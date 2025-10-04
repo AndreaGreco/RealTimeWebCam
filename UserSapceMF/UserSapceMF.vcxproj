@@ -149,7 +149,6 @@
   <ItemGroup>
     <ClInclude Include="framework.h" />
     <ClInclude Include="MediaEventHandler.h" />
-    <ClInclude Include="MFUtils.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="VideoReaderCbk.h" />
   </ItemGroup>

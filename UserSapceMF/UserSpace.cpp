@@ -1,7 +1,6 @@
 ﻿// dllmain.cpp : Definisce il punto di ingresso per l'applicazione DLL.
 #include "pch.h"
 
-#include "MFUtils.h"
 #include <d3d9.h>
 #include <Dxva2api.h>
 #include <evr.h>
@@ -10,11 +9,8 @@
 #include <mfobjects.h>
 #include <mfplay.h>
 #include <mfreadwrite.h>
-#include <stdio.h>
-#include <tchar.h>
 #include <windows.h>
 #include <windowsx.h>
-#include <iostream>
 #include "VideoReaderCbk.h"
 #include "MediaEventHandler.h"
 
@@ -35,6 +31,49 @@
 // Constants 
 const WCHAR CLASS_NAME[] = L"MFVideoEVR Window Class";
 const WCHAR WINDOW_NAME[] = L"MFVideoEVR";
+
+template <class T> void SAFE_RELEASE(T** ppT)
+{
+    if (*ppT)
+    {
+        (*ppT)->Release();
+        *ppT = NULL;
+    }
+}
+
+template <class T> inline void SAFE_RELEASE(T*& pT)
+{
+    if (pT != NULL)
+    {
+        pT->Release();
+        pT = NULL;
+    }
+}
+
+/**
+* Copies a media type attribute from an input media type to an output media type. Useful when setting
+* up the video sink and where a number of the video sink input attributes need to be duplicated on the
+* video writer attributes.
+* @param[in] pSrc: the media attribute the copy of the key is being made from.
+* @param[in] pDest: the media attribute the copy of the key is being made to.
+* @param[in] key: the media attribute key to copy.
+*/
+HRESULT CopyAttribute(IMFAttributes* pSrc, IMFAttributes* pDest, const GUID& key)
+{
+    PROPVARIANT var;
+    PropVariantInit(&var);
+
+    HRESULT hr = S_OK;
+
+    hr = pSrc->GetItem(key, &var);
+    if (SUCCEEDED(hr))
+    {
+        hr = pDest->SetItem(key, var);
+    }
+
+    PropVariantClear(&var);
+    return hr;
+}
 
 class VideoPlayer
 {

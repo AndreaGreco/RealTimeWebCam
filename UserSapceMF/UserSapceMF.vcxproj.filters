@@ -21,9 +21,6 @@
     <ClInclude Include="pch.h">
       <Filter>File di intestazione</Filter>
     </ClInclude>
-    <ClInclude Include="MFUtils.h">
-      <Filter>File di origine</Filter>
-    </ClInclude>
     <ClInclude Include="VideoReaderCbk.h">
       <Filter>File di intestazione</Filter>
     </ClInclude>
