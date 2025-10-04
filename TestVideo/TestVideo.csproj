@@ -64,7 +64,8 @@
     <Reference Include="System.Net.Http" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
-    <Reference Include="UserSpaceMF">
+    <Reference Include="UserSpaceMF, Version=0.0.0.0, Culture=neutral, processorArchitecture=AMD64">
+      <SpecificVersion>False</SpecificVersion>
       <HintPath>..\x64\Debug\UserSpaceMF.dll</HintPath>
     </Reference>
   </ItemGroup>

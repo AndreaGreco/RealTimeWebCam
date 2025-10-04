@@ -1,4 +1,4 @@
-// dllmain.cpp : Definisce il punto di ingresso per l'applicazione DLL.
+﻿// dllmain.cpp : Definisce il punto di ingresso per l'applicazione DLL.
 #include "pch.h"
 
 #include "MFUtils.h"
@@ -15,6 +15,7 @@
 #include <windows.h>
 #include <windowsx.h>
 #include <iostream>
+#include "VideoReaderCbk.h"
 
 #pragma comment(lib, "mf.lib")
 #pragma comment(lib, "evr.lib")
@@ -140,11 +141,8 @@ private:
     IMFActivate* pActive;
     IMFPresentationClock* pClock;
     IMFPresentationTimeSource* pTimeSource;
-    IDirect3DDeviceManager9* pD3DManager;
-    IMFVideoSampleAllocator* pVideoSampleAllocator;
     IMFSample* pD3DVideoSample;
-    IMF2DBuffer* p2DBuffer;
-    IMFMediaBuffer* pDstBuffer;
+    VideoReaderCall* videoReaderCallback;
     
     // Event handlers
     IMFMediaEventGenerator* pEventGenerator;
@@ -217,19 +215,14 @@ void VideoPlayer::InitializeVariables()
     pActive = NULL;
     pClock = NULL;
     pTimeSource = NULL;
-    pD3DManager = NULL;
-    pVideoSampleAllocator = NULL;
     pD3DVideoSample = NULL;
-    p2DBuffer = NULL;
-    pDstBuffer = NULL;
     pEventGenerator = NULL;
     pstreamSinkEventGenerator = NULL;
 }
 
 void VideoPlayer::ReleaseResources()
 {
-    SAFE_RELEASE(p2DBuffer);
-    SAFE_RELEASE(pDstBuffer);
+
     SAFE_RELEASE(pVideoReader);
     SAFE_RELEASE(videoSourceOutputType);
     SAFE_RELEASE(pvideoSourceModType);
@@ -247,8 +240,6 @@ void VideoPlayer::ReleaseResources()
     SAFE_RELEASE(pActive);
     SAFE_RELEASE(pClock);
     SAFE_RELEASE(pTimeSource);
-    SAFE_RELEASE(pD3DManager);
-    SAFE_RELEASE(pVideoSampleAllocator);
     SAFE_RELEASE(pD3DVideoSample);
     SAFE_RELEASE(pEventGenerator);
     SAFE_RELEASE(pstreamSinkEventGenerator);
@@ -282,6 +273,8 @@ HRESULT VideoPlayer::GetVideoSourceFromFile(LPWSTR path, IMFMediaSource** ppVide
 
     HRESULT hr = S_OK;
 
+    videoReaderCallback = new VideoReaderCall(pStreamSink);
+
     hr = MFCreateSourceResolver(&pSourceResolver);
     if (hr != S_OK) {
         goto done;
@@ -303,12 +296,17 @@ HRESULT VideoPlayer::GetVideoSourceFromFile(LPWSTR path, IMFMediaSource** ppVide
         goto done;
     }
 
-    hr = MFCreateAttributes(&pVideoReaderAttributes, 1);
+    hr = MFCreateAttributes(&pVideoReaderAttributes, 2);
     if (hr != S_OK) {
         goto done;
     }
 
     hr = pVideoReaderAttributes->SetUINT32(MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, 1);
+    if (hr != S_OK) {
+        goto done;
+    }
+
+	hr = pVideoReaderAttributes->SetUnknown(MF_SOURCE_READER_ASYNC_CALLBACK, videoReaderCallback);
     if (hr != S_OK) {
         goto done;
     }
@@ -319,7 +317,6 @@ HRESULT VideoPlayer::GetVideoSourceFromFile(LPWSTR path, IMFMediaSource** ppVide
     }
 
 done:
-
     SAFE_RELEASE(pSourceResolver);
     SAFE_RELEASE(uSource);
     SAFE_RELEASE(pVideoReaderAttributes);
@@ -540,6 +537,8 @@ int VideoPlayer::initialize()
         return -37;
     }
 
+	videoReaderCallback->AllocateInternalBuffer(pImfEvrSinkType, pVideoReader);
+
     ret = pVideoReader->SetCurrentMediaType((DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM, NULL, pVideoSourceOutType);
     if (ret != S_OK) {
         return -38;
@@ -565,44 +564,6 @@ int VideoPlayer::initialize()
     ret = pstreamSinkEventGenerator->BeginGetEvent((IMFAsyncCallback*)&streamSinkMediaEvtHandler, pstreamSinkEventGenerator);
     if (ret != S_OK) {
         return -42;
-    }
-
-    // ----- Source and sink now configured. Set up remaining infrastructure and then start sampling. -----
-
-    // Get Direct3D surface organised.
-    ret = MFGetService(pStreamSink, MR_VIDEO_ACCELERATION_SERVICE, IID_PPV_ARGS(&pVideoSampleAllocator));
-    if (ret != S_OK) {
-        return -43;
-    }
-
-    ret = MFGetService(pVideoSink, MR_VIDEO_ACCELERATION_SERVICE, IID_PPV_ARGS(&pD3DManager));
-    if (ret != S_OK) {
-        return -44;
-    }
-
-    ret = pVideoSampleAllocator->SetDirectXManager(pD3DManager);
-    if (ret != S_OK) {
-        return -45;
-    }
-
-    ret = pVideoSampleAllocator->InitializeSampleAllocator(1, pImfEvrSinkType);
-    if (ret != S_OK) {
-        return -46;
-    }
-
-    ret = pVideoSampleAllocator->AllocateSample(&pD3DVideoSample);
-    if (ret != S_OK) {
-        return -47;
-    }
-
-    ret = pD3DVideoSample->GetBufferByIndex(0, &pDstBuffer);
-    if (ret != S_OK) {
-        return -48;
-    }
-
-    ret = pDstBuffer->QueryInterface(IID_PPV_ARGS(&p2DBuffer));
-    if (ret != S_OK) {
-        return -49;
     }
 
     // Get clocks organised.
@@ -642,63 +603,7 @@ int VideoPlayer::play()
 
     isPlaying = true;
     isPaused = false;
-
-    // Start the sample read-write loop in a separate thread for non-blocking operation
-    // For now, simplified version without threading
-    IMFSample* videoSample = NULL;
-    IMFMediaBuffer* pSrcBuffer = NULL;
-    BYTE* pbBuffer = NULL;
-    DWORD streamIndex, flags;
-    LONGLONG llTimeStamp;
-    UINT32 uiAttribute = 0;
-    DWORD dwBuffer = 0;
-
-    for (int frameCount = 0; frameCount < 100 && isPlaying; frameCount++) // Limit frames for demo
-    {
-        ret = pVideoReader->ReadSample(
-            MF_SOURCE_READER_FIRST_VIDEO_STREAM,
-            0,                              // Flags.
-            &streamIndex,                   // Receives the actual stream index. 
-            &flags,                         // Receives status flags.
-            &llTimeStamp,                   // Receives the time stamp.
-            &videoSample                    // Receives the sample or NULL.
-        );
-        if (ret != S_OK) {
-            break;
-        }
-
-        if (flags & MF_SOURCE_READERF_ENDOFSTREAM)
-        {
-            break;
-        }
-
-        if (videoSample)
-        {
-            LONGLONG sampleDuration = 0;
-            ret = videoSample->GetSampleDuration(&sampleDuration);
-            
-            ret = pD3DVideoSample->SetSampleTime(llTimeStamp);
-            ret = pD3DVideoSample->SetSampleDuration(sampleDuration);
-
-            ret = videoSample->ConvertToContiguousBuffer(&pSrcBuffer);
-            if (ret == S_OK) {
-                ret = pSrcBuffer->Lock(&pbBuffer, NULL, &dwBuffer);
-                if (ret == S_OK) {
-                    ret = p2DBuffer->ContiguousCopyFrom(pbBuffer, dwBuffer);
-                    pSrcBuffer->Unlock();
-                }
-            }
-
-            ret = pStreamSink->ProcessSample(pD3DVideoSample);
-            Sleep(sampleDuration / 10000); // Duration is given in 100's of nano seconds.
-        }
-
-        SAFE_RELEASE(pSrcBuffer);
-        SAFE_RELEASE(videoSample);
-    }
-
-    isPlaying = false;
-    return 0;
+	this->pVideoReader->ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, nullptr, nullptr, nullptr, nullptr);
 }
 
 int VideoPlayer::pause()

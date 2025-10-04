@@ -122,6 +122,7 @@
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
+      <AdditionalDependencies>Shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>
@@ -149,6 +150,7 @@
     <ClInclude Include="framework.h" />
     <ClInclude Include="MFUtils.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="VideoReaderCbk.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="UserSpace.cpp" />
@@ -158,6 +160,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="VideoReaderCbk.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
