@@ -1,25 +1,6 @@
 #include "pch.h"
 #include "VideoReaderCbk.h"
 
-// Implementazione template SAFE_RELEASE se non definita altrove
-template <class T> void SAFE_RELEASE(T** ppT)
-{
-    if (*ppT)
-    {
-        (*ppT)->Release();
-        *ppT = NULL;
-    }
-}
-
-template <class T> inline void SAFE_RELEASE(T*& pT)
-{
-    if (pT != NULL)
-    {
-        pT->Release();
-        pT = NULL;
-    }
-}
-
 VideoReaderCall::VideoReaderCall(IMFStreamSink* pSink) : m_pStreamSink(pSink) {
     if (m_pStreamSink)
         m_pStreamSink->AddRef();
@@ -29,11 +10,20 @@ VideoReaderCall::~VideoReaderCall() {
     if (m_pStreamSink)
         m_pStreamSink->Release();
 
-    SAFE_RELEASE(pD3DVideoSample);
-    SAFE_RELEASE(p2DBuffer);
-    SAFE_RELEASE(pDstBuffer);
-    SAFE_RELEASE(pD3DManager);
-    SAFE_RELEASE(pVideoSampleAllocator);
+    pD3DVideoSample->Release();
+    pD3DVideoSample = nullptr;
+
+    p2DBuffer->Release();
+    p2DBuffer = nullptr;
+
+    pDstBuffer->Release();
+    pDstBuffer = nullptr;
+
+    pD3DManager->Release();
+    pD3DManager = nullptr;
+
+    pVideoSampleAllocator->Release();
+    pVideoSampleAllocator = nullptr;
 }
 
 HRESULT VideoReaderCall::AllocateInternalBuffer(IMFMediaType* SinkMediaType, IMFSourceReader* pReader) {
@@ -132,7 +122,8 @@ STDMETHODIMP VideoReaderCall::OnReadSample(HRESULT hrStatus,
             ret = p2DBuffer->ContiguousCopyFrom(pbBuffer, dwBuffer);
             pSrcBuffer->Unlock();
         }
-        SAFE_RELEASE(pSrcBuffer);
+		pSrcBuffer->Release();
+		pSrcBuffer = NULL;
     }
 
     ret = m_pStreamSink->ProcessSample(pD3DVideoSample);
