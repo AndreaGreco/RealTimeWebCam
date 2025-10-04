@@ -148,11 +148,13 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="framework.h" />
+    <ClInclude Include="Logger.h" />
     <ClInclude Include="MediaEventHandler.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="VideoReaderCbk.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Logger.cpp" />
     <ClCompile Include="MediaEventHandler.cpp" />
     <ClCompile Include="UserSpace.cpp" />
     <ClCompile Include="pch.cpp">
