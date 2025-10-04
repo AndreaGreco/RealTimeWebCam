@@ -1,20 +1,21 @@
-﻿ // dllmain.cpp : Definisce il punto di ingresso per l'applicazione DLL.
+﻿// dllmain.cpp : Definisce il punto di ingresso per l'applicazione DLL.
 #include "pch.h"
 
-#include <d3d9.h>
-#include <Dxva2api.h>
-#include <evr.h>
-#include <mfapi.h>
-#include <mferror.h>
-#include <mfobjects.h>
-#include <mfplay.h>
-#include <mfreadwrite.h>
-#include <windows.h>
-#include <windowsx.h>
-#include <sstream>
-#include "VideoReaderCbk.h"
-#include "MediaEventHandler.h"
 #include "Logger.h"
+#include "MediaEventHandler.h"
+#include "VideoReaderCbk.h"
+#include <combaseapi.h>
+#include <evr.h>
+#include <guiddef.h>
+#include <ios>
+#include <mfapi.h>
+#include <mfidl.h>
+#include <mfobjects.h>
+#include <mfreadwrite.h>
+#include <PropIdl.h>
+#include <sstream>
+#include <Unknwnbase.h>
+#include <windows.h>
 
 #pragma comment(lib, "mf.lib")
 #pragma comment(lib, "evr.lib")
@@ -37,33 +38,33 @@ const WCHAR WINDOW_NAME[] = L"MFVideoEVR";
 
 template <class T> void SAFE_RELEASE(T** ppT)
 {
-    if (*ppT)
-    {
-        (*ppT)->Release();
-        *ppT = NULL;
-    }
+	if (*ppT)
+	{
+		(*ppT)->Release();
+		*ppT = NULL;
+	}
 }
 
 template <class T> inline void SAFE_RELEASE(T*& pT)
 {
-    if (pT != NULL)
-    {
-        pT->Release();
-        pT = NULL;
-    }
+	if (pT != NULL)
+	{
+		pT->Release();
+		pT = NULL;
+	}
 }
 
 // Helper function to log HRESULT errors
 void LogError(const char* function, HRESULT hr) {
-    std::ostringstream oss;
-    oss << function << " failed with HRESULT: 0x" << std::hex << hr;
-    DebugLog(oss.str().c_str());
+	std::ostringstream oss;
+	oss << function << " failed with HRESULT: 0x" << std::hex << hr;
+	DebugLog(oss.str().c_str());
 }
 
 void LogErrorCode(const char* function, int errorCode) {
-    std::ostringstream oss;
-    oss << function << " failed with error code: " << errorCode;
-    DebugLog(oss.str().c_str());
+	std::ostringstream oss;
+	oss << function << " failed with error code: " << errorCode;
+	DebugLog(oss.str().c_str());
 }
 
 /**
@@ -76,157 +77,157 @@ void LogErrorCode(const char* function, int errorCode) {
 */
 HRESULT CopyAttribute(IMFAttributes* pSrc, IMFAttributes* pDest, const GUID& key)
 {
-    PROPVARIANT var;
-    PropVariantInit(&var);
+	PROPVARIANT var;
+	PropVariantInit(&var);
 
-    HRESULT hr = S_OK;
+	HRESULT hr = S_OK;
 
-    hr = pSrc->GetItem(key, &var);
-    if (SUCCEEDED(hr))
-    {
-        hr = pDest->SetItem(key, var);
-    }
+	hr = pSrc->GetItem(key, &var);
+	if (SUCCEEDED(hr))
+	{
+		hr = pDest->SetItem(key, var);
+	}
 
-    PropVariantClear(&var);
-    return hr;
+	PropVariantClear(&var);
+	return hr;
 }
 
 class VideoPlayer
 {
 private:
-    // Media Foundation interfaces
-    IMFMediaSource* pVideoSource;
-    IMFSourceReader* pVideoReader;
-    IMFMediaType* videoSourceOutputType;
-    IMFMediaType* pvideoSourceModType;
-    IMFMediaType* pVideoSourceOutType;
-    IMFMediaType* pImfEvrSinkType;
-    IMFMediaType* pHintMediaType;
-    IMFMediaSink* pVideoSink;
-    IMFStreamSink* pStreamSink;
-    IMFMediaTypeHandler* pSinkMediaTypeHandler;
-    IMFMediaTypeHandler* pSourceMediaTypeHandler;
-    IMFPresentationDescriptor* pSourcePresentationDescriptor;
-    IMFStreamDescriptor* pSourceStreamDescriptor;
-    IMFVideoRenderer* pVideoRenderer;
-    IMFVideoDisplayControl* pVideoDisplayControl;
-    IMFGetService* pService;
-    IMFActivate* pActive;
-    IMFPresentationClock* pClock;
-    IMFPresentationTimeSource* pTimeSource;
-    IMFSample* pD3DVideoSample;
-    VideoReaderCall* videoReaderCallback;
-    
-    // Event handlers
-    IMFMediaEventGenerator* pEventGenerator;
-    IMFMediaEventGenerator* pstreamSinkEventGenerator;
-    MediaEventHandler mediaEvtHandler;
-    MediaEventHandler streamSinkMediaEvtHandler;
-    
-    // Configuration
-    LPWSTR filePath;
-    HWND windowHandle;
-    RECT rc;
-    BOOL fSelected;
-    bool isPlaying;
-    bool isPaused;
-    
-    // Helper methods
-    HRESULT GetVideoSourceFromFile(LPWSTR path, IMFMediaSource** ppVideoSource, IMFSourceReader** ppVideoReader);
-    void InitializeVariables();
-    void ReleaseResources();
+	// Media Foundation interfaces
+	IMFMediaSource* pVideoSource;
+	IMFSourceReader* pVideoReader;
+	IMFMediaType* videoSourceOutputType;
+	IMFMediaType* pvideoSourceModType;
+	IMFMediaType* pVideoSourceOutType;
+	IMFMediaType* pImfEvrSinkType;
+	IMFMediaType* pHintMediaType;
+	IMFMediaSink* pVideoSink;
+	IMFStreamSink* pStreamSink;
+	IMFMediaTypeHandler* pSinkMediaTypeHandler;
+	IMFMediaTypeHandler* pSourceMediaTypeHandler;
+	IMFPresentationDescriptor* pSourcePresentationDescriptor;
+	IMFStreamDescriptor* pSourceStreamDescriptor;
+	IMFVideoRenderer* pVideoRenderer;
+	IMFVideoDisplayControl* pVideoDisplayControl;
+	IMFGetService* pService;
+	IMFActivate* pActive;
+	IMFPresentationClock* pClock;
+	IMFPresentationTimeSource* pTimeSource;
+	IMFSample* pD3DVideoSample;
+	VideoReaderCall* videoReaderCallback;
+
+	// Event handlers
+	IMFMediaEventGenerator* pEventGenerator;
+	IMFMediaEventGenerator* pstreamSinkEventGenerator;
+	MediaEventHandler mediaEvtHandler;
+	MediaEventHandler streamSinkMediaEvtHandler;
+
+	// Configuration
+	LPWSTR filePath;
+	HWND windowHandle;
+	RECT rc;
+	BOOL fSelected;
+	bool isPlaying;
+	bool isPaused;
+
+	// Helper methods
+	HRESULT GetVideoSourceFromFile(LPWSTR path, IMFMediaSource** ppVideoSource, IMFSourceReader** ppVideoReader);
+	void InitializeVariables();
+	void ReleaseResources();
 
 public:
-    VideoPlayer();
-    ~VideoPlayer();
-    
-    void setVideoPath(LPWSTR path);
-    void setWindowHandle(HWND hwnd);
-    int initialize();
-    int play();
-    int pause();
-    int stop();
-    bool getIsPlaying() const { return isPlaying; }
-    bool getIsPaused() const { return isPaused; }
+	VideoPlayer();
+	~VideoPlayer();
+
+	void setVideoPath(LPWSTR path);
+	void setWindowHandle(HWND hwnd);
+	int initialize();
+	int play();
+	int pause();
+	int stop();
+	bool getIsPlaying() const { return isPlaying; }
+	bool getIsPaused() const { return isPaused; }
 };
 
 VideoPlayer::VideoPlayer()
 {
-    InitializeVariables();
-    filePath = nullptr;
-    windowHandle = nullptr;
-    rc = { 0, 0, VIDEO_WIDTH, VIDEO_HEIGHT };
-    fSelected = false;
-    isPlaying = false;
-    isPaused = false;
+	InitializeVariables();
+	filePath = nullptr;
+	windowHandle = nullptr;
+	rc = { 0, 0, VIDEO_WIDTH, VIDEO_HEIGHT };
+	fSelected = false;
+	isPlaying = false;
+	isPaused = false;
 }
 
 VideoPlayer::~VideoPlayer()
 {
-    stop();
-    ReleaseResources();
+	stop();
+	ReleaseResources();
 }
 
 void VideoPlayer::InitializeVariables()
 {
-    pVideoSource = NULL;
-    pVideoReader = NULL;
-    videoSourceOutputType = NULL;
-    pvideoSourceModType = NULL;
-    pVideoSourceOutType = NULL;
-    pImfEvrSinkType = NULL;
-    pHintMediaType = NULL;
-    pVideoSink = NULL;
-    pStreamSink = NULL;
-    pSinkMediaTypeHandler = NULL;
-    pSourceMediaTypeHandler = NULL;
-    pSourcePresentationDescriptor = NULL;
-    pSourceStreamDescriptor = NULL;
-    pVideoRenderer = NULL;
-    pVideoDisplayControl = NULL;
-    pService = NULL;
-    pActive = NULL;
-    pClock = NULL;
-    pTimeSource = NULL;
-    pD3DVideoSample = NULL;
-    pEventGenerator = NULL;
-    pstreamSinkEventGenerator = NULL;
+	pVideoSource = NULL;
+	pVideoReader = NULL;
+	videoSourceOutputType = NULL;
+	pvideoSourceModType = NULL;
+	pVideoSourceOutType = NULL;
+	pImfEvrSinkType = NULL;
+	pHintMediaType = NULL;
+	pVideoSink = NULL;
+	pStreamSink = NULL;
+	pSinkMediaTypeHandler = NULL;
+	pSourceMediaTypeHandler = NULL;
+	pSourcePresentationDescriptor = NULL;
+	pSourceStreamDescriptor = NULL;
+	pVideoRenderer = NULL;
+	pVideoDisplayControl = NULL;
+	pService = NULL;
+	pActive = NULL;
+	pClock = NULL;
+	pTimeSource = NULL;
+	pD3DVideoSample = NULL;
+	pEventGenerator = NULL;
+	pstreamSinkEventGenerator = NULL;
 }
 
 void VideoPlayer::ReleaseResources()
 {
 
-    SAFE_RELEASE(pVideoReader);
-    SAFE_RELEASE(videoSourceOutputType);
-    SAFE_RELEASE(pvideoSourceModType);
-    SAFE_RELEASE(pImfEvrSinkType);
-    SAFE_RELEASE(pHintMediaType);
-    SAFE_RELEASE(pVideoSink);
-    SAFE_RELEASE(pStreamSink);
-    SAFE_RELEASE(pSinkMediaTypeHandler);
-    SAFE_RELEASE(pSourceMediaTypeHandler);
-    SAFE_RELEASE(pSourcePresentationDescriptor);
-    SAFE_RELEASE(pSourceStreamDescriptor);
-    SAFE_RELEASE(pVideoRenderer);
-    SAFE_RELEASE(pVideoDisplayControl);
-    SAFE_RELEASE(pService);
-    SAFE_RELEASE(pActive);
-    SAFE_RELEASE(pClock);
-    SAFE_RELEASE(pTimeSource);
-    SAFE_RELEASE(pD3DVideoSample);
-    SAFE_RELEASE(pEventGenerator);
-    SAFE_RELEASE(pstreamSinkEventGenerator);
-    SAFE_RELEASE(pVideoSource);
+	SAFE_RELEASE(pVideoReader);
+	SAFE_RELEASE(videoSourceOutputType);
+	SAFE_RELEASE(pvideoSourceModType);
+	SAFE_RELEASE(pImfEvrSinkType);
+	SAFE_RELEASE(pHintMediaType);
+	SAFE_RELEASE(pVideoSink);
+	SAFE_RELEASE(pStreamSink);
+	SAFE_RELEASE(pSinkMediaTypeHandler);
+	SAFE_RELEASE(pSourceMediaTypeHandler);
+	SAFE_RELEASE(pSourcePresentationDescriptor);
+	SAFE_RELEASE(pSourceStreamDescriptor);
+	SAFE_RELEASE(pVideoRenderer);
+	SAFE_RELEASE(pVideoDisplayControl);
+	SAFE_RELEASE(pService);
+	SAFE_RELEASE(pActive);
+	SAFE_RELEASE(pClock);
+	SAFE_RELEASE(pTimeSource);
+	SAFE_RELEASE(pD3DVideoSample);
+	SAFE_RELEASE(pEventGenerator);
+	SAFE_RELEASE(pstreamSinkEventGenerator);
+	SAFE_RELEASE(pVideoSource);
 }
 
 void VideoPlayer::setVideoPath(LPWSTR path)
 {
-    filePath = path;
+	filePath = path;
 }
 
 void VideoPlayer::setWindowHandle(HWND hwnd)
 {
-    windowHandle = hwnd;
+	windowHandle = hwnd;
 }
 
 /**
@@ -238,559 +239,525 @@ void VideoPlayer::setWindowHandle(HWND hwnd)
 */
 HRESULT VideoPlayer::GetVideoSourceFromFile(LPWSTR path, IMFMediaSource** ppVideoSource, IMFSourceReader** ppVideoReader)
 {
-    IMFSourceResolver* pSourceResolver = NULL;
-    IUnknown* uSource = NULL;
+	IMFSourceResolver* pSourceResolver = NULL;
+	IUnknown* uSource = NULL;
 
-    IMFAttributes* pVideoReaderAttributes = NULL;
-    MF_OBJECT_TYPE ObjectType = MF_OBJECT_INVALID;
+	IMFAttributes* pVideoReaderAttributes = NULL;
+	MF_OBJECT_TYPE ObjectType = MF_OBJECT_INVALID;
 
-    HRESULT hr = S_OK;
+	HRESULT hr = S_OK;
 
-    DebugLog("GetVideoSourceFromFile - start");
+	DebugLog("GetVideoSourceFromFile - start");
 
-    videoReaderCallback = new VideoReaderCall(pStreamSink);
-    if (!videoReaderCallback) {
-        DebugLog("GetVideoSourceFromFile - failed to create VideoReaderCall");
-        return E_OUTOFMEMORY;
-    }
+	videoReaderCallback = new VideoReaderCall(pStreamSink);
+	if (!videoReaderCallback) {
+		DebugLog("GetVideoSourceFromFile - failed to create VideoReaderCall");
+		return E_OUTOFMEMORY;
+	}
 
-    hr = MFCreateSourceResolver(&pSourceResolver);
-    if (hr != S_OK) {
-        LogError("MFCreateSourceResolver", hr);
-        goto done;
-    }
+	hr = MFCreateSourceResolver(&pSourceResolver);
+	if (hr != S_OK) {
+		LogError("MFCreateSourceResolver", hr);
+		goto done;
+	}
 
-    hr = pSourceResolver->CreateObjectFromURL(
-        path,                       // URL of the source.
-        MF_RESOLUTION_MEDIASOURCE,  // Create a source object.
-        NULL,                       // Optional property store.
-        &ObjectType,                // Receives the created object type. 
-        &uSource                    // Receives a pointer to the media source. 
-    );
-    if (hr != S_OK) {
-        LogError("CreateObjectFromURL", hr);
-        goto done;
-    }
+	hr = pSourceResolver->CreateObjectFromURL(
+		path,                       // URL of the source.
+		MF_RESOLUTION_MEDIASOURCE,  // Create a source object.
+		NULL,                       // Optional property store.
+		&ObjectType,                // Receives the created object type. 
+		&uSource                    // Receives a pointer to the media source. 
+	);
+	if (hr != S_OK) {
+		LogError("CreateObjectFromURL", hr);
+		goto done;
+	}
 
-    hr = uSource->QueryInterface(IID_PPV_ARGS(ppVideoSource));
-    if (hr != S_OK) {
-        LogError("QueryInterface for IMFMediaSource", hr);
-        goto done;
-    }
+	hr = uSource->QueryInterface(IID_PPV_ARGS(ppVideoSource));
+	if (hr != S_OK) {
+		LogError("QueryInterface for IMFMediaSource", hr);
+		goto done;
+	}
 
-    hr = MFCreateAttributes(&pVideoReaderAttributes, 2);
-    if (hr != S_OK) {
-        LogError("MFCreateAttributes", hr);
-        goto done;
-    }
-    
-    hr = pVideoReaderAttributes->SetUINT32(MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, 1);
-    if (hr != S_OK) {
-        LogError("SetUINT32 MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING", hr);
-        goto done;
-    }
+	hr = MFCreateAttributes(&pVideoReaderAttributes, 1);
+	if (hr != S_OK) {
+		LogError("MFCreateAttributes", hr);
+		goto done;
+	}
+
+	// DO NOT use MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING when using Direct3D/EVR
+	// The GPU handles format conversion more efficiently during rendering
 
 	hr = pVideoReaderAttributes->SetUnknown(MF_SOURCE_READER_ASYNC_CALLBACK, videoReaderCallback);
-    if (hr != S_OK) {
-        LogError("SetUnknown MF_SOURCE_READER_ASYNC_CALLBACK", hr);
-        goto done;
-    }
+	if (hr != S_OK) {
+		LogError("SetUnknown MF_SOURCE_READER_ASYNC_CALLBACK", hr);
+		goto done;
+	}
 
-    hr = MFCreateSourceReaderFromMediaSource(*ppVideoSource, pVideoReaderAttributes, ppVideoReader);
-    if (hr != S_OK) {
-        LogError("MFCreateSourceReaderFromMediaSource", hr);
-        goto done;
-    }
+	hr = MFCreateSourceReaderFromMediaSource(*ppVideoSource, pVideoReaderAttributes, ppVideoReader);
+	if (hr != S_OK) {
+		LogError("MFCreateSourceReaderFromMediaSource", hr);
+		goto done;
+	}
 
-    DebugLog("GetVideoSourceFromFile - success");
+	DebugLog("GetVideoSourceFromFile - success");
 
 done:
-    SAFE_RELEASE(pSourceResolver);
-    SAFE_RELEASE(uSource);
-    SAFE_RELEASE(pVideoReaderAttributes);
+	SAFE_RELEASE(pSourceResolver);
+	SAFE_RELEASE(uSource);
+	SAFE_RELEASE(pVideoReaderAttributes);
 
-    return hr;
+	return hr;
 }
 
 int VideoPlayer::initialize()
 {
-    HRESULT ret;
-    bool check;
+	HRESULT ret;
+	bool check;
 	DebugLog("VideoPlayer::initialize() - start");
 
-    if (windowHandle == nullptr) {
+	if (windowHandle == nullptr) {
 		DebugLog("VideoPlayer::initialize() - windowHandle is null");
-        return -1;
-    }
-
-    check = IsWindow(windowHandle);
-    if (!check) {
-		DebugLog("VideoPlayer::initialize() - windowHandle is not a valid window");
-        return -1;
+		return -1;
 	}
 
-    if (filePath == nullptr) {
-		DebugLog("VideoPlayer::initialize() - filePath is null");
-        return -1;
-    }
+	check = IsWindow(windowHandle);
+	if (!check) {
+		DebugLog("VideoPlayer::initialize() - windowHandle is not a valid window");
+		return -1;
+	}
 
-    ret = MFStartup(MF_VERSION);
+	if (filePath == nullptr) {
+		DebugLog("VideoPlayer::initialize() - filePath is null");
+		return -1;
+	}
+
+	ret = MFStartup(MF_VERSION);
 	if (ret != S_OK) {
 		LogError("MFStartup", ret);
-        return -1;
-    }
+		return -1;
+	}
 
-    // ----- Set up Video sink (Enhanced Video Renderer). -----
-    ret = MFCreateVideoRendererActivate(windowHandle, &pActive);
-    if (ret != S_OK) {
+	// ----- Set up Video sink (Enhanced Video Renderer). -----
+	ret = MFCreateVideoRendererActivate(windowHandle, &pActive);
+	if (ret != S_OK) {
 		LogError("MFCreateVideoRendererActivate", ret);
-        return -2;
-    }
-    
-    ret = pActive->ActivateObject(IID_IMFMediaSink, (void**)&pVideoSink);
-    if (ret != S_OK) {
-        LogError("ActivateObject for IMFMediaSink", ret);
-        return -3;
-    }
+		return -2;
+	}
 
-    // Initialize the renderer before doing anything else including querying for other interfaces,
-    // see https://msdn.microsoft.com/en-us/library/windows/desktop/ms704667(v=vs.85).aspx.
-    ret = pVideoSink->QueryInterface(__uuidof(IMFVideoRenderer), (void**)&pVideoRenderer);
-    if (ret != S_OK) {
-        LogError("QueryInterface for IMFVideoRenderer", ret);
-        return -4;
-    }
-    
-    ret = pVideoRenderer->InitializeRenderer(NULL, NULL);
-    if (ret != S_OK) {
-        LogError("InitializeRenderer", ret);
-        return -5;
-    }
-    
-    ret = pVideoSink->QueryInterface(__uuidof(IMFGetService), (void**)&pService);
-    if (ret != S_OK) {
-        LogError("QueryInterface for IMFGetService", ret);
-        return -6;
-    }
+	ret = pActive->ActivateObject(IID_IMFMediaSink, (void**)&pVideoSink);
+	if (ret != S_OK) {
+		LogError("ActivateObject for IMFMediaSink", ret);
+		return -3;
+	}
 
-    ret = pService->GetService(MR_VIDEO_RENDER_SERVICE, __uuidof(IMFVideoDisplayControl), (void**)&pVideoDisplayControl);
-    if (ret != S_OK) {
-        LogError("GetService for IMFVideoDisplayControl", ret);
-        return -7;
-    }
+	// Initialize the renderer before doing anything else including querying for other interfaces,
+	// see https://msdn.microsoft.com/en-us/library/windows/desktop/ms704667(v=vs.85).aspx.
+	ret = pVideoSink->QueryInterface(__uuidof(IMFVideoRenderer), (void**)&pVideoRenderer);
+	if (ret != S_OK) {
+		LogError("QueryInterface for IMFVideoRenderer", ret);
+		return -4;
+	}
 
-    ret = pVideoDisplayControl->SetVideoWindow(windowHandle);
-    if (ret != S_OK) {
-        LogError("SetVideoWindow", ret);
-        return -8;
-    }
+	ret = pVideoRenderer->InitializeRenderer(NULL, NULL);
+	if (ret != S_OK) {
+		LogError("InitializeRenderer", ret);
+		return -5;
+	}
 
-    ret = pVideoDisplayControl->SetVideoPosition(NULL, &rc);
-    if (ret != S_OK) {
-        LogError("SetVideoPosition", ret);
-        return -9;
-    }
+	ret = pVideoSink->QueryInterface(__uuidof(IMFGetService), (void**)&pService);
+	if (ret != S_OK) {
+		LogError("QueryInterface for IMFGetService", ret);
+		return -6;
+	}
 
-    ret = pVideoSink->GetStreamSinkByIndex(0, &pStreamSink);
-    if (ret != S_OK) {
-        LogError("GetStreamSinkByIndex", ret);
-        return -10;
-    }
+	ret = pService->GetService(MR_VIDEO_RENDER_SERVICE, __uuidof(IMFVideoDisplayControl), (void**)&pVideoDisplayControl);
+	if (ret != S_OK) {
+		LogError("GetService for IMFVideoDisplayControl", ret);
+		return -7;
+	}
 
-    ret = pStreamSink->GetMediaTypeHandler(&pSinkMediaTypeHandler);
-    if (ret != S_OK) {
-        LogError("GetMediaTypeHandler for sink", ret);
-        return -11;
-    }
+	ret = pVideoDisplayControl->SetVideoWindow(windowHandle);
+	if (ret != S_OK) {
+		LogError("SetVideoWindow", ret);
+		return -8;
+	}
 
-    DWORD sinkMediaTypeCount = 0;
-    ret = pSinkMediaTypeHandler->GetMediaTypeCount(&sinkMediaTypeCount);
-    if (ret != S_OK) {
-        LogError("GetMediaTypeCount for sink", ret);
-        return -12;
-    }
+	ret = pVideoDisplayControl->SetVideoPosition(NULL, &rc);
+	if (ret != S_OK) {
+		LogError("SetVideoPosition", ret);
+		return -9;
+	}
 
-    // ----- Set up Video source. -----
-    ret = GetVideoSourceFromFile(filePath, &pVideoSource, &pVideoReader);
-    if (ret != S_OK) {
-        LogError("GetVideoSourceFromFile", ret);
-        return -13;
-    }
+	ret = pVideoSink->GetStreamSinkByIndex(0, &pStreamSink);
+	if (ret != S_OK) {
+		LogError("GetStreamSinkByIndex", ret);
+		return -10;
+	}
 
-    ret = pVideoReader->SetStreamSelection(MF_SOURCE_READER_ALL_STREAMS, false);
-    if (ret != S_OK) {
-        LogError("SetStreamSelection for all streams", ret);
-        return -14;
-    }
+	ret = pStreamSink->GetMediaTypeHandler(&pSinkMediaTypeHandler);
+	if (ret != S_OK) {
+		LogError("GetMediaTypeHandler for sink", ret);
+		return -11;
+	}
 
-    ret = pVideoReader->GetCurrentMediaType((DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM, &videoSourceOutputType);
-    if (ret != S_OK) {
-        LogError("GetCurrentMediaType", ret);
-        return -15;
-    }
+	DWORD sinkMediaTypeCount = 0;
+	ret = pSinkMediaTypeHandler->GetMediaTypeCount(&sinkMediaTypeCount);
+	if (ret != S_OK) {
+		LogError("GetMediaTypeCount for sink", ret);
+		return -12;
+	}
 
-    ret = pVideoReader->SetStreamSelection((DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM, TRUE);
-    if (ret != S_OK) {
-        LogError("SetStreamSelection for first video stream", ret);
-        return -16;
-    }
+	// ----- Set up Video source. -----
+	ret = GetVideoSourceFromFile(filePath, &pVideoSource, &pVideoReader);
+	if (ret != S_OK) {
+		LogError("GetVideoSourceFromFile", ret);
+		return -13;
+	}
 
-    ret = pVideoSource->CreatePresentationDescriptor(&pSourcePresentationDescriptor);
-    if (ret != S_OK) {
-        LogError("CreatePresentationDescriptor", ret);
-        return -17;
-    }
+	ret = pVideoReader->SetStreamSelection(MF_SOURCE_READER_ALL_STREAMS, false);
+	if (ret != S_OK) {
+		LogError("SetStreamSelection for all streams", ret);
+		return -14;
+	}
 
-    ret = pSourcePresentationDescriptor->GetStreamDescriptorByIndex(0, &fSelected, &pSourceStreamDescriptor);
-    if (ret != S_OK) {
-        LogError("GetStreamDescriptorByIndex", ret);
-        return -18;
-    }
+	ret = pVideoReader->GetCurrentMediaType((DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM, &videoSourceOutputType);
+	if (ret != S_OK) {
+		LogError("GetCurrentMediaType", ret);
+		return -15;
+	}
 
-    ret = pSourceStreamDescriptor->GetMediaTypeHandler(&pSourceMediaTypeHandler);
-    if (ret != S_OK) {
-        LogError("GetMediaTypeHandler for source", ret);
-        return -19;
-    }
+	ret = pVideoReader->SetStreamSelection((DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM, TRUE);
+	if (ret != S_OK) {
+		LogError("SetStreamSelection for first video stream", ret);
+		return -16;
+	}
 
-    DWORD srcMediaTypeCount = 0;
-    ret = pSourceMediaTypeHandler->GetMediaTypeCount(&srcMediaTypeCount);
-    if (ret != S_OK) {
-        LogError("GetMediaTypeCount for source", ret);
-        return -20;
-    }
+	ret = pVideoSource->CreatePresentationDescriptor(&pSourcePresentationDescriptor);
+	if (ret != S_OK) {
+		LogError("CreatePresentationDescriptor", ret);
+		return -17;
+	}
 
-    // ----- Create a compatible media type and set on the source and sink. -----
+	ret = pSourcePresentationDescriptor->GetStreamDescriptorByIndex(0, &fSelected, &pSourceStreamDescriptor);
+	if (ret != S_OK) {
+		LogError("GetStreamDescriptorByIndex", ret);
+		return -18;
+	}
 
-    // Set the video output type on the file source.
-    ret = MFCreateMediaType(&pVideoSourceOutType);
-    if (ret != S_OK) {
-        LogError("MFCreateMediaType for source output", ret);
-        return -21;
-    }
+	ret = pSourceStreamDescriptor->GetMediaTypeHandler(&pSourceMediaTypeHandler);
+	if (ret != S_OK) {
+		LogError("GetMediaTypeHandler for source", ret);
+		return -19;
+	}
 
-    ret = pVideoSourceOutType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
-    if (ret != S_OK) {
-        LogError("SetGUID MF_MT_MAJOR_TYPE", ret);
-        return -22;
-    }
+	DWORD srcMediaTypeCount = 0;
+	ret = pSourceMediaTypeHandler->GetMediaTypeCount(&srcMediaTypeCount);
+	if (ret != S_OK) {
+		LogError("GetMediaTypeCount for source", ret);
+		return -20;
+	}
 
-    ret = pVideoSourceOutType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
-    if (ret != S_OK) {
-        LogError("SetGUID MF_MT_SUBTYPE to RGB32", ret);
-        return -23;
-    }
+	// ----- Create a compatible media type and set on the source and sink. -----
 
-    ret = pVideoSourceOutType->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
-    if (ret != S_OK) {
-        LogError("SetUINT32 MF_MT_INTERLACE_MODE", ret);
-        return -24;
-    }
+	// Use NV12 format - optimal for Direct3D/GPU processing with EVR
+	ret = MFCreateMediaType(&pVideoSourceOutType);
+	if (ret != S_OK) {
+		LogError("MFCreateMediaType for source output", ret);
+		return -21;
+	}
 
-    ret = pVideoSourceOutType->SetUINT32(MF_MT_ALL_SAMPLES_INDEPENDENT, TRUE);
-    if (ret != S_OK) {
-        LogError("SetUINT32 MF_MT_ALL_SAMPLES_INDEPENDENT", ret);
-        return -25;
-    }
+	ret = pVideoSourceOutType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
+	if (ret != S_OK) {
+		LogError("SetGUID MF_MT_MAJOR_TYPE", ret);
+		return -22;
+	}
 
-    ret = MFSetAttributeRatio(pVideoSourceOutType, MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
-    if (ret != S_OK) {
-        LogError("MFSetAttributeRatio for pixel aspect ratio", ret);
-        return -26;
-    }
+	// Use NV12 instead of RGB32 for Direct3D/EVR - GPU will handle conversion
+	ret = pVideoSourceOutType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_NV12);
+	if (ret != S_OK) {
+		LogError("SetGUID MF_MT_SUBTYPE to NV12", ret);
+		return -23;
+	}
 
-    ret = CopyAttribute(videoSourceOutputType, pVideoSourceOutType, MF_MT_FRAME_SIZE);
-    if (ret != S_OK) {
-        LogError("CopyAttribute MF_MT_FRAME_SIZE", ret);
-        return -27;
-    }
+	ret = pVideoSourceOutType->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
+	if (ret != S_OK) {
+		LogError("SetUINT32 MF_MT_INTERLACE_MODE", ret);
+		return -24;
+	}
 
-    ret = CopyAttribute(videoSourceOutputType, pVideoSourceOutType, MF_MT_FRAME_RATE);
-    if (ret != S_OK) {
-        LogError("CopyAttribute MF_MT_FRAME_RATE", ret);
-        return -28;
-    }
+	ret = pVideoSourceOutType->SetUINT32(MF_MT_ALL_SAMPLES_INDEPENDENT, TRUE);
+	if (ret != S_OK) {
+		LogError("SetUINT32 MF_MT_ALL_SAMPLES_INDEPENDENT", ret);
+		return -25;
+	}
 
-    // Set the video input type on the EVR sink.
-    ret = MFCreateMediaType(&pImfEvrSinkType);
-    if (ret != S_OK) {
-        LogError("MFCreateMediaType for EVR sink", ret);
-        return -29;
-    }
+	ret = MFSetAttributeRatio(pVideoSourceOutType, MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
+	if (ret != S_OK) {
+		LogError("MFSetAttributeRatio for pixel aspect ratio", ret);
+		return -26;
+	}
 
-    ret = pImfEvrSinkType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
-    if (ret != S_OK) {
-        LogError("SetGUID MF_MT_MAJOR_TYPE for sink", ret);
-        return -30;
-    }
+	ret = CopyAttribute(videoSourceOutputType, pVideoSourceOutType, MF_MT_FRAME_SIZE);
+	if (ret != S_OK) {
+		LogError("CopyAttribute MF_MT_FRAME_SIZE", ret);
+		return -27;
+	}
 
-    ret = pImfEvrSinkType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
-    if (ret != S_OK) {
-        LogError("SetGUID MF_MT_SUBTYPE to RGB32 for sink", ret);
-        return -31;
-    }
+	ret = CopyAttribute(videoSourceOutputType, pVideoSourceOutType, MF_MT_FRAME_RATE);
+	if (ret != S_OK) {
+		LogError("CopyAttribute MF_MT_FRAME_RATE", ret);
+		return -28;
+	}
 
-    ret = pImfEvrSinkType->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
-    if (ret != S_OK) {
-        LogError("SetUINT32 MF_MT_INTERLACE_MODE for sink", ret);
-        return -32;
-    }
+	// Set the video input type on the EVR sink - must match the source output type
+	ret = MFCreateMediaType(&pImfEvrSinkType);
+	if (ret != S_OK) {
+		LogError("MFCreateMediaType for EVR sink", ret);
+		return -29;
+	}
 
-    ret = pImfEvrSinkType->SetUINT32(MF_MT_ALL_SAMPLES_INDEPENDENT, TRUE);
-    if (ret != S_OK) {
-        LogError("SetUINT32 MF_MT_ALL_SAMPLES_INDEPENDENT for sink", ret);
-        return -33;
-    }
+	// Copy all attributes from source output to sink input
+	ret = pVideoSourceOutType->CopyAllItems(pImfEvrSinkType);
+	if (ret != S_OK) {
+		LogError("CopyAllItems from source to sink", ret);
+		return -30;
+	}
 
-    ret = MFSetAttributeRatio(pImfEvrSinkType, MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
-    if (ret != S_OK) {
-        LogError("MFSetAttributeRatio for sink pixel aspect ratio", ret);
-        return -34;
-    }
+	// Set the media type on the sink first
+	ret = pSinkMediaTypeHandler->SetCurrentMediaType(pImfEvrSinkType);
+	if (ret != S_OK) {
+		LogError("SetCurrentMediaType for sink", ret);
+		return -31;
+	}
 
-    ret = CopyAttribute(videoSourceOutputType, pImfEvrSinkType, MF_MT_FRAME_SIZE);
-    if (ret != S_OK) {
-        LogError("CopyAttribute MF_MT_FRAME_SIZE for sink", ret);
-        return -35;
-    }
-
-    ret = CopyAttribute(videoSourceOutputType, pImfEvrSinkType, MF_MT_FRAME_RATE);
-    if (ret != S_OK) {
-        LogError("CopyAttribute MF_MT_FRAME_RATE for sink", ret);
-        return -36;
-    }
-
-    ret = pSinkMediaTypeHandler->SetCurrentMediaType(pImfEvrSinkType);
-    if (ret != S_OK) {
-        LogError("SetCurrentMediaType for sink", ret);
-        return -37;
-    }
-
+	// Now allocate the internal buffer with the validated media type
 	ret = videoReaderCallback->AllocateInternalBuffer(pImfEvrSinkType, pVideoReader);
-    if (ret != S_OK) {
-        LogError("AllocateInternalBuffer", ret);
-        return -37;
-    }
+	if (ret != S_OK) {
+		LogError("AllocateInternalBuffer", ret);
+		return -32;
+	}
 
-    ret = pVideoReader->SetCurrentMediaType((DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM, NULL, pVideoSourceOutType);
-    if (ret != S_OK) {
-        LogError("SetCurrentMediaType for video reader", ret);
-        return -38;
-    }
+	// Finally, set the media type on the source reader
+	ret = pVideoReader->SetCurrentMediaType((DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM, NULL, pVideoSourceOutType);
+	if (ret != S_OK) {
+		LogError("SetCurrentMediaType for video reader", ret);
+		return -33;
+	}
 
-    // ----- Set up event handler for sink events otherwise memory leaks. -----
+	// ----- Set up event handler for sink events otherwise memory leaks. -----
 
-    ret = pVideoSink->QueryInterface(IID_IMFMediaEventGenerator, (void**)&pEventGenerator);
-    if (ret != S_OK) {
-        LogError("QueryInterface for IMFMediaEventGenerator (sink)", ret);
-        return -39;
-    }
+	ret = pVideoSink->QueryInterface(IID_IMFMediaEventGenerator, (void**)&pEventGenerator);
+	if (ret != S_OK) {
+		LogError("QueryInterface for IMFMediaEventGenerator (sink)", ret);
+		return -39;
+	}
 
-    ret = pEventGenerator->BeginGetEvent((IMFAsyncCallback*)&mediaEvtHandler, pEventGenerator);
-    if (ret != S_OK) {
-        LogError("BeginGetEvent for event generator", ret);
-        return -40;
-    }
+	ret = pEventGenerator->BeginGetEvent((IMFAsyncCallback*)&mediaEvtHandler, pEventGenerator);
+	if (ret != S_OK) {
+		LogError("BeginGetEvent for event generator", ret);
+		return -40;
+	}
 
-    ret = pStreamSink->QueryInterface(IID_IMFMediaEventGenerator, (void**)&pstreamSinkEventGenerator);
-    if (ret != S_OK) {
-        LogError("QueryInterface for IMFMediaEventGenerator (stream sink)", ret);
-        return -41;
-    }
+	ret = pStreamSink->QueryInterface(IID_IMFMediaEventGenerator, (void**)&pstreamSinkEventGenerator);
+	if (ret != S_OK) {
+		LogError("QueryInterface for IMFMediaEventGenerator (stream sink)", ret);
+		return -41;
+	}
 
-    ret = pstreamSinkEventGenerator->BeginGetEvent((IMFAsyncCallback*)&streamSinkMediaEvtHandler, pstreamSinkEventGenerator);
-    if (ret != S_OK) {
-        LogError("BeginGetEvent for stream sink event generator", ret);
-        return -42;
-    }
+	ret = pstreamSinkEventGenerator->BeginGetEvent((IMFAsyncCallback*)&streamSinkMediaEvtHandler, pstreamSinkEventGenerator);
+	if (ret != S_OK) {
+		LogError("BeginGetEvent for stream sink event generator", ret);
+		return -42;
+	}
 
-    // Get clocks organised.
-    ret = MFCreatePresentationClock(&pClock);
-    if (ret != S_OK) {
-        LogError("MFCreatePresentationClock", ret);
-        return -50;
-    }
+	// Get clocks organised.
+	ret = MFCreatePresentationClock(&pClock);
+	if (ret != S_OK) {
+		LogError("MFCreatePresentationClock", ret);
+		return -50;
+	}
 
-    ret = MFCreateSystemTimeSource(&pTimeSource);
-    if (ret != S_OK) {
-        LogError("MFCreateSystemTimeSource", ret);
-        return -51;
-    }
+	ret = MFCreateSystemTimeSource(&pTimeSource);
+	if (ret != S_OK) {
+		LogError("MFCreateSystemTimeSource", ret);
+		return -51;
+	}
 
-    ret = pClock->SetTimeSource(pTimeSource);
-    if (ret != S_OK) {
-        LogError("SetTimeSource", ret);
-        return -52;
-    }
+	ret = pClock->SetTimeSource(pTimeSource);
+	if (ret != S_OK) {
+		LogError("SetTimeSource", ret);
+		return -52;
+	}
 
-    ret = pVideoSink->SetPresentationClock(pClock);
-    if (ret != S_OK) {
-        LogError("SetPresentationClock", ret);
-        return -53;
-    }
+	ret = pVideoSink->SetPresentationClock(pClock);
+	if (ret != S_OK) {
+		LogError("SetPresentationClock", ret);
+		return -53;
+	}
 
-    DebugLog("VideoPlayer::initialize() - success");
-    return 0;
+	DebugLog("VideoPlayer::initialize() - success");
+	return 0;
 }
 
 int VideoPlayer::play()
 {
-    DebugLog("VideoPlayer::play() - start");
+	DebugLog("VideoPlayer::play() - start");
 
-    if (pClock == nullptr) {
-        DebugLog("VideoPlayer::play() - pClock is null");
-        return -1;
-    }
+	if (pClock == nullptr) {
+		DebugLog("VideoPlayer::play() - pClock is null");
+		return -1;
+	}
 
-    HRESULT ret = pClock->Start(0);
-    if (ret != S_OK) {
-        LogError("pClock->Start", ret);
-        return -1;
-    }
+	HRESULT ret = pClock->Start(0);
+	if (ret != S_OK) {
+		LogError("pClock->Start", ret);
+		return -1;
+	}
 
-    isPlaying = true;
-    isPaused = false;
-    
-    ret = this->pVideoReader->ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, nullptr, nullptr, nullptr, nullptr);
-    if (ret != S_OK) {
-        LogError("ReadSample", ret);
-        return -2;
-    }
+	isPlaying = true;
+	isPaused = false;
 
-    DebugLog("VideoPlayer::play() - success");
-    return 0;
+	ret = this->pVideoReader->ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, nullptr, nullptr, nullptr, nullptr);
+	if (ret != S_OK) {
+		LogError("ReadSample", ret);
+		return -2;
+	}
+
+	DebugLog("VideoPlayer::play() - success");
+	return 0;
 }
 
 int VideoPlayer::pause()
 {
-    DebugLog("VideoPlayer::pause() - start");
+	DebugLog("VideoPlayer::pause() - start");
 
-    if (pClock == nullptr) {
-        DebugLog("VideoPlayer::pause() - pClock is null");
-        return -1;
-    }
+	if (pClock == nullptr) {
+		DebugLog("VideoPlayer::pause() - pClock is null");
+		return -1;
+	}
 
-    HRESULT ret = pClock->Pause();
-    if (ret != S_OK) {
-        LogError("pClock->Pause", ret);
-        return -1;
-    }
+	HRESULT ret = pClock->Pause();
+	if (ret != S_OK) {
+		LogError("pClock->Pause", ret);
+		return -1;
+	}
 
-    isPaused = true;
-    isPlaying = false;
-    
-    DebugLog("VideoPlayer::pause() - success");
-    return 0;
+	isPaused = true;
+	isPlaying = false;
+
+	DebugLog("VideoPlayer::pause() - success");
+	return 0;
 }
 
 int VideoPlayer::stop()
 {
-    DebugLog("VideoPlayer::stop() - start");
+	DebugLog("VideoPlayer::stop() - start");
 
-    if (pClock != nullptr) {
-        HRESULT ret = pClock->Stop();
-        if (ret != S_OK) {
-            LogError("pClock->Stop", ret);
-        }
-    }
-    
-    isPlaying = false;
-    isPaused = false;
-    
-    DebugLog("VideoPlayer::stop() - success");
-    return 0;
+	if (pClock != nullptr) {
+		HRESULT ret = pClock->Stop();
+		if (ret != S_OK) {
+			LogError("pClock->Stop", ret);
+		}
+	}
+
+	isPlaying = false;
+	isPaused = false;
+
+	DebugLog("VideoPlayer::stop() - success");
+	return 0;
 }
 
 // C-style interface for C# interop
 extern "C" {
-    __declspec(dllexport) VideoPlayer* CreateVideoPlayer()
-    {
-        return new VideoPlayer();
-    }
+	__declspec(dllexport) VideoPlayer* CreateVideoPlayer()
+	{
+		return new VideoPlayer();
+	}
 
-    __declspec(dllexport) void DestroyVideoPlayer(VideoPlayer* player)
-    {
-        if (player) {
-            delete player;
-        }
-    }
+	__declspec(dllexport) void DestroyVideoPlayer(VideoPlayer* player)
+	{
+		if (player) {
+			delete player;
+		}
+	}
 
-    __declspec(dllexport) void SetVideoPath(VideoPlayer* player, LPWSTR path)
-    {
-        if (player) {
-            player->setVideoPath(path);
-        }
-    }
+	__declspec(dllexport) void SetVideoPath(VideoPlayer* player, LPWSTR path)
+	{
+		if (player) {
+			player->setVideoPath(path);
+		}
+	}
 
-    __declspec(dllexport) void SetWindowHandle(VideoPlayer* player, HWND hwnd)
-    {
-        if (player) {
-            player->setWindowHandle(hwnd);
-        }
-    }
+	__declspec(dllexport) void SetWindowHandle(VideoPlayer* player, HWND hwnd)
+	{
+		if (player) {
+			player->setWindowHandle(hwnd);
+		}
+	}
 
-    __declspec(dllexport) int InitializePlayer(VideoPlayer* player)
-    {
-        if (player) {
-            return player->initialize();
-        }
-        return -1;
-    }
+	__declspec(dllexport) int InitializePlayer(VideoPlayer* player)
+	{
+		if (player) {
+			return player->initialize();
+		}
+		return -1;
+	}
 
-    __declspec(dllexport) int PlayVideo(VideoPlayer* player)
-    {
-        if (player) {
-            return player->play();
-        }
-        return -1;
-    }
+	__declspec(dllexport) int PlayVideo(VideoPlayer* player)
+	{
+		if (player) {
+			return player->play();
+		}
+		return -1;
+	}
 
-    __declspec(dllexport) int PauseVideo(VideoPlayer* player)
-    {
-        if (player) {
-            return player->pause();
-        }
-        return -1;
-    }
+	__declspec(dllexport) int PauseVideo(VideoPlayer* player)
+	{
+		if (player) {
+			return player->pause();
+		}
+		return -1;
+	}
 
-    __declspec(dllexport) int StopVideo(VideoPlayer* player)
-    {
-        if (player) {
-            return player->stop();
-        }
-        return -1;
-    }
+	__declspec(dllexport) int StopVideo(VideoPlayer* player)
+	{
+		if (player) {
+			return player->stop();
+		}
+		return -1;
+	}
 
-    __declspec(dllexport) bool IsPlaying(VideoPlayer* player)
-    {
-        if (player) {
-            return player->getIsPlaying();
-        }
-        return false;
-    }
+	__declspec(dllexport) bool IsPlaying(VideoPlayer* player)
+	{
+		if (player) {
+			return player->getIsPlaying();
+		}
+		return false;
+	}
 
-    __declspec(dllexport) bool IsPaused(VideoPlayer* player)
-    {
-        if (player) {
-            return player->getIsPaused();
-        }
-        return false;
-    }
+	__declspec(dllexport) bool IsPaused(VideoPlayer* player)
+	{
+		if (player) {
+			return player->getIsPaused();
+		}
+		return false;
+	}
 }
 
-BOOL APIENTRY UserSpaceMF( HMODULE hModule,
-                       DWORD  ul_reason_for_call,
-                       LPVOID lpReserved
-                     )
+BOOL APIENTRY UserSpaceMF(HMODULE hModule,
+	DWORD  ul_reason_for_call,
+	LPVOID lpReserved
+)
 {
-    switch (ul_reason_for_call)
-    {
-    case DLL_PROCESS_ATTACH:
-    case DLL_THREAD_ATTACH:
-    case DLL_THREAD_DETACH:
-    case DLL_PROCESS_DETACH:
-        break;
-    }
-    
-    return TRUE;
+	switch (ul_reason_for_call)
+	{
+	case DLL_PROCESS_ATTACH:
+	case DLL_THREAD_ATTACH:
+	case DLL_THREAD_DETACH:
+	case DLL_PROCESS_DETACH:
+		break;
+	}
+
+	return TRUE;
 }

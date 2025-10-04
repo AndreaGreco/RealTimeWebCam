@@ -31,11 +31,13 @@ private:
     IMFVideoSampleAllocator* pVideoSampleAllocator;
     IMFStreamSink* m_pStreamSink = nullptr;
     IDirect3DDeviceManager9* pD3DManager;
-    IMFSample* pD3DVideoSample = nullptr;
-    IMFMediaBuffer* pDstBuffer = nullptr;
     IMFSourceReader* pReader = nullptr;
-    IMF2DBuffer* p2DBuffer = nullptr;
     long m_cRef = 1;
+    
+    // Video format info
+    UINT32 m_width;
+    UINT32 m_height;
+    GUID m_subtype;
 
 public:
     VideoReaderCall(IMFStreamSink* pSink);
