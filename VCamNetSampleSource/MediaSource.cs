@@ -1,7 +1,7 @@
-﻿using System;
+﻿using DirectN;
+using System;
 using System.Runtime.InteropServices;
 using System.Threading;
-using DirectN;
 using VCamNetSampleSource.Utilities;
 using Windows.ApplicationModel;
 using Constants = VCamNetSampleSource.Utilities.Constants;

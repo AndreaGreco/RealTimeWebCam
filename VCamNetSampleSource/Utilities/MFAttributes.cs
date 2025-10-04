@@ -1,5 +1,5 @@
-﻿using System;
-using DirectN;
+﻿using DirectN;
+using System;
 
 namespace VCamNetSampleSource.Utilities
 {

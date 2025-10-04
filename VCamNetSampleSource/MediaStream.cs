@@ -1,6 +1,6 @@
-﻿using System;
+﻿using DirectN;
+using System;
 using System.Threading;
-using DirectN;
 using VCamNetSampleSource.Utilities;
 
 namespace VCamNetSampleSource

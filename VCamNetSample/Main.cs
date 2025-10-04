@@ -1,8 +1,8 @@
-﻿using System;
+﻿using DirectN;
+using System;
 using System.ComponentModel;
 using System.Reflection;
 using System.Windows.Forms;
-using DirectN;
 using VCamNetSampleSource;
 
 namespace VCamNetSample

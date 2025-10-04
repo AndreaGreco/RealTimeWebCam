@@ -1,6 +1,6 @@
-﻿using System;
+﻿using DirectN;
+using System;
 using System.Runtime.InteropServices;
-using DirectN;
 using VCamNetSampleSource.Utilities;
 
 namespace VCamNetSampleSource

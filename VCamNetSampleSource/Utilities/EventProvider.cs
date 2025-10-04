@@ -1,11 +1,11 @@
-﻿using System;
+﻿using DirectN;
+using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
-using DirectN;
 
 namespace VCamNetSampleSource.Utilities
 {

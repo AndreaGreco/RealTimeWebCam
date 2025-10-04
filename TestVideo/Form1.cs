@@ -45,7 +45,7 @@ namespace TestVideo
                 if (!string.IsNullOrEmpty(pathTextBox.Text))
                 {
                     videoPlayer.SetVideoPath(pathTextBox.Text);
-                    
+
                     if (videoPlayer.Initialize())
                     {
                         videoPlayer.Play();
