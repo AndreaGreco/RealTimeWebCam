@@ -1,6 +1,11 @@
 #include "pch.h"
 #include "VideoReaderCbk.h"
 #include "Logger.h"
+#include <string>
+#include <stdio.h>
+
+/* Frame aviable for the pipeline */
+#define SAMPLE_ALLOCATOR_COUNT 100
 
 VideoReaderCall::VideoReaderCall(IMFStreamSink* pSink) : m_pStreamSink(pSink), m_width(0), m_height(0) {
     if (m_pStreamSink)
@@ -55,14 +60,14 @@ HRESULT VideoReaderCall::AllocateInternalBuffer(IMFMediaType* SinkMediaType, IMF
         return ret;
     }
 
-    // Allocate buffer pool (5-10 samples for smooth playback)
-    ret = pVideoSampleAllocator->InitializeSampleAllocator(8, SinkMediaType);
+    // For RTSP real-time: use minimal buffer pool (3 samples) for low latency
+    ret = pVideoSampleAllocator->InitializeSampleAllocator(SAMPLE_ALLOCATOR_COUNT, SinkMediaType);
     if (ret != S_OK) {
         DebugLog("Failed to initialize sample allocator");
         return ret;
     }
 
-    DebugLog("VideoReaderCallback initialized successfully");
+    DebugLog("VideoReaderCallback initialized successfully for real-time streaming");
     return S_OK;
 }
 
@@ -93,6 +98,12 @@ STDMETHODIMP VideoReaderCall::OnReadSample(HRESULT hrStatus,
 {
     HRESULT ret;
 
+    char logBuffer[256];
+    snprintf(logBuffer, sizeof(logBuffer),
+        "OnReadSample: hrStatus=0x%X, dwStreamIndex=%lu, dwStreamFlags=0x%X, llTimestamp=%lld, pSample=%p",
+        hrStatus, dwStreamIndex, dwStreamFlags, llTimestamp, pSample);
+	DebugLog(logBuffer);
+
     if (FAILED(hrStatus)) {
         DebugLog("OnReadSample failed status");
         return hrStatus;
@@ -116,14 +127,18 @@ STDMETHODIMP VideoReaderCall::OnReadSample(HRESULT hrStatus,
     ret = pVideoSampleAllocator->AllocateSample(&pD3DSample);
     if (ret != S_OK) {
         DebugLog("Failed to allocate D3D sample from pool");
+        // Request next frame anyway
+        if (pReader) {
+            pReader->ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, nullptr, nullptr, nullptr, nullptr);
+        }
         return ret;
     }
 
-    // Copy timing information
-    LONGLONG sampleDuration = 0;
+    // Copy timing information with NORMALIZED timestamp for smooth playback
+    LONGLONG sampleDuration;
     pSample->GetSampleDuration(&sampleDuration);
-    pD3DSample->SetSampleTime(llTimestamp);
     pD3DSample->SetSampleDuration(sampleDuration);
+    pD3DSample->SetSampleTime(llTimestamp);
 
     // Get source buffer
     IMFMediaBuffer* pSrcBuffer = nullptr;
@@ -131,6 +146,10 @@ STDMETHODIMP VideoReaderCall::OnReadSample(HRESULT hrStatus,
     if (ret != S_OK) {
         pD3DSample->Release();
         DebugLog("Failed to get contiguous buffer from source");
+        // Request next frame anyway
+        if (pReader) {
+            pReader->ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, nullptr, nullptr, nullptr, nullptr);
+        }
         return ret;
     }
 
@@ -141,6 +160,9 @@ STDMETHODIMP VideoReaderCall::OnReadSample(HRESULT hrStatus,
         pSrcBuffer->Release();
         pD3DSample->Release();
         DebugLog("Failed to get destination buffer");
+        if (pReader) {
+            pReader->ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, nullptr, nullptr, nullptr, nullptr);
+        }
         return ret;
     }
 
@@ -153,6 +175,9 @@ STDMETHODIMP VideoReaderCall::OnReadSample(HRESULT hrStatus,
         pSrcBuffer->Release();
         pD3DSample->Release();
         DebugLog("Failed to lock source buffer");
+        if (pReader) {
+            pReader->ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, nullptr, nullptr, nullptr, nullptr);
+        }
         return ret;
     }
 
@@ -167,7 +192,6 @@ STDMETHODIMP VideoReaderCall::OnReadSample(HRESULT hrStatus,
         if (ret == S_OK) {
             // For NV12: Y plane + UV plane
             DWORD cbYPlane = m_width * m_height;
-            DWORD cbUVPlane = m_width * m_height / 2; // NV12 UV is half height
             
             // Copy Y plane
             MFCopyImage(pbScanline0, lPitch, pbSrcData, m_width, m_width, m_height);

@@ -4,6 +4,7 @@
 #include "Logger.h"
 #include "MediaEventHandler.h"
 #include "VideoReaderCbk.h"
+#include "CSourceOpenMonitor.h"
 #include <combaseapi.h>
 #include <evr.h>
 #include <guiddef.h>
@@ -27,7 +28,7 @@
 #pragma comment(lib, "wmcodecdspuuid.lib")
 #pragma comment(lib, "d3d9.lib")
 #pragma comment(lib, "Dxva2.lib")
-
+#pragma comment(lib, "Propsys.lib")
 
 #define VIDEO_WIDTH  640
 #define VIDEO_HEIGHT 480
@@ -117,6 +118,7 @@ private:
 	IMFPresentationTimeSource* pTimeSource;
 	IMFSample* pD3DVideoSample;
 	VideoReaderCall* videoReaderCallback;
+	CSourceOpenMonitor* pSourceOpenMonitor;
 
 	// Event handlers
 	IMFMediaEventGenerator* pEventGenerator;
@@ -192,6 +194,7 @@ void VideoPlayer::InitializeVariables()
 	pD3DVideoSample = NULL;
 	pEventGenerator = NULL;
 	pstreamSinkEventGenerator = NULL;
+	pSourceOpenMonitor = NULL;
 }
 
 void VideoPlayer::ReleaseResources()
@@ -217,6 +220,7 @@ void VideoPlayer::ReleaseResources()
 	SAFE_RELEASE(pD3DVideoSample);
 	SAFE_RELEASE(pEventGenerator);
 	SAFE_RELEASE(pstreamSinkEventGenerator);
+	SAFE_RELEASE(pSourceOpenMonitor);
 	SAFE_RELEASE(pVideoSource);
 }
 
@@ -243,7 +247,9 @@ HRESULT VideoPlayer::GetVideoSourceFromFile(LPWSTR path, IMFMediaSource** ppVide
 	IUnknown* uSource = NULL;
 
 	IMFAttributes* pVideoReaderAttributes = NULL;
+	IMFAttributes* pSourceConfig = NULL;
 	MF_OBJECT_TYPE ObjectType = MF_OBJECT_INVALID;
+	IPropertyStore* pConfig = NULL;
 
 	HRESULT hr = S_OK;
 
@@ -255,16 +261,41 @@ HRESULT VideoPlayer::GetVideoSourceFromFile(LPWSTR path, IMFMediaSource** ppVide
 		return E_OUTOFMEMORY;
 	}
 
+	// Create the source open monitor
+	pSourceOpenMonitor = new (std::nothrow) CSourceOpenMonitor();
+	if (pSourceOpenMonitor == NULL)
+	{
+		hr = E_OUTOFMEMORY;
+		LogError("Failed to create CSourceOpenMonitor", hr);
+		goto done;
+	}
+
 	hr = MFCreateSourceResolver(&pSourceResolver);
 	if (hr != S_OK) {
 		LogError("MFCreateSourceResolver", hr);
 		goto done;
 	}
 
+	hr = PSCreateMemoryPropertyStore(IID_PPV_ARGS(&pConfig));
+	if (hr != S_OK) {
+		LogError("PSCreateMemoryPropertyStore", hr);
+		goto done;
+	}
+	if (SUCCEEDED(hr))
+	{
+		PROPVARIANT var;
+		var.vt = VT_UNKNOWN;
+		pSourceOpenMonitor->QueryInterface(IID_PPV_ARGS(&var.punkVal));
+
+		hr = pConfig->SetValue(MFPKEY_SourceOpenMonitor, var);
+
+		PropVariantClear(&var);
+	}
+
 	hr = pSourceResolver->CreateObjectFromURL(
 		path,                       // URL of the source.
 		MF_RESOLUTION_MEDIASOURCE,  // Create a source object.
-		NULL,                       // Optional property store.
+		pConfig,                    // Optional property store.
 		&ObjectType,                // Receives the created object type. 
 		&uSource                    // Receives a pointer to the media source. 
 	);
@@ -279,18 +310,36 @@ HRESULT VideoPlayer::GetVideoSourceFromFile(LPWSTR path, IMFMediaSource** ppVide
 		goto done;
 	}
 
+	// Configure the media source for low-latency RTSP streaming
+	hr = (*ppVideoSource)->QueryInterface(IID_PPV_ARGS(&pSourceConfig));
+	if (hr == S_OK) {
+		// Set max buffer time for network source (in milliseconds) - 0 for minimal latency
+		pSourceConfig->SetUINT32(MFNETSOURCE_MAXBUFFERTIMEMS, 0);
+		
+		// Enable RTSP protocol support
+		pSourceConfig->SetUINT32(MFNETSOURCE_ENABLE_RTSP, TRUE);
+		
+		// Minimal buffering for real-time (in milliseconds)
+		pSourceConfig->SetUINT32(MFNETSOURCE_BUFFERINGTIME, 0);  // No buffering for lowest latency
+		
+		DebugLog("Network source configured with minimal buffering (0ms)");
+	}
+
 	hr = MFCreateAttributes(&pVideoReaderAttributes, 1);
 	if (hr != S_OK) {
 		LogError("MFCreateAttributes", hr);
 		goto done;
 	}
 
-	// DO NOT use MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING when using Direct3D/EVR
-	// The GPU handles format conversion more efficiently during rendering
-
 	hr = pVideoReaderAttributes->SetUnknown(MF_SOURCE_READER_ASYNC_CALLBACK, videoReaderCallback);
 	if (hr != S_OK) {
 		LogError("SetUnknown MF_SOURCE_READER_ASYNC_CALLBACK", hr);
+		goto done;
+	}
+
+	hr = pVideoReaderAttributes->SetUINT32(MF_LOW_LATENCY, 1);
+	if (hr != S_OK) {
+		LogError("SetUnknown MFNETSOURCE_MAXBUFFERTIMEMS", hr);
 		goto done;
 	}
 
@@ -300,12 +349,13 @@ HRESULT VideoPlayer::GetVideoSourceFromFile(LPWSTR path, IMFMediaSource** ppVide
 		goto done;
 	}
 
-	DebugLog("GetVideoSourceFromFile - success");
+	DebugLog("GetVideoSourceFromFile - success (optimized for RTSP low-latency)");
 
 done:
 	SAFE_RELEASE(pSourceResolver);
 	SAFE_RELEASE(uSource);
 	SAFE_RELEASE(pVideoReaderAttributes);
+	SAFE_RELEASE(pSourceConfig);
 
 	return hr;
 }
@@ -624,7 +674,7 @@ int VideoPlayer::play()
 		return -2;
 	}
 
-	DebugLog("VideoPlayer::play() - success");
+	DebugLog("VideoPlayer::play() - success (live streaming mode)");
 	return 0;
 }
 
