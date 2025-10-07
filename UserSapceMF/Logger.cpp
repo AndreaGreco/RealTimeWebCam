@@ -23,5 +23,7 @@ void DebugLog(const char* msg) {
         logfile << std::put_time(&tm_buf, "%Y-%m-%d %H:%M:%S")
             << "." << std::setfill('0') << std::setw(6) << micros.count()
             << " - " << msg << std::endl;
+		logfile.flush();
+		logfile.close();
     }
 }
