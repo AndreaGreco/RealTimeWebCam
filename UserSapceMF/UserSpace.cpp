@@ -59,6 +59,15 @@ template <class T> inline void SAFE_RELEASE(T*& pT)
 	}
 }
 
+template <class T> void SAFE_DELETE(T*& pT)
+{
+	if (pT != NULL)
+	{
+		delete pT;
+		pT = NULL;
+	}
+}
+
 // ============================================================================
 // HELPER FUNCTIONS - Logging
 // ============================================================================
@@ -304,27 +313,26 @@ HRESULT CreateNV12VideoOutputType(IMFMediaType* pSourceType, IMFMediaType** ppOu
 class VideoPlayer
 {
 private:
-	// Media Foundation interfaces
-	IMFMediaSource* pVideoSource;
-	IMFSourceReader* pVideoReader;
-	IMFMediaType* videoSourceOutputType;
-	IMFMediaType* pvideoSourceModType;
-	IMFMediaType* pVideoSourceOutType;
-	IMFMediaType* pImfEvrSinkType;
-	IMFMediaType* pHintMediaType;
+	// One-time initialization resources (created once, released in destructor)
 	IMFMediaSink* pVideoSink;
 	IMFStreamSink* pStreamSink;
-	IMFMediaTypeHandler* pSinkMediaTypeHandler;
-	IMFMediaTypeHandler* pSourceMediaTypeHandler;
-	IMFPresentationDescriptor* pSourcePresentationDescriptor;
-	IMFStreamDescriptor* pSourceStreamDescriptor;
 	IMFVideoRenderer* pVideoRenderer;
 	IMFVideoDisplayControl* pVideoDisplayControl;
 	IMFGetService* pService;
 	IMFActivate* pActive;
+	IMFMediaTypeHandler* pSinkMediaTypeHandler;
+	
+	// Playback resources (created in initialize/play, released in stop)
+	IMFMediaSource* pVideoSource;
+	IMFSourceReader* pVideoReader;
+	IMFMediaType* videoSourceOutputType;
+	IMFMediaType* pVideoSourceOutType;
+	IMFMediaType* pImfEvrSinkType;
+	IMFPresentationDescriptor* pSourcePresentationDescriptor;
+	IMFStreamDescriptor* pSourceStreamDescriptor;
+	IMFMediaTypeHandler* pSourceMediaTypeHandler;
 	IMFPresentationClock* pClock;
 	IMFPresentationTimeSource* pTimeSource;
-	IMFSample* pD3DVideoSample;
 	VideoReaderCall* videoReaderCallback;
 	CSourceOpenMonitor* pSourceOpenMonitor;
 
@@ -334,6 +342,11 @@ private:
 	MediaEventHandler mediaEvtHandler;
 	MediaEventHandler streamSinkMediaEvtHandler;
 
+	// Unused/deprecated members
+	IMFMediaType* pvideoSourceModType;
+	IMFMediaType* pHintMediaType;
+	IMFSample* pD3DVideoSample;
+
 	// Configuration
 	LPWSTR filePath;
 	HWND windowHandle;
@@ -341,27 +354,25 @@ private:
 	BOOL fSelected;
 	bool isPlaying;
 	bool isPaused;
+	bool isInitialized;  // Track if one-time initialization is done
 
 	// Initialization helpers
 	void InitializeVariables();
-	void ReleaseResources();
+	void ReleaseAllResources();
+	void ReleasePlaybackResources();
 	HRESULT ValidateInitializationParameters();
 	
-	// Video sink setup
+	// One-time setup (called once)
 	HRESULT CreateAndInitializeVideoSink();
 	HRESULT SetupVideoDisplayControl();
 	HRESULT GetStreamSinkAndMediaTypeHandler();
+	HRESULT SetupEventHandlers();
 	
-	// Video source setup
+	// Playback setup (called on each play)
 	HRESULT CreateVideoSourceAndReader();
 	HRESULT ConfigureVideoSourceStream();
 	HRESULT GetSourceDescriptors();
-	
-	// Media type configuration
 	HRESULT CreateAndSetMediaTypes();
-	
-	// Event and clock setup
-	HRESULT SetupEventHandlers();
 	HRESULT SetupPresentationClock();
 
 public:
@@ -391,73 +402,112 @@ VideoPlayer::VideoPlayer()
 	fSelected = false;
 	isPlaying = false;
 	isPaused = false;
+	isInitialized = false;
 }
 
 VideoPlayer::~VideoPlayer()
 {
 	stop();
-	ReleaseResources();
+	ReleaseAllResources();
+	MFShutdown();
 }
 
 void VideoPlayer::InitializeVariables()
 {
-	pVideoSource = NULL;
-	pVideoReader = NULL;
-	videoSourceOutputType = NULL;
-	pvideoSourceModType = NULL;
-	pVideoSourceOutType = NULL;
-	pImfEvrSinkType = NULL;
-	pHintMediaType = NULL;
+	// One-time resources
 	pVideoSink = NULL;
 	pStreamSink = NULL;
-	pSinkMediaTypeHandler = NULL;
-	pSourceMediaTypeHandler = NULL;
-	pSourcePresentationDescriptor = NULL;
-	pSourceStreamDescriptor = NULL;
 	pVideoRenderer = NULL;
 	pVideoDisplayControl = NULL;
 	pService = NULL;
 	pActive = NULL;
+	pSinkMediaTypeHandler = NULL;
+	
+	// Playback resources
+	pVideoSource = NULL;
+	pVideoReader = NULL;
+	videoSourceOutputType = NULL;
+	pVideoSourceOutType = NULL;
+	pImfEvrSinkType = NULL;
+	pSourcePresentationDescriptor = NULL;
+	pSourceStreamDescriptor = NULL;
+	pSourceMediaTypeHandler = NULL;
 	pClock = NULL;
 	pTimeSource = NULL;
-	pD3DVideoSample = NULL;
+	videoReaderCallback = NULL;
+	pSourceOpenMonitor = NULL;
+	
+	// Event handlers
 	pEventGenerator = NULL;
 	pstreamSinkEventGenerator = NULL;
-	pSourceOpenMonitor = NULL;
-	videoReaderCallback = NULL;
+	
+	// Unused
+	pvideoSourceModType = NULL;
+	pHintMediaType = NULL;
+	pD3DVideoSample = NULL;
 }
 
-void VideoPlayer::ReleaseResources()
+void VideoPlayer::ReleasePlaybackResources()
 {
+	DebugLog("ReleasePlaybackResources - start");
+
+	// Stop the clock first
+	if (pClock)
+	{
+		pClock->Stop();
+	}
+
+	// Release source reader and related
 	SAFE_RELEASE(pVideoReader);
 	SAFE_RELEASE(videoSourceOutputType);
-	SAFE_RELEASE(pvideoSourceModType);
 	SAFE_RELEASE(pVideoSourceOutType);
 	SAFE_RELEASE(pImfEvrSinkType);
-	SAFE_RELEASE(pHintMediaType);
-	SAFE_RELEASE(pVideoSink);
-	SAFE_RELEASE(pStreamSink);
-	SAFE_RELEASE(pSinkMediaTypeHandler);
+	
+	// Release source and descriptors
 	SAFE_RELEASE(pSourceMediaTypeHandler);
-	SAFE_RELEASE(pSourcePresentationDescriptor);
 	SAFE_RELEASE(pSourceStreamDescriptor);
-	SAFE_RELEASE(pVideoRenderer);
-	SAFE_RELEASE(pVideoDisplayControl);
-	SAFE_RELEASE(pService);
-	SAFE_RELEASE(pActive);
-	SAFE_RELEASE(pClock);
-	SAFE_RELEASE(pTimeSource);
-	SAFE_RELEASE(pD3DVideoSample);
-	SAFE_RELEASE(pEventGenerator);
-	SAFE_RELEASE(pstreamSinkEventGenerator);
-	SAFE_RELEASE(pSourceOpenMonitor);
+	SAFE_RELEASE(pSourcePresentationDescriptor);
 	SAFE_RELEASE(pVideoSource);
 	
-	if (videoReaderCallback)
-	{
-		delete videoReaderCallback;
-		videoReaderCallback = NULL;
-	}
+	// Release clock resources
+	SAFE_RELEASE(pClock);
+	SAFE_RELEASE(pTimeSource);
+	
+	// Delete callback and monitor
+	SAFE_DELETE(videoReaderCallback);
+	SAFE_RELEASE(pSourceOpenMonitor);
+	
+	DebugLog("ReleasePlaybackResources - complete");
+}
+
+void VideoPlayer::ReleaseAllResources()
+{
+	DebugLog("ReleaseAllResources - start");
+	
+	// First release playback resources
+	ReleasePlaybackResources();
+	
+	// Then release event handlers
+	SAFE_RELEASE(pstreamSinkEventGenerator);
+	SAFE_RELEASE(pEventGenerator);
+	
+	// Release one-time sink resources
+	SAFE_RELEASE(pSinkMediaTypeHandler);
+	SAFE_RELEASE(pStreamSink);
+	SAFE_RELEASE(pVideoDisplayControl);
+	SAFE_RELEASE(pService);
+	SAFE_RELEASE(pVideoRenderer);
+	SAFE_RELEASE(pVideoSink);
+	SAFE_RELEASE(pActive);
+	
+	// Release unused resources
+	SAFE_RELEASE(pvideoSourceModType);
+	SAFE_RELEASE(pHintMediaType);
+	SAFE_RELEASE(pD3DVideoSample);
+	
+	isInitialized = false;
+	
+	DebugLog("ReleaseAllResources - complete");
 }
 
 // ============================================================================
@@ -828,34 +878,51 @@ int VideoPlayer::initialize()
 		return -1;
 	}
 
-	// Initialize Media Foundation
-	hr = MFStartup(MF_VERSION);
-	if (FAILED(hr))
+	// One-time initialization
+	if (!isInitialized)
 	{
-		LogError("MFStartup", hr);
-		return -1;
+		// Initialize Media Foundation
+		hr = MFStartup(MF_VERSION);
+		if (FAILED(hr))
+		{
+			LogError("MFStartup", hr);
+			return -1;
+		}
+
+		// Set up Video Sink (Enhanced Video Renderer) - ONE TIME
+		hr = CreateAndInitializeVideoSink();
+		if (FAILED(hr))
+		{
+			return -2;
+		}
+
+		hr = SetupVideoDisplayControl();
+		if (FAILED(hr))
+		{
+			return -3;
+		}
+
+		hr = GetStreamSinkAndMediaTypeHandler();
+		if (FAILED(hr))
+		{
+			return -4;
+		}
+
+		// Set up event handlers - ONE TIME
+		hr = SetupEventHandlers();
+		if (FAILED(hr))
+		{
+			return -9;
+		}
+
+		isInitialized = true;
+		DebugLog("One-time initialization complete");
 	}
 
-	// Set up Video Sink (Enhanced Video Renderer)
-	hr = CreateAndInitializeVideoSink();
-	if (FAILED(hr))
-	{
-		return -2;
-	}
+	// Always clean up previous playback resources before creating new ones
+	ReleasePlaybackResources();
 
-	hr = SetupVideoDisplayControl();
-	if (FAILED(hr))
-	{
-		return -3;
-	}
-
-	hr = GetStreamSinkAndMediaTypeHandler();
-	if (FAILED(hr))
-	{
-		return -4;
-	}
-
-	// Set up Video Source
+	// Set up Video Source - EVERY TIME (may change)
 	hr = CreateVideoSourceAndReader();
 	if (FAILED(hr))
 	{
@@ -881,13 +948,6 @@ int VideoPlayer::initialize()
 		return -8;
 	}
 
-	// Set up event handlers
-	hr = SetupEventHandlers();
-	if (FAILED(hr))
-	{
-		return -9;
-	}
-
 	// Set up presentation clock
 	hr = SetupPresentationClock();
 	if (FAILED(hr))
@@ -905,7 +965,7 @@ int VideoPlayer::play()
 
 	if (pClock == nullptr)
 	{
-		DebugLog("VideoPlayer::play() - pClock is null");
+		DebugLog("VideoPlayer::play() - pClock is null, need to call initialize first");
 		return -1;
 	}
 
@@ -958,6 +1018,11 @@ int VideoPlayer::stop()
 {
 	DebugLog("VideoPlayer::stop() - start");
 
+	// Stop playback
+	isPlaying = false;
+	isPaused = false;
+
+	// Stop the clock
 	if (pClock != nullptr)
 	{
 		HRESULT hr = pClock->Stop();
@@ -967,8 +1032,8 @@ int VideoPlayer::stop()
 		}
 	}
 
-	isPlaying = false;
-	isPaused = false;
+	// Release playback resources to prevent memory leaks
+	ReleasePlaybackResources();
 
 	DebugLog("VideoPlayer::stop() - success");
 	return 0;
