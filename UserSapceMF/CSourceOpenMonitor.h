@@ -13,6 +13,6 @@ public:
     STDMETHODIMP OnSourceEvent(IMFMediaEvent* pEvent);
 
 private:
-    long    m_cRef;
+    long m_cRef;
 };
 
