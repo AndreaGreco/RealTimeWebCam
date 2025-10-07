@@ -85,7 +85,9 @@ namespace TestVideo
             this.pathTextBox.Name = "pathTextBox";
             this.pathTextBox.Size = new Size(400, 20);
             this.pathTextBox.TabIndex = 2;
-            this.pathTextBox.Text = @"C:\Users\andre\Downloads\sample-5s.mp4";
+            this.pathTextBox.Text = @"rtsp://192.168.178.66:8554/webcam";
+            //this.pathTextBox.Text = @"C:\Users\andre\Downloads\sample-5s.mp4";
+
 
             // 
             // browseButton
