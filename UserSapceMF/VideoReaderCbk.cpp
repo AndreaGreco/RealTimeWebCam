@@ -24,6 +24,127 @@ VideoReaderCall::~VideoReaderCall() {
         pVideoSampleAllocator->Release();
 }
 
+// Helper function to copy NV12 format
+HRESULT VideoReaderCall::CopyNV12Buffer(IMF2DBuffer* p2DBuffer, BYTE* pbSrcData, DWORD cbSrcLength) {
+    HRESULT ret;
+    BYTE* pbScanline0 = nullptr;
+    LONG lPitch = 0;
+    
+    ret = p2DBuffer->Lock2D(&pbScanline0, &lPitch);
+    if (ret != S_OK) {
+        DebugLog("Failed to lock 2D buffer for NV12");
+        return ret;
+    }
+
+    // Calculate expected sizes
+    DWORD cbYPlane = m_width * m_height;
+    DWORD cbUVPlane = m_width * (m_height / 2);
+    DWORD cbExpected = cbYPlane + cbUVPlane;
+
+    if (cbSrcLength < cbExpected) {
+        DebugLog("Source buffer too small for NV12 format");
+        p2DBuffer->Unlock2D();
+        return E_INVALIDARG;
+    }
+
+    // Copy Y plane (full resolution)
+    // Parameters: destPtr, destStride, srcPtr, srcStride, widthInBytes, lines
+    ret = MFCopyImage(pbScanline0, lPitch, pbSrcData, m_width, m_width, m_height);
+    if (FAILED(ret)) {
+        DebugLog("Failed to copy Y plane");
+        p2DBuffer->Unlock2D();
+        return ret;
+    }
+    
+    // Copy UV plane (half resolution, interleaved)
+    ret = MFCopyImage(pbScanline0 + (lPitch * m_height), lPitch,
+                      pbSrcData + cbYPlane, m_width, m_width, m_height / 2);
+    if (FAILED(ret)) {
+        DebugLog("Failed to copy UV plane");
+        p2DBuffer->Unlock2D();
+        return ret;
+    }
+    
+    p2DBuffer->Unlock2D();
+    return S_OK;
+}
+
+// Helper function to copy YUY2 format
+HRESULT VideoReaderCall::CopyYUY2Buffer(IMF2DBuffer* p2DBuffer, BYTE* pbSrcData, DWORD cbSrcLength) {
+    HRESULT ret;
+    BYTE* pbScanline0 = nullptr;
+    LONG lPitch = 0;
+    
+    ret = p2DBuffer->Lock2D(&pbScanline0, &lPitch);
+    if (ret != S_OK) {
+        DebugLog("Failed to lock 2D buffer for YUY2");
+        return ret;
+    }
+
+    // YUY2 is 2 bytes per pixel (packed format: Y0 U0 Y1 V0)
+    DWORD cbRowSize = m_width * 2;
+    DWORD cbExpected = cbRowSize * m_height;
+
+    if (cbSrcLength < cbExpected) {
+        char errorLog[256];
+        snprintf(errorLog, sizeof(errorLog), 
+                "WARNING: Source buffer smaller than expected for YUY2: expected %lu, got %lu - this might be compressed data!",
+                cbExpected, cbSrcLength);
+        DebugLog(errorLog);
+        p2DBuffer->Unlock2D();
+        return E_INVALIDARG;
+    }
+
+    // Copy YUY2 data (single packed plane)
+    // Parameters: destPtr, destStride, srcPtr, srcStride, widthInBytes, lines
+    ret = MFCopyImage(pbScanline0, lPitch, pbSrcData, cbRowSize, cbRowSize, m_height);
+    if (FAILED(ret)) {
+        char errorLog[128];
+        snprintf(errorLog, sizeof(errorLog), "Failed to copy YUY2 data, HRESULT: 0x%X", ret);
+        DebugLog(errorLog);
+        p2DBuffer->Unlock2D();
+        return ret;
+    }
+    
+    p2DBuffer->Unlock2D();
+    return S_OK;
+}
+
+// Helper function to copy RGB32 format
+HRESULT VideoReaderCall::CopyRGB32Buffer(IMF2DBuffer* p2DBuffer, BYTE* pbSrcData, DWORD cbSrcLength) {
+    HRESULT ret;
+    BYTE* pbScanline0 = nullptr;
+    LONG lPitch = 0;
+    
+    ret = p2DBuffer->Lock2D(&pbScanline0, &lPitch);
+    if (ret != S_OK) {
+        DebugLog("Failed to lock 2D buffer for RGB32");
+        return ret;
+    }
+
+    // RGB32 is 4 bytes per pixel
+    DWORD cbRowSize = m_width * 4;
+    DWORD cbExpected = cbRowSize * m_height;
+
+    if (cbSrcLength < cbExpected) {
+        DebugLog("Source buffer too small for RGB32 format");
+        p2DBuffer->Unlock2D();
+        return E_INVALIDARG;
+    }
+
+    // Copy RGB32 data (single plane)
+    // Parameters: destPtr, destStride, srcPtr, srcStride, widthInBytes, lines
+    ret = MFCopyImage(pbScanline0, lPitch, pbSrcData, cbRowSize, cbRowSize, m_height);
+    if (FAILED(ret)) {
+        DebugLog("Failed to copy RGB32 data");
+        p2DBuffer->Unlock2D();
+        return ret;
+    }
+    
+    p2DBuffer->Unlock2D();
+    return S_OK;
+}
+
 HRESULT VideoReaderCall::AllocateInternalBuffer(IMFMediaType* SinkMediaType, IMFSourceReader* pReader) {
     HRESULT ret;
 
@@ -181,26 +302,39 @@ STDMETHODIMP VideoReaderCall::OnReadSample(HRESULT hrStatus,
         return ret;
     }
 
-    // Lock destination buffer using 2D interface for NV12
+    char bufferLog[256];
+    snprintf(bufferLog, sizeof(bufferLog), 
+            "Buffer size: %lu bytes, Format: %08X-%04X-%04X, Expected for %ux%u",
+            cbSrcLength, m_subtype.Data1, m_subtype.Data2, m_subtype.Data3, m_width, m_height);
+    DebugLog(bufferLog);
+
+    // Lock destination buffer using 2D interface
     IMF2DBuffer* p2DBuffer = nullptr;
     ret = pDstBuffer->QueryInterface(IID_PPV_ARGS(&p2DBuffer));
     if (ret == S_OK) {
-        // Use 2D buffer for efficient copy
-        BYTE* pbScanline0 = nullptr;
-        LONG lPitch = 0;
-        ret = p2DBuffer->Lock2D(&pbScanline0, &lPitch);
-        if (ret == S_OK) {
-            // For NV12: Y plane + UV plane
-            DWORD cbYPlane = m_width * m_height;
-            
-            // Copy Y plane
-            MFCopyImage(pbScanline0, lPitch, pbSrcData, m_width, m_width, m_height);
-            
-            // Copy UV plane
-            MFCopyImage(pbScanline0 + (lPitch * m_height), lPitch,
-                       pbSrcData + cbYPlane, m_width, m_width, m_height / 2);
-            
-            p2DBuffer->Unlock2D();
+        // Check format and use appropriate copy function
+        if (m_subtype == MFVideoFormat_NV12) {
+            ret = CopyNV12Buffer(p2DBuffer, pbSrcData, cbSrcLength);
+            if (ret != S_OK) {
+                DebugLog("Failed to copy NV12 buffer");
+            }
+        } else if (m_subtype == MFVideoFormat_YUY2) {
+            ret = CopyYUY2Buffer(p2DBuffer, pbSrcData, cbSrcLength);
+            if (ret != S_OK) {
+                DebugLog("Failed to copy YUY2 buffer");
+            }
+        } else if (m_subtype == MFVideoFormat_RGB32) {
+            ret = CopyRGB32Buffer(p2DBuffer, pbSrcData, cbSrcLength);
+            if (ret != S_OK) {
+                DebugLog("Failed to copy RGB32 buffer");
+            }
+        } else {
+            char formatLog[128];
+            snprintf(formatLog, sizeof(formatLog), 
+                    "Unsupported format: %08X-%04X-%04X",
+                    m_subtype.Data1, m_subtype.Data2, m_subtype.Data3);
+            DebugLog(formatLog);
+            ret = E_NOTIMPL;
         }
         p2DBuffer->Release();
     } else {
@@ -210,6 +344,10 @@ STDMETHODIMP VideoReaderCall::OnReadSample(HRESULT hrStatus,
         ret = pDstBuffer->Lock(&pbDstData, &cbDstMaxLength, nullptr);
         if (ret == S_OK) {
             DWORD cbToCopy = min(cbSrcLength, cbDstMaxLength);
+            snprintf(bufferLog, sizeof(bufferLog), 
+                    "Fallback memcpy: copying %lu bytes (src: %lu, dst: %lu)",
+                    cbToCopy, cbSrcLength, cbDstMaxLength);
+            DebugLog(bufferLog);
             memcpy(pbDstData, pbSrcData, cbToCopy);
             pDstBuffer->Unlock();
         }
@@ -220,12 +358,14 @@ STDMETHODIMP VideoReaderCall::OnReadSample(HRESULT hrStatus,
     pDstBuffer->Release();
 
     // Send to EVR sink for rendering
-    ret = m_pStreamSink->ProcessSample(pD3DSample);
-    pD3DSample->Release();
-
-    if (ret != S_OK) {
-        DebugLog("ProcessSample failed");
+    if (ret == S_OK) {
+        ret = m_pStreamSink->ProcessSample(pD3DSample);
+        if (ret != S_OK) {
+            DebugLog("ProcessSample failed");
+        }
     }
+    
+    pD3DSample->Release();
 
     // Request next frame asynchronously
     if (pReader) {

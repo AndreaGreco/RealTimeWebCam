@@ -157,7 +157,7 @@ HRESULT CreateSourceReaderWithCallback(IMFMediaSource* pSource, VideoReaderCall*
 {
 	IMFAttributes* pVideoReaderAttributes = NULL;
 	
-	HRESULT hr = MFCreateAttributes(&pVideoReaderAttributes, 2);
+	HRESULT hr = MFCreateAttributes(&pVideoReaderAttributes, 3);
 	if (FAILED(hr))
 	{
 		LogError("MFCreateAttributes", hr);
@@ -176,6 +176,15 @@ HRESULT CreateSourceReaderWithCallback(IMFMediaSource* pSource, VideoReaderCall*
 	if (FAILED(hr))
 	{
 		LogError("SetUINT32 MF_LOW_LATENCY", hr);
+		SAFE_RELEASE(pVideoReaderAttributes);
+		return hr;
+	}
+
+	// Enable video processing for automatic format conversion when needed
+	hr = pVideoReaderAttributes->SetUINT32(MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, TRUE);
+	if (FAILED(hr))
+	{
+		LogError("SetUINT32 MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING", hr);
 		SAFE_RELEASE(pVideoReaderAttributes);
 		return hr;
 	}
@@ -748,34 +757,79 @@ HRESULT VideoPlayer::GetSourceDescriptors()
 
 HRESULT VideoPlayer::CreateAndSetMediaTypes()
 {
-	// Create NV12 video output type
-	HRESULT hr = CreateNV12VideoOutputType(videoSourceOutputType, &pVideoSourceOutType);
-	if (FAILED(hr))
+	// Try formats in order of preference: YUY2 (hybrid) -> RGB32 (SW)
+	// Note: With video processing enabled, source reader will automatically convert from decoder output
+	const GUID formatsToTry[] = { MFVideoFormat_YUY2, MFVideoFormat_RGB32 };
+	const int numFormats = sizeof(formatsToTry) / sizeof(formatsToTry[0]);
+	
+	HRESULT hr = E_FAIL;
+	bool formatAccepted = false;
+
+	for (int i = 0; i < numFormats && !formatAccepted; i++)
 	{
-		return hr;
+		// Create media type with current format
+		SAFE_RELEASE(pVideoSourceOutType);
+		hr = MFCreateMediaType(&pVideoSourceOutType);
+		if (FAILED(hr)) continue;
+
+		hr = pVideoSourceOutType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
+		if (FAILED(hr)) continue;
+
+		hr = pVideoSourceOutType->SetGUID(MF_MT_SUBTYPE, formatsToTry[i]);
+		if (FAILED(hr)) continue;
+
+		hr = pVideoSourceOutType->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
+		if (FAILED(hr)) continue;
+
+		hr = pVideoSourceOutType->SetUINT32(MF_MT_ALL_SAMPLES_INDEPENDENT, TRUE);
+		if (FAILED(hr)) continue;
+
+		hr = MFSetAttributeRatio(pVideoSourceOutType, MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
+		if (FAILED(hr)) continue;
+
+		hr = CopyAttribute(videoSourceOutputType, pVideoSourceOutType, MF_MT_FRAME_SIZE);
+		if (FAILED(hr)) continue;
+
+		hr = CopyAttribute(videoSourceOutputType, pVideoSourceOutType, MF_MT_FRAME_RATE);
+		if (FAILED(hr)) continue;
+
+		// CRITICAL: Tell the Source Reader to DECODE to this format
+		// Without this, we get compressed data (H.264) instead of decoded frames
+		hr = pVideoReader->SetCurrentMediaType((DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM, NULL, pVideoSourceOutType);
+		if (FAILED(hr))
+		{
+			char logMsg[256];
+			snprintf(logMsg, sizeof(logMsg), 
+					"SetCurrentMediaType failed for format %08X, trying next format", formatsToTry[i].Data1);
+			DebugLog(logMsg);
+			continue;
+		}
+
+		// Create sink type
+		SAFE_RELEASE(pImfEvrSinkType);
+		hr = MFCreateMediaType(&pImfEvrSinkType);
+		if (FAILED(hr)) continue;
+
+		hr = pVideoSourceOutType->CopyAllItems(pImfEvrSinkType);
+		if (FAILED(hr)) continue;
+
+		// Try to set on sink - if this succeeds, we're good
+		hr = pSinkMediaTypeHandler->SetCurrentMediaType(pImfEvrSinkType);
+		if (SUCCEEDED(hr))
+		{
+			char logMsg[256];
+			snprintf(logMsg, sizeof(logMsg), 
+					"Successfully configured pipeline with format: %08X", formatsToTry[i].Data1);
+			DebugLog(logMsg);
+			formatAccepted = true;
+			break;
+		}
 	}
 
-	// Create EVR sink type by copying source output type
-	hr = MFCreateMediaType(&pImfEvrSinkType);
-	if (FAILED(hr))
+	if (!formatAccepted)
 	{
-		LogError("MFCreateMediaType for EVR sink", hr);
-		return hr;
-	}
-
-	hr = pVideoSourceOutType->CopyAllItems(pImfEvrSinkType);
-	if (FAILED(hr))
-	{
-		LogError("CopyAllItems from source to sink", hr);
-		return hr;
-	}
-
-	// Set the media type on the sink first
-	hr = pSinkMediaTypeHandler->SetCurrentMediaType(pImfEvrSinkType);
-	if (FAILED(hr))
-	{
-		LogError("SetCurrentMediaType for sink", hr);
-		return hr;
+		LogError("No compatible format found for EVR sink", hr);
+		return E_FAIL;
 	}
 
 	// Allocate internal buffer with validated media type
@@ -783,14 +837,6 @@ HRESULT VideoPlayer::CreateAndSetMediaTypes()
 	if (FAILED(hr))
 	{
 		LogError("AllocateInternalBuffer", hr);
-		return hr;
-	}
-
-	// Set the media type on the source reader
-	hr = pVideoReader->SetCurrentMediaType((DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM, NULL, pVideoSourceOutType);
-	if (FAILED(hr))
-	{
-		LogError("SetCurrentMediaType for video reader", hr);
 		return hr;
 	}
 

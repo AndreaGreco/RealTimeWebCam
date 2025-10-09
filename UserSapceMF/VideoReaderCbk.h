@@ -39,6 +39,11 @@ private:
     UINT32 m_height;
     GUID m_subtype;
 
+    // Helper functions for format-specific buffer copying
+    HRESULT CopyNV12Buffer(IMF2DBuffer* p2DBuffer, BYTE* pbSrcData, DWORD cbSrcLength);
+    HRESULT CopyYUY2Buffer(IMF2DBuffer* p2DBuffer, BYTE* pbSrcData, DWORD cbSrcLength);
+    HRESULT CopyRGB32Buffer(IMF2DBuffer* p2DBuffer, BYTE* pbSrcData, DWORD cbSrcLength);
+
 public:
     VideoReaderCall(IMFStreamSink* pSink);
     ~VideoReaderCall();
