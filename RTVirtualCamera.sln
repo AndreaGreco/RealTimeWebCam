@@ -1,0 +1,54 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.9.34616.47
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MFPipeline", "MFPipeline\MFPipeline.vcxproj", "{4E2A38E1-FDFE-43AB-8D43-2F10A491E573}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RTVirtualCamera", "RTVirtualCamera\RTVirtualCamera.csproj", "{A0ABFDE8-6672-48C1-8143-FD4ACB2241C7}"
+	ProjectSection(ProjectDependencies) = postProject
+		{4E2A38E1-FDFE-43AB-8D43-2F10A491E573} = {4E2A38E1-FDFE-43AB-8D43-2F10A491E573}
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|ARM64 = Debug|ARM64
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|ARM64 = Release|ARM64
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4E2A38E1-FDFE-43AB-8D43-2F10A491E573}.Debug|ARM64.ActiveCfg = Debug|x64
+		{4E2A38E1-FDFE-43AB-8D43-2F10A491E573}.Debug|ARM64.Build.0 = Debug|x64
+		{4E2A38E1-FDFE-43AB-8D43-2F10A491E573}.Debug|x64.ActiveCfg = Debug|x64
+		{4E2A38E1-FDFE-43AB-8D43-2F10A491E573}.Debug|x64.Build.0 = Debug|x64
+		{4E2A38E1-FDFE-43AB-8D43-2F10A491E573}.Debug|x86.ActiveCfg = Debug|Win32
+		{4E2A38E1-FDFE-43AB-8D43-2F10A491E573}.Debug|x86.Build.0 = Debug|Win32
+		{4E2A38E1-FDFE-43AB-8D43-2F10A491E573}.Release|ARM64.ActiveCfg = Release|x64
+		{4E2A38E1-FDFE-43AB-8D43-2F10A491E573}.Release|ARM64.Build.0 = Release|x64
+		{4E2A38E1-FDFE-43AB-8D43-2F10A491E573}.Release|x64.ActiveCfg = Release|x64
+		{4E2A38E1-FDFE-43AB-8D43-2F10A491E573}.Release|x64.Build.0 = Release|x64
+		{4E2A38E1-FDFE-43AB-8D43-2F10A491E573}.Release|x86.ActiveCfg = Release|Win32
+		{4E2A38E1-FDFE-43AB-8D43-2F10A491E573}.Release|x86.Build.0 = Release|Win32
+		{A0ABFDE8-6672-48C1-8143-FD4ACB2241C7}.Debug|ARM64.ActiveCfg = Debug|Any CPU
+		{A0ABFDE8-6672-48C1-8143-FD4ACB2241C7}.Debug|ARM64.Build.0 = Debug|Any CPU
+		{A0ABFDE8-6672-48C1-8143-FD4ACB2241C7}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A0ABFDE8-6672-48C1-8143-FD4ACB2241C7}.Debug|x64.Build.0 = Debug|Any CPU
+		{A0ABFDE8-6672-48C1-8143-FD4ACB2241C7}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{A0ABFDE8-6672-48C1-8143-FD4ACB2241C7}.Debug|x86.Build.0 = Debug|Any CPU
+		{A0ABFDE8-6672-48C1-8143-FD4ACB2241C7}.Release|ARM64.ActiveCfg = Release|Any CPU
+		{A0ABFDE8-6672-48C1-8143-FD4ACB2241C7}.Release|ARM64.Build.0 = Release|Any CPU
+		{A0ABFDE8-6672-48C1-8143-FD4ACB2241C7}.Release|x64.ActiveCfg = Release|Any CPU
+		{A0ABFDE8-6672-48C1-8143-FD4ACB2241C7}.Release|x64.Build.0 = Release|Any CPU
+		{A0ABFDE8-6672-48C1-8143-FD4ACB2241C7}.Release|x86.ActiveCfg = Release|Any CPU
+		{A0ABFDE8-6672-48C1-8143-FD4ACB2241C7}.Release|x86.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {9953105F-F679-4AC2-AAE6-39E5E0C7A68C}
+	EndGlobalSection
+EndGlobal
