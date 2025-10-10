@@ -1,8 +1,0 @@
-{
-  "profiles": {
-    "VCamNetSampleAOT": {
-      "commandName": "Project",
-      "nativeDebugging": true
-    }
-  }
-}
