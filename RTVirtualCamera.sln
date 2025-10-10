@@ -10,6 +10,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RTVirtualCamera", "RTVirtua
 		{4E2A38E1-FDFE-43AB-8D43-2F10A491E573} = {4E2A38E1-FDFE-43AB-8D43-2F10A491E573}
 	EndProjectSection
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "VirtualCamera", "VirtualCamera\VCamSampleSource.vcxproj", "{52FB6B93-3AA6-4369-BED4-D4BFF1F97B78}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|ARM64 = Debug|ARM64
@@ -44,6 +46,18 @@ Global
 		{A0ABFDE8-6672-48C1-8143-FD4ACB2241C7}.Release|x64.Build.0 = Release|Any CPU
 		{A0ABFDE8-6672-48C1-8143-FD4ACB2241C7}.Release|x86.ActiveCfg = Release|Any CPU
 		{A0ABFDE8-6672-48C1-8143-FD4ACB2241C7}.Release|x86.Build.0 = Release|Any CPU
+		{52FB6B93-3AA6-4369-BED4-D4BFF1F97B78}.Debug|ARM64.ActiveCfg = Debug|ARM64
+		{52FB6B93-3AA6-4369-BED4-D4BFF1F97B78}.Debug|ARM64.Build.0 = Debug|ARM64
+		{52FB6B93-3AA6-4369-BED4-D4BFF1F97B78}.Debug|x64.ActiveCfg = Debug|x64
+		{52FB6B93-3AA6-4369-BED4-D4BFF1F97B78}.Debug|x64.Build.0 = Debug|x64
+		{52FB6B93-3AA6-4369-BED4-D4BFF1F97B78}.Debug|x86.ActiveCfg = Debug|Win32
+		{52FB6B93-3AA6-4369-BED4-D4BFF1F97B78}.Debug|x86.Build.0 = Debug|Win32
+		{52FB6B93-3AA6-4369-BED4-D4BFF1F97B78}.Release|ARM64.ActiveCfg = Release|ARM64
+		{52FB6B93-3AA6-4369-BED4-D4BFF1F97B78}.Release|ARM64.Build.0 = Release|ARM64
+		{52FB6B93-3AA6-4369-BED4-D4BFF1F97B78}.Release|x64.ActiveCfg = Release|x64
+		{52FB6B93-3AA6-4369-BED4-D4BFF1F97B78}.Release|x64.Build.0 = Release|x64
+		{52FB6B93-3AA6-4369-BED4-D4BFF1F97B78}.Release|x86.ActiveCfg = Release|Win32
+		{52FB6B93-3AA6-4369-BED4-D4BFF1F97B78}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

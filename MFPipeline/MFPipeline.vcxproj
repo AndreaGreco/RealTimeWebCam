@@ -153,6 +153,7 @@
     <ClInclude Include="MediaEventHandler.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="VideoReaderCbk.h" />
+    <ClInclude Include="VirtualCamera.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CSourceOpenMonitor.cpp" />
@@ -166,6 +167,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="VideoReaderCbk.cpp" />
+    <ClCompile Include="VirtualCamera.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

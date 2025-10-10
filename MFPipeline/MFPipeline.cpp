@@ -359,7 +359,6 @@ private:
 	// Configuration
 	LPWSTR filePath;
 	HWND windowHandle;
-	RECT rc;
 	BOOL fSelected;
 	bool isPlaying;
 	bool isPaused;
@@ -394,6 +393,7 @@ public:
 	int play();
 	int pause();
 	int stop();
+	void updateVideoPosition();  // Update video position when window is resized
 	bool getIsPlaying() const { return isPlaying; }
 	bool getIsPaused() const { return isPaused; }
 };
@@ -407,7 +407,6 @@ VideoPlayer::VideoPlayer()
 	InitializeVariables();
 	filePath = nullptr;
 	windowHandle = nullptr;
-	rc = { 0, 0, VIDEO_WIDTH, VIDEO_HEIGHT };
 	fSelected = false;
 	isPlaying = false;
 	isPaused = false;
@@ -418,7 +417,12 @@ VideoPlayer::~VideoPlayer()
 {
 	stop();
 	ReleaseAllResources();
-	MFShutdown();
+	
+	// Only shutdown if it was initialized
+	if (isInitialized)
+	{
+		MFShutdown();
+	}
 }
 
 void VideoPlayer::InitializeVariables()
@@ -617,13 +621,26 @@ HRESULT VideoPlayer::SetupVideoDisplayControl()
 		return hr;
 	}
 
-	hr = pVideoDisplayControl->SetVideoPosition(NULL, &rc);
+	// Get the actual window size and use entire area
+	RECT windowRect;
+	GetClientRect(windowHandle, &windowRect);
+	
+	hr = pVideoDisplayControl->SetVideoPosition(NULL, &windowRect);
 	if (FAILED(hr))
 	{
 		LogError("SetVideoPosition", hr);
 		return hr;
 	}
 
+	// Set aspect ratio mode to preserve video proportions (centered with letterboxing)
+	hr = pVideoDisplayControl->SetAspectRatioMode(MFVideoARMode_PreservePicture);
+	if (FAILED(hr))
+	{
+		LogError("SetAspectRatioMode", hr);
+		// Non-critical, continue anyway
+	}
+
+	DebugLog("Video display configured with dynamic sizing and aspect ratio preservation");
 	return S_OK;
 }
 
@@ -1085,6 +1102,35 @@ int VideoPlayer::stop()
 	return 0;
 }
 
+void VideoPlayer::updateVideoPosition()
+{
+	if (pVideoDisplayControl == nullptr)
+	{
+		DebugLog("VideoPlayer::updateVideoPosition() - pVideoDisplayControl is null");
+		return;
+	}
+
+	if (windowHandle == nullptr || !IsWindow(windowHandle))
+	{
+		DebugLog("VideoPlayer::updateVideoPosition() - invalid window handle");
+		return;
+	}
+
+	// Get current window client area
+	RECT windowRect;
+	GetClientRect(windowHandle, &windowRect);
+
+	// Update video position to fill the entire window
+	HRESULT hr = pVideoDisplayControl->SetVideoPosition(NULL, &windowRect);
+	if (FAILED(hr))
+	{
+		LogError("SetVideoPosition in updateVideoPosition", hr);
+		return;
+	}
+
+	DebugLog("VideoPlayer::updateVideoPosition() - video position updated");
+}
+
 // ============================================================================
 // C-style interface for C# interop
 // ============================================================================
@@ -1153,6 +1199,14 @@ extern "C" {
 			return player->stop();
 		}
 		return -1;
+	}
+
+	__declspec(dllexport) void UpdateVideoPosition(VideoPlayer* player)
+	{
+		if (player)
+		{
+			player->updateVideoPosition();
+		}
 	}
 
 	__declspec(dllexport) bool IsPlaying(VideoPlayer* player)

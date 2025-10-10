@@ -33,6 +33,9 @@
     <ClInclude Include="CSourceOpenMonitor.h">
       <Filter>File di intestazione</Filter>
     </ClInclude>
+    <ClInclude Include="VirtualCamera.h">
+      <Filter>File di intestazione</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="MFPipeline.cpp">
@@ -51,6 +54,9 @@
       <Filter>File di origine</Filter>
     </ClCompile>
     <ClCompile Include="CSourceOpenMonitor.cpp">
+      <Filter>File di origine</Filter>
+    </ClCompile>
+    <ClCompile Include="VirtualCamera.cpp">
       <Filter>File di origine</Filter>
     </ClCompile>
   </ItemGroup>

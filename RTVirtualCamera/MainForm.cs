@@ -11,6 +11,21 @@ namespace TestVideo
         {
             InitializeComponent();
             InitializeVideoPlayer();
+            
+            // Handle resize events to update video position
+            videoPanel.Resize += VideoPanel_Resize;
+        }
+
+        private void VideoPanel_Resize(object sender, EventArgs e)
+        {
+            try
+            {
+                videoPlayer?.SetWindowHandle(videoPanel);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error updating video position: {ex.Message}");
+            }
         }
 
         private void InitializeVideoPlayer()

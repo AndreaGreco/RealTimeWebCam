@@ -61,7 +61,8 @@ namespace TestVideo
             this.videoPanel.Dock = System.Windows.Forms.DockStyle.Fill;
             this.videoPanel.Location = new System.Drawing.Point(3, 3);
             this.videoPanel.Name = "videoPanel";
-            this.videoPanel.Size = new System.Drawing.Size(794, 644);
+            this.videoPanel.Padding = new System.Windows.Forms.Padding(8);
+            this.videoPanel.Size = new System.Drawing.Size(578, 555);
             this.videoPanel.TabIndex = 0;
             // 
             // playButton
@@ -100,7 +101,7 @@ namespace TestVideo
             this.pathTextBox.Name = "pathTextBox";
             this.pathTextBox.Size = new System.Drawing.Size(400, 20);
             this.pathTextBox.TabIndex = 2;
-            this.pathTextBox.Text = "rtsp://192.168.178.66:8554/webcam";
+            this.pathTextBox.Text = "rtsp://192.168.100.1:8554/webcam";
             // 
             // browseButton
             // 
@@ -131,14 +132,14 @@ namespace TestVideo
             this.tableLayoutPanel1.Location = new System.Drawing.Point(0, 0);
             this.tableLayoutPanel1.Name = "tableLayoutPanel1";
             this.tableLayoutPanel1.RowCount = 2;
-            this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 87.01472F));
-            this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 12.98527F));
+            this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 85.02269F));
+            this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 14.97731F));
             this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 20F));
             this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 20F));
             this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 20F));
             this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 20F));
             this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 20F));
-            this.tableLayoutPanel1.Size = new System.Drawing.Size(800, 747);
+            this.tableLayoutPanel1.Size = new System.Drawing.Size(584, 661);
             this.tableLayoutPanel1.TabIndex = 7;
             // 
             // panel1
@@ -149,17 +150,18 @@ namespace TestVideo
             this.panel1.Controls.Add(this.browseButton);
             this.panel1.Controls.Add(this.playButton);
             this.panel1.Controls.Add(this.stopButton);
-            this.panel1.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.panel1.Location = new System.Drawing.Point(3, 662);
+            this.panel1.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.panel1.Location = new System.Drawing.Point(3, 564);
+            this.panel1.MinimumSize = new System.Drawing.Size(500, 90);
             this.panel1.Name = "panel1";
-            this.panel1.Size = new System.Drawing.Size(794, 82);
+            this.panel1.Size = new System.Drawing.Size(578, 94);
             this.panel1.TabIndex = 1;
             // 
             // MainForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(800, 747);
+            this.ClientSize = new System.Drawing.Size(584, 661);
             this.Controls.Add(this.tableLayoutPanel1);
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.Name = "MainForm";
