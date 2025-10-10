@@ -60,4 +60,7 @@
       <Filter>File di origine</Filter>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="VirtualCamera_README.md" />
+  </ItemGroup>
 </Project>

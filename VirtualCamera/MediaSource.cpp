@@ -28,6 +28,11 @@ HRESULT MediaSource::Initialize(IMFAttributes* attributes)
 	RETURN_IF_FAILED(collection->AddProfile(profile.get()));
 	RETURN_IF_FAILED(SetUnknown(MF_DEVICEMFT_SENSORPROFILE_COLLECTION, collection.get()));
 
+	// AppInfo::Current() is only available for packaged (UWP/MSIX) applications.
+	// For desktop apps, we skip this configuration.
+	// The virtual camera will still work without the package family name.
+	// Commented out to avoid exception when running from desktop applications.
+#if 0
 	try
 	{
 		auto appInfo = winrt::Windows::ApplicationModel::AppInfo::Current();
@@ -40,6 +45,7 @@ HRESULT MediaSource::Initialize(IMFAttributes* attributes)
 	{
 		WINTRACE(L"MediaSource::Initialize no AppX");
 	}
+#endif
 
 	auto streams = wil::make_unique_cotaskmem_array<wil::com_ptr_nothrow<IMFStreamDescriptor>>(_streams.size());
 	for (uint32_t i = 0; i < streams.size(); i++)

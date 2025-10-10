@@ -29,6 +29,7 @@
 #pragma comment(lib, "d3d9.lib")
 #pragma comment(lib, "Dxva2.lib")
 #pragma comment(lib, "Propsys.lib")
+#pragma comment(lib, "mfsensorgroup.lib")
 
 #define VIDEO_WIDTH  640
 #define VIDEO_HEIGHT 480

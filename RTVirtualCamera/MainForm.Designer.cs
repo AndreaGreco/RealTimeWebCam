@@ -16,6 +16,7 @@ namespace TestVideo
         private Button playButton;
         private Button pauseButton;
         private Button stopButton;
+        private Button startVCamButton;
         private TextBox pathTextBox;
         private Button browseButton;
         private Label pathLabel;
@@ -46,6 +47,7 @@ namespace TestVideo
             this.playButton = new System.Windows.Forms.Button();
             this.pauseButton = new System.Windows.Forms.Button();
             this.stopButton = new System.Windows.Forms.Button();
+            this.startVCamButton = new System.Windows.Forms.Button();
             this.pathTextBox = new System.Windows.Forms.TextBox();
             this.browseButton = new System.Windows.Forms.Button();
             this.pathLabel = new System.Windows.Forms.Label();
@@ -94,6 +96,17 @@ namespace TestVideo
             this.stopButton.Text = "Stop";
             this.stopButton.UseVisualStyleBackColor = true;
             this.stopButton.Click += new System.EventHandler(this.StopButton_Click);
+            // 
+            // startVCamButton
+            // 
+            this.startVCamButton.BackColor = System.Drawing.Color.LightGreen;
+            this.startVCamButton.Location = new System.Drawing.Point(243, 44);
+            this.startVCamButton.Name = "startVCamButton";
+            this.startVCamButton.Size = new System.Drawing.Size(100, 30);
+            this.startVCamButton.TabIndex = 7;
+            this.startVCamButton.Text = "Start VCam";
+            this.startVCamButton.UseVisualStyleBackColor = false;
+            this.startVCamButton.Click += new System.EventHandler(this.StartVCamButton_Click);
             // 
             // pathTextBox
             // 
@@ -150,6 +163,7 @@ namespace TestVideo
             this.panel1.Controls.Add(this.browseButton);
             this.panel1.Controls.Add(this.playButton);
             this.panel1.Controls.Add(this.stopButton);
+            this.panel1.Controls.Add(this.startVCamButton);
             this.panel1.Dock = System.Windows.Forms.DockStyle.Fill;
             this.panel1.Location = new System.Drawing.Point(3, 564);
             this.panel1.MinimumSize = new System.Drawing.Size(500, 90);
