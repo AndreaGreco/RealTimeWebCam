@@ -124,6 +124,18 @@ namespace TestVideo
             }
         }
 
+        // Expose the native handle for sharing with VirtualCamera
+        public IntPtr NativeHandle
+        {
+            get
+            {
+                if (disposed)
+                    throw new ObjectDisposedException(nameof(VideoPlayerWrapper));
+
+                return playerInstance;
+            }
+        }
+
         public void Dispose()
         {
             Dispose(true);

@@ -2,17 +2,19 @@
 #include "VirtualCamera.h"
 #include "Logger.h"
 #include <sstream>
+#include "VideoPlayer.h"
 
 // ============================================================================
 // VirtualCamera Implementation
 // ============================================================================
 
-VirtualCamera::VirtualCamera()
+VirtualCamera::VirtualCamera(VideoPlayer *video)
 	: _vcam(nullptr)
 	, _title(L"RTSP Virtual Camera")
 	, _isRegistered(false)
 	, _isStarted(false)
 {
+	this->videoPlayer = video;
 }
 
 VirtualCamera::~VirtualCamera()
@@ -136,6 +138,8 @@ HRESULT VirtualCamera::StartVirtualCamera()
 	_isStarted = true;
 	DebugLog("VirtualCamera started successfully");
 
+	videoPlayer->sendFrameToVirtualCamera(_isStarted);
+
 	return S_OK;
 }
 
@@ -160,6 +164,8 @@ HRESULT VirtualCamera::StopVirtualCamera()
 
 	_isStarted = false;
 	DebugLog("VirtualCamera stopped");
+
+	videoPlayer->sendFrameToVirtualCamera(_isStarted);
 
 	return S_OK;
 }
@@ -236,9 +242,9 @@ HRESULT VirtualCamera::GetMediaSource(IMFMediaSource** ppMediaSource)
 // ============================================================================
 
 extern "C" {
-	__declspec(dllexport) VirtualCamera* CreateVirtualCamera()
+	__declspec(dllexport) VirtualCamera* CreateVirtualCamera(VideoPlayer* video)
 	{
-		return new VirtualCamera();
+		return new VirtualCamera(video);
 	}
 
 	__declspec(dllexport) void DestroyVirtualCamera(VirtualCamera* vcam)

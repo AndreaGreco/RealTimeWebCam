@@ -1,6 +1,7 @@
 #pragma once
 
 #include <mfvirtualcamera.h>
+#include "VideoPlayer.h"
 #include <string>
 
 // CLSID della Virtual Camera (deve corrispondere a quello in VCamSampleSource)
@@ -24,12 +25,14 @@ class VirtualCamera
 {
 private:
 	IMFVirtualCamera* _vcam;
+	VideoPlayer* videoPlayer;
 	std::wstring _title;
 	bool _isRegistered;
 	bool _isStarted;
+	
 
 public:
-	VirtualCamera();
+	VirtualCamera(VideoPlayer *video);
 	~VirtualCamera();
 
 	// Set the friendly name of the virtual camera

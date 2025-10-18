@@ -4,6 +4,7 @@
 #include "EnumNames.h"
 #include "MFTools.h"
 #include "FrameGenerator.h"
+#include "SharedMemory.h"
 #include "MediaStream.h"
 #include "MediaSource.h"
 
@@ -84,6 +85,21 @@ HRESULT MediaStream::Start(IMFMediaType* type)
 
 	RETURN_IF_FAILED(_allocator->InitializeSampleAllocator(10, type));
 	RETURN_IF_FAILED(_queue->QueueEventParamVar(MEStreamStarted, GUID_NULL, S_OK, nullptr));
+
+	// Inizializza il consumer della shared memory
+	this->sharedMemoryConsumer = new SharedMemoryConsumer();
+	HRESULT hr = sharedMemoryConsumer->Initialize();
+	if (SUCCEEDED(hr))
+	{
+		WINTRACE(L"MediaStream: SharedMemoryConsumer initialized successfully");
+	}
+	else
+	{
+		WINTRACE(L"MediaStream: SharedMemoryConsumer initialization failed (0x%08X) - will use synthetic frames", hr);
+		delete sharedMemoryConsumer;
+		sharedMemoryConsumer = nullptr;
+	}
+
 	_state = MF_STREAM_STATE_RUNNING;
 	return S_OK;
 }
@@ -122,6 +138,13 @@ HRESULT MediaStream::SetD3DManager(IUnknown* manager)
 
 void MediaStream::Shutdown()
 {
+	// Cleanup shared memory consumer
+	if (sharedMemoryConsumer)
+	{
+		delete sharedMemoryConsumer;
+		sharedMemoryConsumer = nullptr;
+	}
+
 	if (_queue)
 	{
 		LOG_IF_FAILED_MSG(_queue->Shutdown(), "Queue shutdown failed");
@@ -204,7 +227,6 @@ STDMETHODIMP MediaStream::GetStreamDescriptor(IMFStreamDescriptor** ppStreamDesc
 
 STDMETHODIMP MediaStream::RequestSample(IUnknown* pToken)
 {
-	//WINTRACE(L"MediaStream::RequestSample pToken:%p", pToken);
 	winrt::slim_lock_guard lock(_lock);
 	RETURN_HR_IF(MF_E_SHUTDOWN, !_allocator || !_queue);
 
@@ -213,8 +235,34 @@ STDMETHODIMP MediaStream::RequestSample(IUnknown* pToken)
 	RETURN_IF_FAILED(sample->SetSampleTime(MFGetSystemTime()));
 	RETURN_IF_FAILED(sample->SetSampleDuration(333333));
 
-	// generate frame
 	wil::com_ptr_nothrow<IMFSample> outSample;
+	
+	WINTRACE(L"MediaStream: sharedMemoryConsumer:%p", sharedMemoryConsumer);
+	if (sharedMemoryConsumer)
+	{
+		ShmFrame_st frameInfo;
+		uint32_t width = 0, height = 0, stride = 0, pixelFormat = 0;
+		uint64_t timestamp = 0;
+		
+		frameInfo.buff = (uint8_t*)malloc(MAX_FRAME_SIZE);
+
+		HRESULT hr = sharedMemoryConsumer->TryReadFrame(&frameInfo);
+		if (hr == S_OK)
+		{
+			// Frame ricevuto dalla shared memory!
+			WINTRACE(L"MediaStream: Frame received from shared memory - %ux%u, format:0x%08X, size:%u bytes", 
+				width, height, pixelFormat, stride * height);
+			
+			// TODO: Copiare i dati nel sample MF
+			// Per ora usiamo ancora il frame sintetico, ma loggiamo che abbiamo ricevuto il frame
+		} else {
+			WINTRACE(L"MediaStream: Shared memory Try read reply with:%d", hr);
+		}
+
+		free(frameInfo.buff);
+	}
+	
+	// Genera frame sintetico (per ora sempre, anche se abbiamo ricevuto dalla shared memory)
 	RETURN_IF_FAILED(_generator.Generate(sample.get(), _format, &outSample));
 
 	if (pToken)

@@ -9,6 +9,7 @@
 #include <mfreadwrite.h>
 #include <mfidl.h>
 #include <evr.h>
+#include "SharedMemory.h"
 
 #pragma comment(lib, "mf.lib")
 #pragma comment(lib, "evr.lib")
@@ -39,13 +40,16 @@ private:
     UINT32 m_height;
     GUID m_subtype;
 
+    // Shared memory producer
+    SharedMemoryProducer* sharedMemory;
+
     // Helper functions for format-specific buffer copying
     HRESULT CopyNV12Buffer(IMF2DBuffer* p2DBuffer, BYTE* pbSrcData, DWORD cbSrcLength);
     HRESULT CopyYUY2Buffer(IMF2DBuffer* p2DBuffer, BYTE* pbSrcData, DWORD cbSrcLength);
     HRESULT CopyRGB32Buffer(IMF2DBuffer* p2DBuffer, BYTE* pbSrcData, DWORD cbSrcLength);
 
 public:
-    VideoReaderCall(IMFStreamSink* pSink);
+    VideoReaderCall(IMFStreamSink* pSink, SharedMemoryProducer *shared);
     ~VideoReaderCall();
 
     HRESULT AllocateInternalBuffer(IMFMediaType* SinkMediaType, IMFSourceReader* pReader);

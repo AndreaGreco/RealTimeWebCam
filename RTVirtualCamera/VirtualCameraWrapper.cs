@@ -7,7 +7,7 @@ namespace TestVideo
     {
         // P/Invoke declarations for VirtualCamera functions
         [DllImport("MFPipeline.dll", CallingConvention = CallingConvention.Cdecl)]
-        private static extern IntPtr CreateVirtualCamera();
+        private static extern IntPtr CreateVirtualCamera(IntPtr videoPlayerHandle);
 
         [DllImport("MFPipeline.dll", CallingConvention = CallingConvention.Cdecl)]
         private static extern void DestroyVirtualCamera(IntPtr vcam);
@@ -36,9 +36,13 @@ namespace TestVideo
         private IntPtr vcamHandle;
         private bool disposed = false;
 
-        public VirtualCameraWrapper()
+        public VirtualCameraWrapper(VideoPlayerWrapper video)
         {
-            vcamHandle = CreateVirtualCamera();
+            if (video == null)
+                throw new ArgumentNullException(nameof(video));
+
+            // Pass the native handle of the VideoPlayer to C++
+            vcamHandle = CreateVirtualCamera(video.NativeHandle);
             if (vcamHandle == IntPtr.Zero)
             {
                 throw new InvalidOperationException("Failed to create virtual camera instance");

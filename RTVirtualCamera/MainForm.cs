@@ -115,7 +115,7 @@ namespace TestVideo
                 if (!isVCamRunning)
                 {
                     // Create and start virtual camera
-                    virtualCamera = new VirtualCameraWrapper();
+                    virtualCamera = new VirtualCameraWrapper(this.videoPlayer);
                     virtualCamera.SetCameraName("RTSP Virtual Camera");
 
                     if (virtualCamera.Register())
