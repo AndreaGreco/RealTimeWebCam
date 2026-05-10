@@ -10,7 +10,6 @@
 // Forward declarations
 class VideoReaderCall;
 class CSourceOpenMonitor;
-class SharedMemoryProducer;
 
 class VideoPlayer
 {
@@ -48,7 +47,6 @@ private:
 	IMFMediaType* pvideoSourceModType;
 	IMFMediaType* pHintMediaType;
 	IMFSample* pD3DVideoSample;
-	SharedMemoryProducer* sharedMemory;
 
 	// Configuration
 	LPWSTR filePath;
@@ -88,7 +86,6 @@ public:
 	int pause();
 	int stop();
 
-	void sendFrameToVirtualCamera(bool send);
 	void updateVideoPosition();  // Update video position when window is resized
 	bool getIsPlaying() const { return isPlaying; }
 	bool getIsPaused() const { return isPaused; }

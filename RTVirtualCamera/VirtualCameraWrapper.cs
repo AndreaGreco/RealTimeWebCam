@@ -7,13 +7,16 @@ namespace TestVideo
     {
         // P/Invoke declarations for VirtualCamera functions
         [DllImport("MFPipeline.dll", CallingConvention = CallingConvention.Cdecl)]
-        private static extern IntPtr CreateVirtualCamera(IntPtr videoPlayerHandle);
+        private static extern IntPtr CreateVirtualCamera();
 
         [DllImport("MFPipeline.dll", CallingConvention = CallingConvention.Cdecl)]
         private static extern void DestroyVirtualCamera(IntPtr vcam);
 
         [DllImport("MFPipeline.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
         private static extern void SetVirtualCameraName(IntPtr vcam, string name);
+
+        [DllImport("MFPipeline.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
+        private static extern void SetVirtualCameraRTSPUrl(IntPtr vcam, string url);
 
         [DllImport("MFPipeline.dll", CallingConvention = CallingConvention.Cdecl)]
         private static extern int RegisterVCam(IntPtr vcam);
@@ -36,13 +39,9 @@ namespace TestVideo
         private IntPtr vcamHandle;
         private bool disposed = false;
 
-        public VirtualCameraWrapper(VideoPlayerWrapper video)
+        public VirtualCameraWrapper()
         {
-            if (video == null)
-                throw new ArgumentNullException(nameof(video));
-
-            // Pass the native handle of the VideoPlayer to C++
-            vcamHandle = CreateVirtualCamera(video.NativeHandle);
+            vcamHandle = CreateVirtualCamera();
             if (vcamHandle == IntPtr.Zero)
             {
                 throw new InvalidOperationException("Failed to create virtual camera instance");
@@ -62,6 +61,17 @@ namespace TestVideo
             if (vcamHandle != IntPtr.Zero && !string.IsNullOrEmpty(name))
             {
                 SetVirtualCameraName(vcamHandle, name);
+            }
+        }
+
+        public void SetRTSPUrl(string url)
+        {
+            if (disposed)
+                throw new ObjectDisposedException(nameof(VirtualCameraWrapper));
+
+            if (vcamHandle != IntPtr.Zero && !string.IsNullOrEmpty(url))
+            {
+                SetVirtualCameraRTSPUrl(vcamHandle, url);
             }
         }
 

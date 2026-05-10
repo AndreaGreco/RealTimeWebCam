@@ -1,5 +1,6 @@
 #pragma once
-#include "SharedMemory.h"
+#include "FrameGenerator.h"
+#include "RtspReaderCallback.h"
 
 struct MediaStream : winrt::implements<MediaStream, CBaseAttributes<IMFAttributes>, IMFMediaStream2, IKsControl>
 {
@@ -29,8 +30,11 @@ public:
 		_index(0),
 		_state(MF_STREAM_STATE_STOPPED),
 		_format(GUID_NULL),
-		sharedMemoryConsumer(nullptr)
+		_videoWidth(0),
+		_videoHeight(0),
+		_videoStride(0)
 	{
+		this->_rtspUrl = L"";
 		SetBaseAttributesTraceName(L"MediaStreamAtts");
 	}
 
@@ -41,6 +45,10 @@ public:
 	HRESULT Start(IMFMediaType* type);
 	HRESULT Stop();
 	void Shutdown();
+	
+	// RTSP configuration
+	void SetRTSPUrl(std::wstring url);
+	std::wstring GetRTSPUrl();
 
 private:
 #if _DEBUG
@@ -50,16 +58,26 @@ private:
 	}
 #endif
 
+	HRESULT InitializeRTSPReader();
+	HRESULT CopyRtspFrame(IMFSample* rtspSample, IMFSample* targetSample);
+
 	winrt::slim_mutex  _lock;
 	MF_STREAM_STATE _state;
-	FrameGenerator _generator;
 	GUID _format;
 	wil::com_ptr_nothrow<IMFStreamDescriptor> _descriptor;
 	wil::com_ptr_nothrow<IMFMediaEventQueue> _queue;
 	wil::com_ptr_nothrow<IMFMediaSource> _source;
 	wil::com_ptr_nothrow<IMFVideoSampleAllocatorEx> _allocator;
+	wil::com_ptr_nothrow<IUnknown> _dxgiManager;
 	int _index;
 	
-	// Shared memory consumer
-	SharedMemoryConsumer* sharedMemoryConsumer;
+	// RTSP reader components
+	std::wstring _rtspUrl;
+	wil::com_ptr_nothrow<RtspReaderCallback> _rtspCallback;  // async reader; null = no RTSP
+	UINT32 _videoWidth;
+	UINT32 _videoHeight;
+	UINT32 _videoStride;  // bytes per row of the actual RTSP output (may include padding)
+
+	// Fallback frame generator (used when RTSP is unavailable)
+	FrameGenerator _frameGenerator;
 };

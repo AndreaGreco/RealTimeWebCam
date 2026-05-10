@@ -100,7 +100,10 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <OutDir>$(SolutionDir)\ComCamera\$(Platform)\$(Configuration)\</OutDir>
+    <OutDir>$(SolutionDir)bin\$(Platform)\$(Configuration)\</OutDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>$(SolutionDir)bin\$(Platform)\$(Configuration)\</OutDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -161,8 +164,7 @@
       <ModuleDefinitionFile>VCamSampleSource.def</ModuleDefinitionFile>
     </Link>
     <PostBuildEvent>
-      <Command>
-      </Command>
+      <Command>powershell -NoProfile -ExecutionPolicy Bypass -File "$(ProjectDir)deploy_vcam.ps1" -DllPath "$(TargetPath)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">
@@ -204,6 +206,9 @@
       <EnableUAC>false</EnableUAC>
       <ModuleDefinitionFile>VCamSampleSource.def</ModuleDefinitionFile>
     </Link>
+    <PostBuildEvent>
+      <Command>powershell -NoProfile -ExecutionPolicy Bypass -File "$(ProjectDir)deploy_vcam.ps1" -DllPath "$(TargetPath)"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|ARM64'">
     <ClCompile>
@@ -231,7 +236,9 @@
     <ClInclude Include="Activator.h" />
     <ClInclude Include="EnumNames.h" />
     <ClInclude Include="FrameGenerator.h" />
+    <ClInclude Include="RtspReaderCallback.h" />
     <ClInclude Include="framework.h" />
+    <ClInclude Include="IVCamConfiguration.h" />
     <ClInclude Include="MediaSource.h" />
     <ClInclude Include="MediaStream.h" />
     <ClInclude Include="MFTools.h" />
@@ -249,6 +256,7 @@
     <ClCompile Include="MediaSource.cpp" />
     <ClCompile Include="MediaStream.cpp" />
     <ClCompile Include="MFTools.cpp" />
+    <ClCompile Include="RtspReaderCallback.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">Create</PrecompiledHeader>
@@ -261,6 +269,10 @@
     <ClCompile Include="WinTrace.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="deploy_vcam.ps1" />
+    <None Include="MediaSource.h.new" />
+    <None Include="MediaStream.cpp.new" />
+    <None Include="MediaStream.h.new" />
     <None Include="packages.config" />
     <None Include="VCamSampleSource.def" />
   </ItemGroup>

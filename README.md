@@ -1,85 +1,130 @@
-# VCamNetSample
-This solution contains a Media Foundation Virtual Camera Sample developed using .NET. It works only on Windows 11 thanks to the [MFCreateVirtualCamera](https://learn.microsoft.com/en-us/windows/win32/api/mfvirtualcamera/nf-mfvirtualcamera-mfcreatevirtualcamera) API.
+# RealTimeWebCam — RTSP to Virtual Camera
 
-It's a port of the same project written in C++ **VCamSample**: [https://github.com/smourier/VCamSample](https://github.com/smourier/VCamSample) and it's based on [DirectN](https://github.com/smourier/DirectN) for all DirectX, WIC and Media Foundation interop.
+Zoom (e Teams, Skype, ecc.) non supporta sorgenti RTSP direttamente. Questo progetto risolve il problema creando una **virtual camera di Windows** che fa da proxy: apre il flusso RTSP di una camera di rete e lo presenta al sistema come se fosse una normale webcam USB.
 
-There are four projects in the solution:
+Funziona su **Windows 11** grazie all'API [`MFCreateVirtualCamera`](https://learn.microsoft.com/en-us/windows/win32/api/mfvirtualcamera/nf-mfvirtualcamera-mfcreatevirtualcamera) introdotta con Windows 11 21H2.
 
-* **VCamNetSampleSource**: the Media Source that provides RGB32 and NV12 streaming samples.
-* **VCamNetSample**: the "driver" Winforms application that does very little but calls `MFCreateVirtualCamera`.
-* **VCamNetSampleSourceAOT**: the same Media source than the VCamNetSampleSource sample, but as an AOT-compatible project.
-* **VCamNetSampleAOT**: the "driver" application that does very little but calls `MFCreateVirtualCamera`.
+Basato su [VCamSample di Simon Mourier](https://github.com/smourier/VCamSample) come punto di partenza per la parte Media Foundation.
 
 ## AOT version
-* The AOT version, based on .NET 9, uses [DirectNAOT](https://github.com/smourier/DirectNAot) instead of DirectN.
-* VCamNetSampleAOT.exe doesn't use Winforms nor WPF, but a custom Win32 Window provided by DirectN AOT utilities.
-* The VCamNetSampleSourceAOT project uses the [AotNetComHost](https://github.com/smourier/AotNetComHost) project binaries to allow easy development in DEBUG builds. These binaries are not required with RELEASE builds.
-* Since it can be published as AOT, it has zero dependency on .NET (it's self-contained) and can be used directly on Windows 11 w/o any prior setup.
-* AOT and non AOT projects are not compatible (you can't use VCamNetSample with VCamNetSampleSourceAOT, and you can't use VCamNetSampleAOT with VCamNetSampleSource) since they don't use the same CLSID for exposing the virtual camera.
 
-## Testing
-**To test the .NET virtual cam**:
+> Questo progetto **non** usa la versione AOT. Il README originale del progetto di esempio da cui è partito menzionava AOT — non è rilevante qui.
 
-* Build in debug or release
-* Go to the build output and register the media source (a COM object) with a command similar to this: `regsvr32 VCamNetSampleSource.comhost.dll` (you *must* run this as administrator, it' not possible to register a Virtual Camera media source in `HKCU`, only in `HKLM` since it will be loaded by multiple processes)
-* Run the VCamNetSample.exe Winforms app.
-* Run for example the Windows Camera app or using a Web Browser ImageCapture API
+## Come funziona
 
-**To test the .NET virtual cam, AOT version**:
+```
+RTVirtualCamera.exe (C# WinForms)
+  │  inserisce l'URL RTSP
+  │  avvia/ferma la virtual camera
+  ▼
+MFPipeline.dll (C++ bridge)
+  │  chiama MFCreateVirtualCamera()
+  │  passa l'URL RTSP come attributo MF
+  ▼
+Windows Frame Server (svchost.exe)  ← processo separato di sistema
+  │  carica VCamSampleSource.dll
+  │  apre il flusso RTSP
+  │  legge frame e li consegna alle app
+  ▼
+Zoom / Teams / qualsiasi app webcam
+```
 
-* Build in DEBUG or publish for AOT (RELEASE), or download the two pre-built binaries (RELEASE) from the [published releases](https://github.com/smourier/VCamNetSample/releases)
-* In RELEASE, go to the build output and register the media source (a COM object) with a command similar to this: `regsvr32 VCamNetSampleSourceAOT.dll` (you *must* run this as administrator, it' not possible to register a Virtual Camera media source in `HKCU`, only in `HKLM` since it will be loaded by multiple processes)
-* In DEBUG, go to the build output and register the media source (a COM object) with a command similar to this: `regsvr32 VCamNetSampleSourceAOT.comthunk.dll` (you *must* run this as administrator, it' not possible to register a Virtual Camera media source in `HKCU`, only in `HKLM` since it will be loaded by multiple processes)
-* Run the VCamNetSampleAOT.exe app.
-* Run for example the Windows Camera app or using a Web Browser ImageCapture API
+Il Frame Server è un servizio di sistema di Windows 11 che gestisce le camera. Carica la nostra DLL nel suo processo e la usa come sorgente video. Non c'è condivisione di frame tra processi: il Frame Server apre RTSP per conto suo.
 
-You should now see something like this in the Windows Camera App
+---
 
-![Screenshot 2024-03-22 174749](https://github.com/smourier/VCamNetSample/assets/5328574/93ea57fa-515c-4aa9-b964-1b87c1c8761c)
+## Progetti nella soluzione
 
-Something like this in Windows' Edge Web Browser, using this testing page: https://googlechrome.github.io/samples/image-capture/grab-frame-take-photo.html
+### `VirtualCamera/` → `VCamSampleSource.dll`
+La parte più importante. È una **COM DLL** che implementa `IMFMediaSourceEx`, l'interfaccia standard di Windows Media Foundation per le sorgenti video.
 
-![Screenshot 2024-03-22 181438](https://github.com/smourier/VCamNetSample/assets/5328574/ce360340-c7b5-4b58-a258-f73f498e6a98)
+Va registrata nel sistema con `regsvr32` (come amministratore, in HKLM). Da quel momento Windows la conosce tramite il suo CLSID `{3CAD447D-F283-4AF4-A3B2-6F5363309F52}`.
 
-Something like this in OBS (Video Capture Device):
+Quando un'app apre la virtual camera, il **Frame Server** carica questa DLL nel suo processo e:
+- `MediaSource::Initialize()` legge l'URL RTSP dagli attributi MF
+- `MediaSource::Start()` lo passa agli stream
+- `MediaStream::InitializeRTSPReader()` apre il flusso RTSP con `IMFSourceReader`
+- `MediaStream::RequestSample()` legge ogni frame e lo consegna al Frame Server, che lo distribuisce a Zoom, Teams, ecc.
 
-![Screenshot 2024-03-22 181650](https://github.com/smourier/VCamNetSample/assets/5328574/5bb2b1e2-370b-4e8b-bf47-94d2d37c6f8c)
+Se non c'è URL RTSP configurato, il frame è nero (fallback di sicurezza).
 
-Something like this in Teams, yes, this is your avatar :-)
+### `MFPipeline/` → `MFPipeline.dll`
+**Bridge tra C# e le API Win32 di Media Foundation.** C# non può chiamare facilmente le API COM native di MF, quindi questa DLL C++ espone un'interfaccia semplice in stile C che il C# chiama via P/Invoke.
 
-![Screenshot 2024-03-22 181914](https://github.com/smourier/VCamNetSample/assets/5328574/603eca22-25a2-47be-8514-3bd4c297829f)
+Contiene due componenti:
 
-## Notes
+- **`VirtualCamera`** — chiama `MFCreateVirtualCamera()` con il CLSID di VCamSampleSource, fa start/stop/unregister, e imposta l'URL RTSP tramite `IMFVirtualCamera::AddProperty()`. È il "telecomando" della virtual camera.
+- **`VideoPlayer`** — apre un file video o stream RTSP con `IMFSourceReader` e lo visualizza in un pannello WinForms tramite EVR (Enhanced Video Renderer). Serve solo per il **preview nell'UI**, non è coinvolto nel flusso verso Zoom.
 
-* The media source uses `Direct2D` and `DirectWrite` to create images. It will then create Media Foundation samples from these. To create MF samples, it can use:
-  * The GPU, if a Direct3D manager has been provided by the environment. This is the case of the Windows 11 camera app.
-  * The CPU, if no Direct3D environment has been provided. In this case, the media source uses a WIC bitmap as a render target and it then copies the bits over to an MF sample. The ImageCapture API code embedded in Chrome or Edge, Teams, etc. is an example of such a D3D-less environment (but sometimes it uses Direct3D).
-  * If you want to force CPU usage at all times, you can change the code in `MediaStream::SetD3DManager` and put the lines there in comment.
-* The media source provides RGB32 and NV12 formats as most setups prefer the NV12 format. Samples are initially created as RGB32 (Direct2D) and converted to NV12. To convert the samples, the media source uses two ways:
-  * The GPU, if a Direct3D manager has been provided, using Media Foundation's [Video Processor MFT](https://learn.microsoft.com/en-us/windows/win32/medfound/video-processor-mft).
-  * The CPU, if no Direct3D environment has been provided. In this case, the RGB to NV12 conversion is done using Media Foundation's [Color Converter DSP](https://learn.microsoft.com/en-us/windows/win32/medfound/colorconverter).
-  * If you want to force RGB32 mode, you can change the code in `MediaStream` constructor and set the media types array size to 1 (check comments in the code).
+### `RTVirtualCamera/` → `RTVirtualCamera.exe`
+**Applicazione di controllo** in C# WinForms (namespace `TestVideo`).
 
-## Troubleshooting "Access Denied" on IMFVirtualCamera::Start method (AOT and non AOT versions)
-If you get access denied here, it's probably the same issue as for the native version https://github.com/smourier/VCamSample/issues/1
+- Permette di inserire l'URL RTSP della camera di rete
+- Avvia/ferma la virtual camera tramite `VirtualCameraWrapper` (P/Invoke su `MFPipeline.dll`)
+- Mostra un preview del flusso nell'UI tramite `VideoPlayerWrapper`
 
-Here is a summary:
+---
 
-* The COM object that serves as a Virtual Camera Source (here `VCamNetSampleSource.comhost.dll` or `VCamNetSampleSourceAOT`) must be accessible by the two Windows 11 services **Frame Server** & **Frame Server Monitor** (running as `svchost.exe`).
-* These two services usually run as *Local Service* & *Local System* credentials respectively.
-* If you compile or build in a directory under your compiling user's root, for example something like `C:\Users\<your login>\source\repos\VCamNetSample\VCamNetSampleSource\bin\Debug\net8.0-windows10.0.22621.0` or somewhere restricted in some way, **it won't work** since these two services will need to access that.
+## Setup e utilizzo
 
-=> So the solution is just to either copy the output directory once built (or downloaded) somewhere where everyone has access and register  `VCamNetSampleSource.comhost.dll` or `VCamNetSampleSourceAOT.dll` from there, or copy/checkout the whole repo where everyone has access and build and register there.
+### Prerequisiti
+- Windows 11 21H2 o successivo
+- Visual Studio 2022
 
-![image](https://github.com/smourier/VCamNetSample/assets/5328574/0c96d30a-c954-4d3f-8c7f-3d723258bd35)
+### Build
+Aprire `RTVirtualCamera.sln` in Visual Studio 2022 e compilare in **x64**.
 
+I binari prodotti sono tutti nella stessa cartella nella root della soluzione:
 
-## Tracing
+| File | Cartella |
+|---|---|
+| `VCamSampleSource.dll` | `bin\x64\Debug\` oppure `bin\x64\Release\` |
+| `MFPipeline.dll` | `bin\x64\Debug\` oppure `bin\x64\Release\` |
+| `RTVirtualCamera.exe` | `bin\x64\Debug\` oppure `bin\x64\Release\` |
 
-The code output lots of interesting traces. It's quite important in this virtual camera environment because there's not just your process that's involved but at least 4: the VCamNetSample app, the Windows Frame Server, the Windows camera monitor, and the reader app (camera, etc.). They all load the media source COM object in-process.
+Tutti e tre i binari finiscono nella stessa cartella: l'exe trova automaticamente `MFPipeline.dll` senza copiare nulla.
 
-The solution also contains a small **DebuggerAttach** project that can be ran to attach to the Windows Frame Server (hosted in svchost.exe). For it to run you must run Visual Studio and DebuggerAttach as administrator. You can also attach to the Frame Server using Visual Studio attach to process once it's been started.
+### Registrazione di VCamSampleSource.dll
 
-Tracing here  doesn't use `OutputDebugString` because it's 100% old, crappy, truncating text, slow, etc. Instead it uses Event Tracing for Windows ("ETW") in "string-only" mode (the mode where it's very simple and you don't have to register painfull traces records and use complex readers...).
+Va eseguita **una volta** (o ad ogni ricompilazione durante lo sviluppo). Lo script `VirtualCamera\deploy_vcam.ps1` automatizza il processo: ferma il Frame Server, ri-registra la DLL, riavvia il Frame Server. Si auto-eleva ad Administrator.
 
-So to read these ETW traces, use WpfTraceSpy you can download here https://github.com/smourier/TraceSpy. Configure an ETW Provider with the GUID set to `964d4572-adb9-4f3a-8170-fcbecec27467`
+```powershell
+.\VirtualCamera\deploy_vcam.ps1 -DllPath ".\bin\x64\Debug\VCamSampleSource.dll"
+```
+
+Per automatizzarlo ad ogni build, aggiungere nelle proprietà del progetto `VirtualCamera` → **Build Events → Post-Build Event**:
+
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File "$(ProjectDir)deploy_vcam.ps1" -DllPath "$(TargetPath)"
+```
+
+> La DLL deve trovarsi in una cartella accessibile a tutti gli utenti (es. `C:\VCam\`), perché il Frame Server gira come *Local Service* e non ha accesso alle cartelle utente. La cartella `bin\x64\` nella root del repo va bene se il repo è in una cartella pubblica (es. `C:\Projects\`). Se il repo è sotto `C:\Users\...`, spostare la DLL prima di registrarla.
+
+### Avvio
+1. Eseguire `RTVirtualCamera.exe`
+2. Inserire l'URL RTSP della camera (es. `rtsp://192.168.1.10:554/stream`)
+3. Cliccare **Start VCam**
+4. La virtual camera "RTSP Virtual Camera" apparirà in Zoom, Teams, ecc.
+
+---
+
+## Troubleshooting
+
+### La virtual camera non appare o mostra frame neri
+- Verificare che `VCamSampleSource.dll` sia registrata (`regsvr32`)
+- Verificare che la DLL sia in una cartella accessibile a tutti (non sotto `C:\Users\...`)
+- Controllare che l'URL RTSP sia raggiungibile dalla macchina Windows
+
+### "Access Denied" su `IMFVirtualCamera::Start`
+Il Frame Server (`svchost.exe`) non riesce ad accedere alla DLL. Spostare la DLL in una cartella pubblica (es. `C:\VCam\`) e ripetere la registrazione da lì.
+
+### Debug del Frame Server
+Il Frame Server è un processo separato. Per debuggarlo con Visual Studio: **Attach to Process** → cercare `svchost.exe` che ospita il servizio *Windows Camera Frame Server*.
+
+---
+
+## Note di sviluppo
+- Sviluppo su Linux via Samba, compilazione su guest Windows con Visual Studio 2022
+- Il CLSID `{3CAD447D-F283-4AF4-A3B2-6F5363309F52}` deve corrispondere ovunque (VirtualCamera DLL, MFPipeline, registro di sistema)
+- I formati video supportati sono RGB32 e NV12; il descrittore dello stream è attualmente hardcoded a 1280×960 @ 30fps
+

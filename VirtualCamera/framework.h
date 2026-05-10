@@ -20,6 +20,7 @@
 #include <propvarutil.h>
 #include <mfapi.h>
 #include <mfidl.h>
+#include <mfreadwrite.h>
 #include <mfvirtualcamera.h>
 #include <mferror.h>
 #include <mfcaptureengine.h>

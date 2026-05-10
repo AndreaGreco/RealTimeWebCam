@@ -7,11 +7,10 @@
 /* Frame aviable for the pipeline */
 #define SAMPLE_ALLOCATOR_COUNT 100
 
-VideoReaderCall::VideoReaderCall(IMFStreamSink* pSink, SharedMemoryProducer *shared) : m_pStreamSink(pSink), m_width(0), m_height(0), sharedMemory(nullptr) {
+VideoReaderCall::VideoReaderCall(IMFStreamSink* pSink) : m_pStreamSink(pSink), m_width(0), m_height(0) {
     if (m_pStreamSink)
         m_pStreamSink->AddRef();
     m_subtype = GUID_NULL;
-	sharedMemory = shared;
 }
 
 VideoReaderCall::~VideoReaderCall() {   
@@ -308,40 +307,6 @@ STDMETHODIMP VideoReaderCall::OnReadSample(HRESULT hrStatus,
             "Buffer size: %lu bytes, Format: %08X-%04X-%04X, Expected for %ux%u",
             cbSrcLength, m_subtype.Data1, m_subtype.Data2, m_subtype.Data3, m_width, m_height);
     DebugLog(bufferLog);
-
-    if (sharedMemory && sharedMemory->IsEnabled()) {
-        struct ShmFrame_st frame;
-        HRESULT hrShared = S_OK;
-        UINT32 stride = 0;
-
-        if (m_subtype == MFVideoFormat_NV12) {
-            stride = m_width;
-        } else if (m_subtype == MFVideoFormat_YUY2) {
-            stride = m_width * 2;
-        } else if (m_subtype == MFVideoFormat_RGB32) {
-            stride = m_width * 4;
-        }
-        
-        // Converti GUID a FOURCC per la shared memory
-        uint32_t fourcc = m_subtype.Data1;
-
-        frame.buff = pbSrcData;
-        frame.buff_size = cbSrcLength;
-        frame.width = m_width;
-        frame.height = m_height;
-        frame.stride = stride;
-        frame.pixel_format = fourcc;
-        frame.timestamp = static_cast<uint64_t>(llTimestamp);       
-        
-        hrShared = sharedMemory->WriteFrame(&frame);
-        if (hrShared == S_FALSE) {
-            DebugLog("SharedMemory: Buffer full, frame dropped");
-        } else if (hrShared != S_OK) {
-            DebugLog("SharedMemory: Write frame error");
-        } else {
-            DebugLog("SharedMemory: Okay");
-        }
-    }
 
     // Lock destination buffer using 2D interface
     IMF2DBuffer* p2DBuffer = nullptr;

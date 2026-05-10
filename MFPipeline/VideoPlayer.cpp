@@ -309,18 +309,6 @@ VideoPlayer::VideoPlayer()
 	isPlaying = false;
 	isPaused = false;
 	isInitialized = false;
-
-	sharedMemory = new (std::nothrow) SharedMemoryProducer();
-	if (sharedMemory) {
-		HRESULT hr = sharedMemory->Initialize();
-		if (FAILED(hr)) {
-			DebugLog("VideoReaderCall: Failed to initialize shared memory producer");
-			delete sharedMemory;
-			sharedMemory = nullptr;
-		} else {
-			DebugLog("VideoReaderCall: Shared memory producer initialized successfully");
-		}
-	}
 }
 
 VideoPlayer::~VideoPlayer()
@@ -328,11 +316,6 @@ VideoPlayer::~VideoPlayer()
 	stop();
 	ReleaseAllResources();
 
-	if (sharedMemory) {
-		delete sharedMemory;
-		sharedMemory = nullptr;
-	}
-	
 	// Only shutdown if it was initialized
 	if (isInitialized)
 	{
@@ -608,7 +591,7 @@ HRESULT VideoPlayer::CreateVideoSourceAndReader()
 	ConfigureSourceForLowLatency(pVideoSource);
 
 	// Create video reader callback
-	videoReaderCallback = new (std::nothrow) VideoReaderCall(pStreamSink, sharedMemory);
+	videoReaderCallback = new (std::nothrow) VideoReaderCall(pStreamSink);
 	if (!videoReaderCallback)
 	{
 		LogError("Failed to create VideoReaderCall", E_OUTOFMEMORY);
@@ -1046,7 +1029,3 @@ void VideoPlayer::updateVideoPosition()
 	DebugLog("VideoPlayer::updateVideoPosition() - video position updated");
 }
 
-void VideoPlayer::sendFrameToVirtualCamera(bool send)
-{
-	this->sharedMemory->SetEnabled(send);
-}

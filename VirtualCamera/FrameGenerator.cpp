@@ -125,76 +125,18 @@ HRESULT FrameGenerator::Generate(IMFSample* sample, REFGUID format, IMFSample** 
 	RETURN_HR_IF_NULL(E_POINTER, outSample);
 	*outSample = nullptr;
 
-	// render something on image common to CPU & GPU
+	// Render "Camera IP non connessa" on dark background (CPU and GPU paths share this drawing step)
 	if (_renderTarget && _textFormat && _dwrite && _whiteBrush)
 	{
 		_renderTarget->BeginDraw();
-		_renderTarget->Clear(D2D1::ColorF(0, 0, 1, 1));
+		_renderTarget->Clear(D2D1::ColorF(0.08f, 0.08f, 0.08f, 1.0f));
 
-		// draw some HSL blocks
-		const float divisor = 20;
-		for (UINT i = 0; i < _width / divisor; i++)
-		{
-			for (UINT j = 0; j < _height / divisor; j++)
-			{
-				wil::com_ptr_nothrow<ID2D1SolidColorBrush> brush;
-				auto color = HSL2RGB((float)i / (_height / divisor), 1, ((float)j / (_width / divisor)));
-				RETURN_IF_FAILED(_renderTarget->CreateSolidColorBrush(color, &brush));
-				_renderTarget->FillRectangle(D2D1::Rect(i * divisor, j * divisor, (i + 1) * divisor, (j + 1) * divisor), brush.get());
-			}
-		}
-
-		auto radius = divisor * 2;
-		const float padding = 1;
-		_renderTarget->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(radius + padding, radius + padding), radius, radius), _whiteBrush.get());
-		_renderTarget->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(radius + padding, _height - radius - padding), radius, radius), _whiteBrush.get());
-		_renderTarget->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(_width - radius - padding, radius + padding), radius, radius), _whiteBrush.get());
-		_renderTarget->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(_width - radius - padding, _height - radius - padding), radius, radius), _whiteBrush.get());
-		_renderTarget->DrawRectangle(D2D1::Rect(radius, radius, _width - radius, _height - radius), _whiteBrush.get());
-
-		// draw resolution at center
-		// note: we could optimize here and compute layout only once if text doesn't change (depending on the font, etc.)
-		wchar_t text[127];
-		wchar_t fmt[15];
-		if (format == MFVideoFormat_NV12)
-		{
-			if (HasD3DManager())
-			{
-				lstrcpy(fmt, L"NV12 (GPU)");
-			}
-			else
-			{
-				lstrcpy(fmt, L"NV12 (CPU)");
-			}
-		}
-		else
-		{
-			if (HasD3DManager())
-			{
-				lstrcpy(fmt, L"RGB32 (GPU)");
-			}
-			else
-			{
-				lstrcpy(fmt, L"RGB32 (CPU)");
-			}
-		}
-
-#define FRAMES_FOR_FPS 60 // number of frames to wait to compute fps from last measure
-#define NS_PER_MS 10000
-#define MS_PER_S 1000
-
-		if (!_fps || !(_frame % FRAMES_FOR_FPS))
-		{
-			auto time = MFGetSystemTime();
-			_fps = (UINT)(MS_PER_S * NS_PER_MS * FRAMES_FOR_FPS / (time - _prevTime));
-			_prevTime = time;
-		}
-
-		auto len = wsprintf(text, L"Format: %s\nFrame#: %I64i\nFps: %u\nResolution: %u x %u", fmt, _frame, _fps, _width, _height);
-
+		// Build tag baked at compile time — changes every build to confirm DLL was redeployed
+		static const wchar_t buildTag[] =
+			L"Camera IP non connessa\n"
+			_CRT_WIDE(__DATE__) L" " _CRT_WIDE(__TIME__);
 		wil::com_ptr_nothrow<IDWriteTextLayout> layout;
-		RETURN_IF_FAILED(_dwrite->CreateTextLayout(text, len, _textFormat.get(), (FLOAT)_width, (FLOAT)_height, &layout));
-
+		RETURN_IF_FAILED(_dwrite->CreateTextLayout(buildTag, (UINT32)wcslen(buildTag), _textFormat.get(), (FLOAT)_width, (FLOAT)_height, &layout));
 		_renderTarget->DrawTextLayout(D2D1::Point2F(0, 0), layout.get(), _whiteBrush.get());
 		_renderTarget->EndDraw();
 	}
@@ -259,7 +201,7 @@ HRESULT FrameGenerator::Generate(IMFSample* sample, REFGUID format, IMFSample** 
 				hr = lock->GetDataPointer(&wicSize, &wicPointer);
 				if (SUCCEEDED(hr))
 				{
-					WINTRACE(L"WIC stride:%u WIC size:%u MF pitch:%u MF length:%u frame:%u format:%s", wicStride, wicSize, pitch, length, _frame, GUID_ToStringW(format).c_str());
+					//WINTRACE(L"WIC stride:%u WIC size:%u MF pitch:%u MF length:%u frame:%u format:%s", wicStride, wicSize, pitch, length, _frame, GUID_ToStringW(format).c_str());
 					if (format == MFVideoFormat_NV12)
 					{
 						// note we could use MF's converter too

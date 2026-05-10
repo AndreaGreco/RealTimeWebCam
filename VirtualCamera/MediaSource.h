@@ -1,4 +1,5 @@
 #pragma once
+#include <wchar.h>
 
 struct MediaStream;
 
@@ -39,7 +40,6 @@ public:
 	STDMETHOD_(NTSTATUS, KsMethod)(PKSMETHOD Method, ULONG MethodLength, LPVOID MethodData, ULONG DataLength, ULONG* BytesReturned);
 	STDMETHOD_(NTSTATUS, KsEvent)(PKSEVENT Event, ULONG EventLength, LPVOID EventData, ULONG DataLength, ULONG* BytesReturned);
 
-public:
 	MediaSource() :
 		_streams(_numStreams)
 	{
@@ -53,6 +53,9 @@ public:
 	}
 
 	HRESULT Initialize(IMFAttributes* attributes);
+
+	std::wstring GetRTSPUrl();
+	void SetRTSPUrl(std::wstring url);
 
 private:
 #if _DEBUG
@@ -77,11 +80,10 @@ private:
 
 	int GetStreamIndexById(DWORD id);
 
-private:
 	const int _numStreams = 1;  // 1 stream for now
 	winrt::slim_mutex _lock;
+	std::wstring _rtspUrl;  // RTSP URL configuration
 	winrt::com_array<wil::com_ptr_nothrow<MediaStream>> _streams;
 	wil::com_ptr_nothrow<IMFMediaEventQueue> _queue;
 	wil::com_ptr_nothrow<IMFPresentationDescriptor> _descriptor;
 };
-

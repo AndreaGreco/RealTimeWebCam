@@ -51,6 +51,9 @@
     <ClInclude Include="resource.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="IVCamConfiguration.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
@@ -89,6 +92,10 @@
       <Filter>Source Files</Filter>
     </None>
     <None Include="packages.config" />
+    <None Include="MediaSource.h.new" />
+    <None Include="MediaStream.h.new" />
+    <None Include="MediaStream.cpp.new" />
+    <None Include="deploy_vcam.ps1" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="VCamSampleSource.rc">

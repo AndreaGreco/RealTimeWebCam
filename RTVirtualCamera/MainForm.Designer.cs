@@ -114,7 +114,7 @@ namespace TestVideo
             this.pathTextBox.Name = "pathTextBox";
             this.pathTextBox.Size = new System.Drawing.Size(400, 20);
             this.pathTextBox.TabIndex = 2;
-            this.pathTextBox.Text = "rtsp://192.168.100.1:8554/webcam";
+            this.pathTextBox.Text = "rtsp://192.168.178.66:8554/webcam";
             // 
             // browseButton
             // 

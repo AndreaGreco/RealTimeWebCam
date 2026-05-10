@@ -1,17 +1,120 @@
+/*
+ * ══════════════════════════════════════════════════════════════════════════════
+ *  CICLO DI VITA DELLA VIRTUAL CAMERA — guida per sviluppatori
+ * ══════════════════════════════════════════════════════════════════════════════
+ *
+ *  LATO APP (RTVirtualCamera.exe, processo utente):
+ *  ─────────────────────────────────────────────────
+ *  1. MFCreateVirtualCamera()
+ *       Registra la camera nel sistema. La DLL NON viene ancora caricata.
+ *
+ *  2. IMFVirtualCamera::AddProperty()   [in MFPipeline/VirtualCamera.cpp]
+ *       Salva l'URL RTSP come device property (DEVPROPKEY) sull'oggetto
+ *       IMFVirtualCamera. Deve essere chiamato PRIMA di Start().
+ *
+ *  3. IMFVirtualCamera::Start()
+ *       Trigger principale. Il Frame Server (svchost.exe):
+ *         a) Carica VCamSampleSource.dll nel suo processo
+ *         b) Crea il COM object tramite DllGetClassObject → IClassFactory
+ *         c) Chiama MediaSource::Initialize(attributes)  ← qui sotto
+ *         d) Invia MF_FRAMESERVER_VCAMEVENT_EXTENDED_SOURCE_INITIALIZE
+ *            al VcamStartCallback registrato dall'app
+ *
+ *  LATO FRAME SERVER (svchost.exe, processo di sistema):
+ *  ──────────────────────────────────────────────────────
+ *  4. MediaSource::Initialize(attributes)          ← QUESTO FILE
+ *       Unica occasione per leggere la configurazione dall'app.
+ *       L'URL RTSP deve essere recuperato qui, altrimenti non arriva mai
+ *       a InitializeRTSPReader(). Se il log mostra "No RTSP URL property
+ *       found", l'URL non è nei attributes — vedere TraceMFAttributes sotto.
+ *
+ *  5. Quando Zoom/Teams/Windows Camera apre la virtual camera:
+ *       Frame Server chiama MediaSource::Start()
+ *       → Evento MF_FRAMESERVER_VCAMEVENT_EXTENDED_SOURCE_START verso l'app
+ *       → MediaStream::Start() → InitializeRTSPReader() → apre RTSP
+ *
+ *  6. RequestSample() — chiamato ~30x/sec dal Frame Server
+ *       Legge un frame da _rtspReader e lo consegna al Frame Server,
+ *       che lo distribuisce a Zoom, Teams, ecc.
+ *       Se RTSP non disponibile → FrameGenerator genera "Camera IP non connessa"
+ *
+ *  7. Quando l'app consumer chiude la camera:
+ *       Frame Server chiama MediaSource::Stop()
+ *       → Evento MF_FRAMESERVER_VCAMEVENT_EXTENDED_SOURCE_STOP
+ *       → MediaStream::Stop() → _rtspReader.reset() (connessione RTSP chiusa)
+ *
+ *  8. Quando l'app chiama IMFVirtualCamera::Remove():
+ *       Frame Server chiama MediaSource::Shutdown()
+ *       → Evento MF_FRAMESERVER_VCAMEVENT_EXTENDED_SOURCE_UNINITIALIZE
+ *       → DLL scaricata dal processo Frame Server
+ *
+ *  Log visibili in TraceSpy (ETW GUID: 964d4572-adb9-4f3a-8170-fcbecec27467)
+ * ══════════════════════════════════════════════════════════════════════════════
+ */
 #include "pch.h"
 #include "Undocumented.h"
 #include "Tools.h"
 #include "EnumNames.h"
 #include "MFTools.h"
-#include "FrameGenerator.h"
 #include "MediaStream.h"
 #include "MediaSource.h"
 
+// Custom MF attribute GUID used to carry the RTSP URL from the app process to the
+// Frame Server. The app sets it via IMFVirtualCamera::SetString() (which works because
+// IMFVirtualCamera inherits IMFAttributes); the Frame Server forwards all attributes
+// to MediaSource::Initialize(). Must match the same GUID in MFPipeline/VirtualCamera.cpp.
+static const GUID MF_VCAM_RTSP_URL = { 0xb8e0a5c1, 0x2d3f, 0x4a6b, { 0x9c, 0x8d, 0x1e, 0x2f, 0x3a, 0x4b, 0x5c, 0x6d } };
+
 HRESULT MediaSource::Initialize(IMFAttributes* attributes)
 {
+	// ── Passo 4 del ciclo di vita ────────────────────────────────────────────
+	// Chiamato dal Frame Server subito dopo aver caricato la DLL, in risposta
+	// a IMFVirtualCamera::Start() dell'app. È l'UNICO momento in cui si può
+	// leggere la configurazione passata da AddProperty(). Dopo questa chiamata
+	// il parametro 'attributes' non è più accessibile.
+
 	if (attributes)
 	{
+		// DIAGNOSTICA: stampa TUTTI gli attributi ricevuti dal Frame Server.
+		// In TraceSpy (ETW) cerca "Initialize-attrs" per vedere la lista completa.
+		// Se {b8e0a5c1-2d3f-4a6b-...} non appare, AddProperty() non ha prodotto
+		// un IMFAttribute corrispondente e l'URL non potrà mai essere letto qui.
+		WINTRACE(L"MediaSource::Initialize - attributi ricevuti dal Frame Server:");
+		TraceMFAttributes(attributes, L"Initialize-attrs");
+
 		RETURN_IF_FAILED(attributes->CopyAllItems(this));
+
+		// Tenta di leggere l'URL RTSP dagli attributi.
+		// La chiave MF_VCAM_RTSP_URL è il GUID {b8e0a5c1-2d3f-4a6b-...}.
+		// In MFPipeline/VirtualCamera.cpp, AddProperty() usa un DEVPROPKEY
+		// con lo stesso fmtid; il Frame Server dovrebbe mapparli qui.
+		// Se GetStringLength fallisce, il GUID non è presente → vedere DIAGNOSTICA sopra.
+		UINT32 urlLength = 0;
+		HRESULT hr = attributes->GetStringLength(MF_VCAM_RTSP_URL, &urlLength);
+		if (SUCCEEDED(hr) && urlLength > 0)
+		{
+			_rtspUrl.resize(urlLength + 1);
+			hr = attributes->GetString(MF_VCAM_RTSP_URL, &_rtspUrl[0], urlLength + 1, &urlLength);
+			if (SUCCEEDED(hr))
+			{
+				_rtspUrl.resize(urlLength);
+				WINTRACE(L"MediaSource::Initialize - RTSP URL from property: %s", _rtspUrl.c_str());
+			}
+			else
+			{
+				_rtspUrl.clear();
+				WINTRACE(L"MediaSource::Initialize - Failed to get RTSP URL string");
+			}
+		}
+		else
+		{
+			// L'URL RTSP non è negli attributi ricevuti. Cause possibili:
+			//   A) AddProperty() lato app è fallita — controllare DebugLog in VirtualCamera.cpp
+			//   B) Il Frame Server non mappa DEVPROPKEY.fmtid → IMFAttributes per questo GUID
+			//   C) SetRTSPUrl() è stata chiamata DOPO Start() (timing errato)
+			// Vedere DIAGNOSTICA sopra (Initialize-attrs in TraceSpy) per la lista completa.
+			WINTRACE(L"MediaSource::Initialize - No RTSP URL property found, will use black frames");
+		}
 	}
 
 	wil::com_ptr_nothrow<IMFSensorProfileCollection> collection;
@@ -169,6 +272,16 @@ STDMETHODIMP MediaSource::Shutdown()
 	return S_OK;
 }
 
+void MediaSource::SetRTSPUrl(std::wstring url)
+{
+	_rtspUrl = url;
+}
+
+std::wstring MediaSource::GetRTSPUrl()
+{
+	return _rtspUrl;
+}
+
 STDMETHODIMP MediaSource::Start(IMFPresentationDescriptor* pPresentationDescriptor, const GUID* pguidTimeFormat, const PROPVARIANT* pvarStartPosition)
 {
 	WINTRACE(L"MediaSource::Start pPresentationDescriptor:%p pguidTimeFormat:%p pvarStartPosition:%p", pPresentationDescriptor, pguidTimeFormat, pvarStartPosition);
@@ -217,16 +330,30 @@ STDMETHODIMP MediaSource::Start(IMFPresentationDescriptor* pPresentationDescript
 		{
 			if (selected)
 			{
-				RETURN_IF_FAILED(_descriptor->SelectStream(index));
+			// ── Passo 5 del ciclo di vita ──────────────────────────────────
+			// Un'app (Zoom, Teams, ecc.) ha aperto la virtual camera.
+			// Passiamo l'URL RTSP allo stream PRIMA di chiamare Start():
+			// MediaStream::Start() → InitializeRTSPReader() usa _rtspUrl.
+			RETURN_IF_FAILED(_descriptor->SelectStream(index));
 
-				wil::com_ptr_nothrow<IUnknown> unk;
-				RETURN_IF_FAILED(_streams[index].copy_to(&unk));
-				RETURN_IF_FAILED(_queue->QueueEventParamUnk(MENewStream, GUID_NULL, S_OK, unk.get()));
+			wil::com_ptr_nothrow<IUnknown> unk;
+			RETURN_IF_FAILED(_streams[index].copy_to(&unk));
+			RETURN_IF_FAILED(_queue->QueueEventParamUnk(MENewStream, GUID_NULL, S_OK, unk.get()));
 
-				wil::com_ptr_nothrow<IMFMediaTypeHandler> handler;
-				wil::com_ptr_nothrow<IMFMediaType> type;
-				RETURN_IF_FAILED(desc->GetMediaTypeHandler(&handler));
-				RETURN_IF_FAILED(handler->GetCurrentMediaType(&type));
+			wil::com_ptr_nothrow<IMFMediaTypeHandler> handler;
+			wil::com_ptr_nothrow<IMFMediaType> type;
+			RETURN_IF_FAILED(desc->GetMediaTypeHandler(&handler));
+			RETURN_IF_FAILED(handler->GetCurrentMediaType(&type));
+
+			if (!_rtspUrl.empty())
+			{
+				WINTRACE(L"MediaSource::Start - propagating RTSP URL to stream[%i]: %s", index, _rtspUrl.c_str());
+				_streams[index]->SetRTSPUrl(_rtspUrl.c_str());
+			}
+			else
+			{
+				WINTRACE(L"MediaSource::Start - no RTSP URL, stream[%i] will show fallback frame", index);
+				}
 
 				RETURN_IF_FAILED(_streams[index]->Start(type.get()));
 			}
@@ -349,6 +476,11 @@ STDMETHODIMP MediaSource::GetAllocatorUsage(DWORD dwOutputStreamID, DWORD* pdwIn
 }
 
 // IKsControl
+// Custom KsProperty set GUID for VCam runtime configuration.
+// Property ID 1 = RTSP URL (wide string). Must match MFPipeline/VirtualCamera.cpp.
+static const GUID KSPROPSETID_VCam_Config = { 0xc1d2e3f4, 0xa5b6, 0x47c8, { 0xd9, 0xea, 0x1b, 0x2c, 0x3d, 0x4e, 0x5f, 0x60 } };
+static const ULONG KSPROPID_VCam_RtspUrl  = 1;
+
 STDMETHODIMP_(NTSTATUS) MediaSource::KsProperty(PKSPROPERTY property, ULONG length, LPVOID data, ULONG dataLength, ULONG* bytesReturned)
 {
 	WINTRACE(L"MediaSource::KsProperty len:%u data:%p dataLength:%u", length, data, dataLength);
@@ -358,12 +490,38 @@ STDMETHODIMP_(NTSTATUS) MediaSource::KsProperty(PKSPROPERTY property, ULONG leng
 
 	WINTRACE(L"MediaSource::KsProperty prop:%s", PKSIDENTIFIER_ToString(property, length).c_str());
 
-	// right now, we don't expose any property, but this is where we'll typically be asked for
-	// 
-	// KSPROPSETID_Pin, KSPROPSETID_Topology, PROPSETID_VIDCAP_CAMERACONTROL, PROPSETID_VIDCAP_VIDEOPROCAMP
-	// PROPSETID_VIDCAP_CAMERACONTROL_REGION_OF_INTEREST, KSPROPERTYSETID_PerFrameSettingControl, KSPROPERTYSETID_ExtendedCameraControl
-	// 
-	// etc
+	// Handle our custom property set: KSPROPSETID_VCam_Config / KSPROPID_VCam_RtspUrl
+	if (property->Set == KSPROPSETID_VCam_Config &&
+		property->Id   == KSPROPID_VCam_RtspUrl  &&
+		(property->Flags & KSPROPERTY_TYPE_SET))
+	{
+		if (data == nullptr || dataLength < sizeof(wchar_t))
+		{
+			WINTRACE(L"MediaSource::KsProperty - RTSP URL: invalid buffer");
+			return HRESULT_FROM_WIN32(ERROR_INVALID_PARAMETER);
+		}
+
+		// Read the wide-string URL from the payload
+		const wchar_t* url = static_cast<const wchar_t*>(data);
+		ULONG maxChars = dataLength / sizeof(wchar_t);
+
+		// Ensure null-terminated within the buffer
+		std::wstring newUrl(url, wcsnlen(url, maxChars));
+
+		WINTRACE(L"MediaSource::KsProperty - RTSP URL received: %s", newUrl.c_str());
+
+		_rtspUrl = std::move(newUrl);
+
+		// Propagate to all streams (in case Start() was already called)
+		for (auto& stream : _streams)
+		{
+			if (stream)
+				stream->SetRTSPUrl(_rtspUrl.c_str());
+		}
+
+		*bytesReturned = 0;
+		return S_OK;
+	}
 
 	return HRESULT_FROM_WIN32(ERROR_SET_NOT_FOUND);
 }

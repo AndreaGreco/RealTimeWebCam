@@ -1,7 +1,6 @@
 #pragma once
 
 #include <mfvirtualcamera.h>
-#include "VideoPlayer.h"
 #include <string>
 
 // CLSID della Virtual Camera (deve corrispondere a quello in VCamSampleSource)
@@ -24,15 +23,14 @@ inline std::wstring GUID_ToStringW(const GUID& guid)
 class VirtualCamera
 {
 private:
-	IMFVirtualCamera* _vcam;
-	VideoPlayer* videoPlayer;
-	std::wstring _title;
-	bool _isRegistered;
-	bool _isStarted;
-	
+IMFVirtualCamera* _vcam;
+std::wstring _title;
+std::wstring _rtspUrl;
+bool _isRegistered;
+bool _isStarted;
 
 public:
-	VirtualCamera(VideoPlayer *video);
+	VirtualCamera();
 	~VirtualCamera();
 
 	// Set the friendly name of the virtual camera
@@ -52,6 +50,12 @@ public:
 
 	// Get the IMFMediaSource for this virtual camera
 	HRESULT GetMediaSource(IMFMediaSource** ppMediaSource);
+	
+	void SetRTSPUrl(std::wstring url);
+
+	// Push the stored RTSP URL to the Frame Server via KsProperty (cross-process).
+	// Called automatically from VcamStartCallback after SOURCE_INITIALIZE.
+	void SendRTSPUrl();
 
 	// Check if camera is registered
 	bool IsRegistered() const { return _isRegistered; }

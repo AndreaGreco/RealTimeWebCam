@@ -111,19 +111,12 @@ extern "C" {
 		}
 		return false;
 	}
-
-	__declspec(dllexport) void SendFrameToVirtualCamera(VideoPlayer* player, bool send)
-	{
-		if (player)
-		{
-			player->sendFrameToVirtualCamera(send);
-		}
-	}
 }
 
 // ============================================================================
 // DLL Entry Point
 // ============================================================================
+#pragma unmanaged
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
 {

@@ -16,13 +16,14 @@ public:
 
 	HRESULT Initialize();
 
+/*
 private:
 #if _DEBUG
 	int32_t query_interface_tearoff(winrt::guid const& id, void** object) const noexcept override
 	{
 		if (id == winrt::guid_of<IMFAttributes>())
 		{
-			this->m_inner->AddRef();
+			AddRef();
 			*object = (IMFAttributes*)this;
 			WINTRACE(L"Activator QueryInterface IMFAttributes ok");
 			return S_OK;
@@ -30,7 +31,7 @@ private:
 
 		RETURN_HR_MSG(E_NOINTERFACE, "Activator QueryInterface failed on IID %s", GUID_ToStringW(id).c_str());
 	}
-#endif
+#endif */
 
 private:
 	winrt::com_ptr<MediaSource> _source;
