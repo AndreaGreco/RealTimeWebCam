@@ -133,7 +133,7 @@ namespace TestVideo
             {
                 if (vcamHandle != IntPtr.Zero)
                 {
-                    if (IsStarted)    StopVCam(vcamHandle);
+                    if (IsStarted) StopVCam(vcamHandle);
                     if (IsRegistered) UnregisterVCam(vcamHandle);
                     DestroyVirtualCamera(vcamHandle);
                     vcamHandle = IntPtr.Zero;

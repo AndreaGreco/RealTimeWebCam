@@ -93,7 +93,7 @@ namespace TestVideo
             GetVideoStreamInfo(playerInstance, infos, 8, out written);
 
             outs = new StreamInfo[written];
-            for(int i = 0; i < written; i++)
+            for (int i = 0; i < written; i++)
             {
                 outs[i] = infos[i];
             }

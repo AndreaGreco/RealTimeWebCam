@@ -389,7 +389,7 @@ STDMETHODIMP MediaSource::Start(IMFPresentationDescriptor* pPresentationDescript
 			else
 			{
 				WINTRACE(L"MediaSource::Start - no RTSP URL, stream[%i] will show fallback frame", index);
-				}
+			}
 
 				RETURN_IF_FAILED(_streams[index]->Start(type.get()));
 			}

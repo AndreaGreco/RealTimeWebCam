@@ -1,6 +1,4 @@
-﻿using RTVirtualCamera;
-using System;
-using System.Data;
+﻿using System;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -17,7 +15,7 @@ namespace TestVideo
         {
             InitializeComponent();
             InitializeVideoPlayer();
-            
+
             // Handle resize events to update video position
             videoPanel.Resize += VideoPanel_Resize;
         }
@@ -72,7 +70,7 @@ namespace TestVideo
                     {
                         StreamInfo[] infos = videoPlayer.GetStreamInfos();
                         videoPlayer.Play();
-                        
+
                         foreach (var info in infos)
                         {
                             string msg;
@@ -115,11 +113,11 @@ namespace TestVideo
                     var config = new VCamConfig
                     {
                         RtspUrl = pathTextBox.Text ?? string.Empty,
-                        Width   = this.streamInfo.width,
-                        Height  = this.streamInfo.height,
-                        FpsNum  = this.streamInfo.fpsNum,
-                        FpsDen  = this.streamInfo.fpsDen,
-                        Format  = this.streamInfo.subtype,
+                        Width = this.streamInfo.width,
+                        Height = this.streamInfo.height,
+                        FpsNum = this.streamInfo.fpsNum,
+                        FpsDen = this.streamInfo.fpsDen,
+                        Format = this.streamInfo.subtype,
                     };
                     virtualCamera.SetConfig(config);
 
@@ -177,7 +175,7 @@ namespace TestVideo
             catch (Exception ex)
             {
                 MessageBox.Show($"Error managing virtual camera: {ex.Message}\n\n{ex.StackTrace}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                
+
                 // Cleanup on error
                 virtualCamera?.Dispose();
                 virtualCamera = null;
