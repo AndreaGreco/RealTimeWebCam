@@ -33,6 +33,14 @@ STDMETHODIMP Activator::ActivateObject(REFIID riid, void** ppv)
 			WINTRACE(L"Activator::ActivateObject client process '%s'", name.c_str());
 		}
 	}
+
+	// At this point the Frame Server has finished writing all attributes on the
+	// Activator (URL, width, height, fps). Pass them to the source now — this is
+	// the correct moment, NOT inside Initialize() which is called too early.
+	HRESULT hrCfg = _source->SetupCameraSettings(this);
+	if (FAILED(hrCfg))
+		WINTRACE(L"Activator::ActivateObject - SetupCameraSettings failed: 0x%08X (no RTSP, black frames)", hrCfg);
+
 	RETURN_IF_FAILED_MSG(_source->QueryInterface(riid, ppv), "Activator::ActivateObject failed on IID %s", GUID_ToStringW(riid).c_str());
 	return S_OK;
 }

@@ -83,6 +83,25 @@ STDMETHODIMP RtspReaderCallback::OnReadSample(
     return S_OK;
 }
 
+HRESULT RtspReaderCallback::SetOutputMediaType(const GUID& subtype, UINT32 width, UINT32 height)
+{
+    winrt::slim_lock_guard lock(_lock);
+    if (_shutdown || !_reader) return MF_E_SHUTDOWN;
+
+    wil::com_ptr_nothrow<IMFMediaType> outputType;
+    RETURN_IF_FAILED(MFCreateMediaType(&outputType));
+    RETURN_IF_FAILED(outputType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video));
+    RETURN_IF_FAILED(outputType->SetGUID(MF_MT_SUBTYPE, subtype));
+    MFSetAttributeSize(outputType.get(), MF_MT_FRAME_SIZE, width, height);
+
+    HRESULT hr = _reader->SetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM, nullptr, outputType.get());
+    if (FAILED(hr))
+        WINTRACE(L"RtspReaderCallback::SetOutputMediaType - failed 0x%08X (continuing with previous type)", hr);
+    else
+        WINTRACE(L"RtspReaderCallback::SetOutputMediaType - reconfigured to %ux%u", width, height);
+    return hr;
+}
+
 HRESULT RtspReaderCallback::TakeLatestSample(IMFSample** ppSample)
 {
     RETURN_HR_IF_NULL(E_POINTER, ppSample);

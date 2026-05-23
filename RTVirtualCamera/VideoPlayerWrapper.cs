@@ -4,6 +4,28 @@ using System.Windows.Forms;
 
 namespace TestVideo
 {
+    [StructLayout(LayoutKind.Sequential)]
+    public struct StreamInfo
+    {
+        public uint width;
+        public uint height;
+
+        public Guid subtype;
+
+        public uint fpsNum;
+        public uint fpsDen;
+
+        public uint bitrate;
+
+        public int getFSP()
+        {
+            if (fpsDen == 0)
+                return 0;
+
+            return (int)(fpsNum / fpsDen);
+        }
+    }
+
     public class VideoPlayerWrapper : IDisposable
     {
         private IntPtr playerInstance;
@@ -18,6 +40,12 @@ namespace TestVideo
 
         [DllImport("MFPipeline.dll", CharSet = CharSet.Unicode)]
         private static extern void SetVideoPath(IntPtr player, string path);
+
+        [DllImport("MFPipeline.dll")]
+        private static extern int GetVideoStreamInfo(IntPtr player,
+            [Out] StreamInfo[] infos,
+            uint maxCount,
+            out uint writtenCount);
 
         [DllImport("MFPipeline.dll")]
         private static extern void SetWindowHandle(IntPtr player, IntPtr hwnd);
@@ -55,6 +83,22 @@ namespace TestVideo
                 throw new ObjectDisposedException(nameof(VideoPlayerWrapper));
 
             SetVideoPath(playerInstance, videoPath);
+        }
+
+        public StreamInfo[] GetStreamInfos()
+        {
+            StreamInfo[] infos = new StreamInfo[8];
+            StreamInfo[] outs;
+            uint written;
+            GetVideoStreamInfo(playerInstance, infos, 8, out written);
+
+            outs = new StreamInfo[written];
+            for(int i = 0; i < written; i++)
+            {
+                outs[i] = infos[i];
+            }
+
+            return outs;
         }
 
         public void SetWindowHandle(IntPtr windowHandle)

@@ -86,6 +86,15 @@ extern "C" {
 		return -1;
 	}
 
+	__declspec(dllexport) int GetVideoStreamInfo(VideoPlayer* player, StreamInfo* pInfo, UINT32 maxBuffElement, UINT32* count)
+	{
+		if (player)
+		{
+			return player->getVideoStreamInfo(pInfo, maxBuffElement, count);
+		}
+		return -1;
+	}
+
 	__declspec(dllexport) void UpdateVideoPosition(VideoPlayer* player)
 	{
 		if (player)

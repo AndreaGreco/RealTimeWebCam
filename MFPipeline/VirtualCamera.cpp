@@ -2,177 +2,15 @@
 #include "VirtualCamera.h"
 #include "Logger.h"
 #include <sstream>
-#include <ks.h>
 
 // ============================================================================
 // VirtualCamera Implementation
 // ============================================================================
 
-// KsProperty set GUID used by SendCameraProperty (app→FrameServer) and received
-// in MediaSource::KsProperty() inside VCamSampleSource.dll.
-// Property ID 1 = RTSP URL (wide string payload).
-// Must match the same GUID in VirtualCamera/MediaSource.cpp.
-static const GUID KSPROPSETID_VCam_Config = { 0xc1d2e3f4, 0xa5b6, 0x47c8, { 0xd9, 0xea, 0x1b, 0x2c, 0x3d, 0x4e, 0x5f, 0x60 } };
-static const ULONG KSPROPID_VCam_RtspUrl  = 1;
-
-class VirtualCamera; // forward
-
-class VcamStartCallback : public IMFAsyncCallback
-{
-private:
-	LONG m_refCount;
-	VirtualCamera* _owner; // non-owning: callback lifetime < VirtualCamera lifetime
-
-
-public:
-	// IUnknown methods
-	STDMETHODIMP QueryInterface(REFIID riid, void** ppv)
-	{
-		if (riid == IID_IUnknown || riid == __uuidof(IMFAsyncCallback))
-		{
-			*ppv = static_cast<IMFAsyncCallback*>(this);
-			AddRef();
-			return S_OK;
-		}
-		*ppv = nullptr;
-		return E_NOINTERFACE;
-	}
-	STDMETHODIMP_(ULONG) AddRef()
-	{
-		return InterlockedIncrement(&m_refCount);
-	}
-	STDMETHODIMP_(ULONG) Release()
-	{
-		ULONG count = InterlockedDecrement(&m_refCount);
-		if (count == 0)
-		{
-			delete this;
-		}
-		return count;
-	}
-	// IMFAsyncCallback methods
-	STDMETHODIMP GetParameters(DWORD* pdwFlags, DWORD* pdwQueue)
-	{
-		return E_NOTIMPL;
-	}
-	STDMETHODIMP Invoke(IMFAsyncResult* pAsyncResult)
-	{
-		if (!pAsyncResult)
-		{
-			DebugLog("VcamStartCallback::Invoke - pAsyncResult is null");
-			return E_POINTER;
-		}
-
-		// Get the event from the async result
-		IMFMediaEvent* pEvent = nullptr;
-		HRESULT hr = pAsyncResult->GetObject((IUnknown**)&pEvent);
-		if (FAILED(hr) || !pEvent)
-		{
-			DebugLog("VcamStartCallback::Invoke - Failed to get event from async result");
-			return hr;
-		}
-
-		// Get the event type
-		MediaEventType eventType;
-		hr = pEvent->GetType(&eventType);
-		if (FAILED(hr))
-		{
-			pEvent->Release();
-			DebugLog("VcamStartCallback::Invoke - Failed to get event type");
-			return hr;
-		}
-
-		// Handle the event based on type
-		switch (eventType)
-		{
-		case MEExtendedType:
-		{
-			// Get the extended type GUID
-			GUID extendedType;
-			hr = pEvent->GetExtendedType(&extendedType);
-			if (SUCCEEDED(hr))
-			{
-				// Log the extended event types
-				if (extendedType == MF_FRAMESERVER_VCAMEVENT_EXTENDED_SOURCE_INITIALIZE)
-				{
-					DebugLog("VcamEvent: MF_FRAMESERVER_VCAMEVENT_EXTENDED_SOURCE_INITIALIZE - Custom media source initialized");
-					// Frame Server has loaded VCamSampleSource.dll and called Initialize().
-					// NOW we can push the RTSP URL cross-process via KsProperty.
-					if (_owner)
-					{
-						_owner->SendRTSPUrl();
-					}
-				}
-				else if (extendedType == MF_FRAMESERVER_VCAMEVENT_EXTENDED_SOURCE_START)
-				{
-					DebugLog("VcamEvent: MF_FRAMESERVER_VCAMEVENT_EXTENDED_SOURCE_START - Stream(s) started by application");
-				}
-				else if (extendedType == MF_FRAMESERVER_VCAMEVENT_EXTENDED_SOURCE_STOP)
-				{
-					DebugLog("VcamEvent: MF_FRAMESERVER_VCAMEVENT_EXTENDED_SOURCE_STOP - All streams stopped by application");
-				}
-				else if (extendedType == MF_FRAMESERVER_VCAMEVENT_EXTENDED_SOURCE_UNINITIALIZE)
-				{
-					DebugLog("VcamEvent: MF_FRAMESERVER_VCAMEVENT_EXTENDED_SOURCE_UNINITIALIZE - Custom media source uninitialized");
-				}
-				else if (extendedType == MF_FRAMESERVER_VCAMEVENT_EXTENDED_PIPELINE_SHUTDOWN)
-				{
-					DebugLog("VcamEvent: MF_FRAMESERVER_VCAMEVENT_EXTENDED_PIPELINE_SHUTDOWN - Virtual camera pipeline shutdown");
-				}
-				else if (extendedType == MF_FRAMESERVER_VCAMEVENT_EXTENDED_CUSTOM_EVENT)
-				{
-					DebugLog("VcamEvent: MF_FRAMESERVER_VCAMEVENT_EXTENDED_CUSTOM_EVENT - Custom event from media source");
-				}
-				else
-				{
-					// Log unknown extended type
-					char logMsg[256];
-					snprintf(logMsg, sizeof(logMsg),
-						"VcamEvent: Unknown extended type {%08X-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X}",
-						extendedType.Data1, extendedType.Data2, extendedType.Data3,
-						extendedType.Data4[0], extendedType.Data4[1], extendedType.Data4[2], extendedType.Data4[3],
-						extendedType.Data4[4], extendedType.Data4[5], extendedType.Data4[6], extendedType.Data4[7]);
-					DebugLog(logMsg);
-				}
-			}
-			break;
-		}
-		case MEError:
-		{
-			// Get the error status
-			HRESULT hrStatus;
-			hr = pEvent->GetStatus(&hrStatus);
-			if (SUCCEEDED(hr))
-			{
-				std::ostringstream oss;
-				oss << "VcamEvent: MEError - Error occurred with HRESULT: 0x" << std::hex << hrStatus;
-				DebugLog(oss.str().c_str());
-			}
-			else
-			{
-				DebugLog("VcamEvent: MEError - Error occurred (failed to get status)");
-			}
-			break;
-		}
-		default:
-		{
-			// Log other event types
-			char logMsg[128];
-			snprintf(logMsg, sizeof(logMsg), "VcamEvent: Unhandled event type: %d", eventType);
-			DebugLog(logMsg);
-			break;
-		}
-		}
-
-		pEvent->Release();
-		return S_OK;
-	}
-	VcamStartCallback(VirtualCamera* owner) : m_refCount(1), _owner(owner) {}
-};
-
 VirtualCamera::VirtualCamera()
 	: _vcam(nullptr)
 	, _title(L"RTSP Virtual Camera")
+	, _config{}
 	, _isRegistered(false)
 	, _isStarted(false)
 {
@@ -191,46 +29,10 @@ void VirtualCamera::SetCameraName(const wchar_t* name)
 	}
 }
 
-void VirtualCamera::SetRTSPUrl(std::wstring url)
+void VirtualCamera::SetConfig(const VCamConfig& config)
 {
-	_rtspUrl = url;
-	DebugLog("VirtualCamera::SetRTSPUrl - URL stored");
-}
-
-void VirtualCamera::SendRTSPUrl()
-{
-	// Called from VcamStartCallback after SOURCE_INITIALIZE: the Frame Server has loaded
-	// VCamSampleSource.dll and is ready to receive KsProperty calls.
-	// SendCameraProperty routes to MediaSource::KsProperty() cross-process.
-	if (_vcam == nullptr || _rtspUrl.empty())
-	{
-		DebugLog("VirtualCamera::SendRTSPUrl - skipped (no vcam or empty URL)");
-		return;
-	}
-
-	const wchar_t* url   = _rtspUrl.c_str();
-	ULONG          bytes = (ULONG)((wcslen(url) + 1) * sizeof(wchar_t));
-	ULONG          written = 0;
-
-	HRESULT hr = _vcam->SendCameraProperty(
-		KSPROPSETID_VCam_Config,      // property set GUID
-		KSPROPID_VCam_RtspUrl,        // property ID = 1
-		KSPROPERTY_TYPE_SET,          // SET operation
-		nullptr, 0,                   // no extra payload header
-		(void*)url, bytes,            // the URL as wchar_t buffer
-		&written
-	);
-
-	if (SUCCEEDED(hr))
-	{
-		DebugLog("VirtualCamera::SendRTSPUrl - URL sent successfully via SendCameraProperty");
-	}
-	else
-	{
-		std::ostringstream oss;
-		oss << "VirtualCamera::SendRTSPUrl - SendCameraProperty failed: 0x" << std::hex << hr;
-		DebugLog(oss.str().c_str());
-	}
+	_config = config;
+	DebugLog("VirtualCamera::SetConfig - config stored");
 }
 
 HRESULT VirtualCamera::RegisterVirtualCamera()
@@ -267,6 +69,25 @@ HRESULT VirtualCamera::RegisterVirtualCamera()
 	}
 
 	_isRegistered = true;
+
+	// Set individual attributes on the IMFVirtualCamera store BEFORE Start().
+	// IMFVirtualCamera::SetString/SetUINT32 are forwarded by the Frame Server
+	// to MediaSource::Initialize(). SetBlob is NOT reliably forwarded.
+	auto setAttr = [&](HRESULT h, const char* name) {
+		if (FAILED(h)) {
+			std::ostringstream oss;
+			oss << "VirtualCamera::RegisterVirtualCamera - " << name << " failed: 0x" << std::hex << h;
+			DebugLog(oss.str().c_str());
+		}
+	};
+
+	setAttr(_vcam->SetString(MF_VCAM_RTSP_URL, _config.rtspUrl), "SetString(RTSP_URL)");
+	setAttr(_vcam->SetUINT32(MF_VCAM_WIDTH,    _config.width),   "SetUINT32(WIDTH)");
+	setAttr(_vcam->SetUINT32(MF_VCAM_HEIGHT,   _config.height),  "SetUINT32(HEIGHT)");
+	setAttr(_vcam->SetUINT32(MF_VCAM_FPS_NUM,  _config.fpsNum),  "SetUINT32(FPS_NUM)");
+	setAttr(_vcam->SetUINT32(MF_VCAM_FPS_DEN,  _config.fpsDen),  "SetUINT32(FPS_DEN)");
+
+	DebugLog("VirtualCamera::RegisterVirtualCamera - config attributes stored on IMFVirtualCamera");
 
 	// Log success with CLSID
 	char clsidStr[128];
@@ -322,9 +143,9 @@ HRESULT VirtualCamera::StartVirtualCamera()
 		pTest->Release();
 	}
 
-	// Start the virtual camera with callback to push RTSP URL after SOURCE_INITIALIZE
-	VcamStartCallback* startCallback = new VcamStartCallback(this);
-	HRESULT hr = _vcam->Start(startCallback);
+	// Config attributes already set in RegisterVirtualCamera() via SetString/SetUINT32.
+	// Start with no callback: the Frame Server will forward them to MediaSource::Initialize().
+	HRESULT hr = _vcam->Start(nullptr);
 	if (FAILED(hr))
 	{
 		std::ostringstream oss;
@@ -463,11 +284,11 @@ extern "C" {
 		}
 	}
 
-	__declspec(dllexport) void SetVirtualCameraRTSPUrl(VirtualCamera* vcam, LPWSTR url)
+	__declspec(dllexport) void SetVirtualCameraConfig(VirtualCamera* vcam, const VCamConfig* config)
 	{
-		if (vcam && url)
+		if (vcam && config)
 		{
-			vcam->SetRTSPUrl(url);
+			vcam->SetConfig(*config);
 		}
 	}
 

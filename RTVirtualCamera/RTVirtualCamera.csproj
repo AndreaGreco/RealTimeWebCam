@@ -80,6 +80,7 @@
     </Compile>
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="MFVideoSubtypeNames.cs" />
     <Compile Include="VideoPlayerWrapper.cs" />
     <Compile Include="VirtualCameraWrapper.cs" />
     <EmbeddedResource Include="MainForm.resx">

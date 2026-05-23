@@ -1,4 +1,6 @@
-﻿using System;
+﻿using RTVirtualCamera;
+using System;
+using System.Data;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -9,6 +11,7 @@ namespace TestVideo
         private VideoPlayerWrapper videoPlayer;
         private VirtualCameraWrapper virtualCamera;
         private bool isVCamRunning = false;
+        private StreamInfo streamInfo;
 
         public MainForm()
         {
@@ -64,9 +67,23 @@ namespace TestVideo
                 {
                     videoPlayer.SetVideoPath(pathTextBox.Text);
 
-                    if (videoPlayer.Initialize())
+                    bool init = videoPlayer.Initialize();
+                    if (init)
                     {
+                        StreamInfo[] infos = videoPlayer.GetStreamInfos();
                         videoPlayer.Play();
+                        
+                        foreach (var info in infos)
+                        {
+                            string msg;
+
+                            msg = string.Format($"Resolution:{info.width}x{info.height}@{info.getFSP()}");
+
+                            this.streamProp_lbl.Text = msg;
+                        }
+
+                        this.streamInfo = infos[0];
+                        this.startVCamButton.Enabled = true;
                     }
                     else
                     {
@@ -84,30 +101,6 @@ namespace TestVideo
             }
         }
 
-        private void PauseButton_Click(object sender, EventArgs e)
-        {
-            try
-            {
-                videoPlayer.Pause();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error pausing video: {ex.Message}");
-            }
-        }
-
-        private void StopButton_Click(object sender, EventArgs e)
-        {
-            try
-            {
-                videoPlayer.Stop();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error stopping video: {ex.Message}");
-            }
-        }
-
         private void StartVCamButton_Click(object sender, EventArgs e)
         {
             try
@@ -117,7 +110,18 @@ namespace TestVideo
                     // Create and start virtual camera
                     virtualCamera = new VirtualCameraWrapper();
                     virtualCamera.SetCameraName("RTSP Virtual Camera");
-                    virtualCamera.SetRTSPUrl(pathTextBox.Text);
+
+                    // Build config from the path text box; resolution/fps from probed info if available
+                    var config = new VCamConfig
+                    {
+                        RtspUrl = pathTextBox.Text ?? string.Empty,
+                        Width   = this.streamInfo.width,
+                        Height  = this.streamInfo.height,
+                        FpsNum  = this.streamInfo.fpsNum,
+                        FpsDen  = this.streamInfo.fpsDen,
+                        Format  = this.streamInfo.subtype,
+                    };
+                    virtualCamera.SetConfig(config);
 
                     if (virtualCamera.Register())
                     {
@@ -128,20 +132,6 @@ namespace TestVideo
                             isVCamRunning = true;
                             startVCamButton.Text = "Stop VCam";
                             startVCamButton.BackColor = Color.LightCoral;
-
-                            System.Diagnostics.Debug.WriteLine("Virtual camera started");
-                            MessageBox.Show(
-                                "Virtual Camera is now ACTIVE!\n\n" +
-                                "You can now see it in:\n" +
-                                "- Windows Camera app (Win+Camera)\n" +
-                                "- Microsoft Teams\n" +
-                                "- Zoom\n" +
-                                "- Skype\n" +
-                                "- Any other camera app\n\n" +
-                                "You will see synthetic test frames (color bars with timestamp).",
-                                "Virtual Camera Started",
-                                MessageBoxButtons.OK,
-                                MessageBoxIcon.Information);
                         }
                         else
                         {

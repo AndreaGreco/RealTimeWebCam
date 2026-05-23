@@ -39,6 +39,10 @@ public:
     // Start the async read chain. Call once after creating the source reader.
     HRESULT BeginRead(IMFSourceReader* reader);
 
+    // Reconfigures the source reader's output type. Called from MediaStream::Start()
+    // when the consumer (Zoom) negotiates a format that differs from the initial NV12.
+    HRESULT SetOutputMediaType(const GUID& subtype, UINT32 width, UINT32 height);
+
     // Returns the latest frame and clears it. Returns S_FALSE if no frame available yet.
     // Called by MediaStream::RequestSample() on the Frame Server thread.
     HRESULT TakeLatestSample(IMFSample** ppSample);

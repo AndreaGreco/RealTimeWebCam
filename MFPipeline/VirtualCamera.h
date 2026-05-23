@@ -2,6 +2,7 @@
 
 #include <mfvirtualcamera.h>
 #include <string>
+#include "..\Shared\VCamConfig.h"
 
 // CLSID della Virtual Camera (deve corrispondere a quello in VCamSampleSource)
 // {3CAD447D-F283-4AF4-A3B2-6F5363309F52}
@@ -25,7 +26,7 @@ class VirtualCamera
 private:
 IMFVirtualCamera* _vcam;
 std::wstring _title;
-std::wstring _rtspUrl;
+VCamConfig _config;
 bool _isRegistered;
 bool _isStarted;
 
@@ -35,6 +36,10 @@ public:
 
 	// Set the friendly name of the virtual camera
 	void SetCameraName(const wchar_t* name);
+
+	// Set the full configuration (URL, resolution, fps, format) to be sent to
+	// the Frame Server. Must be called before Register()+Start().
+	void SetConfig(const VCamConfig& config);
 
 	// Register the virtual camera in the system
 	HRESULT RegisterVirtualCamera();
@@ -50,12 +55,6 @@ public:
 
 	// Get the IMFMediaSource for this virtual camera
 	HRESULT GetMediaSource(IMFMediaSource** ppMediaSource);
-	
-	void SetRTSPUrl(std::wstring url);
-
-	// Push the stored RTSP URL to the Frame Server via KsProperty (cross-process).
-	// Called automatically from VcamStartCallback after SOURCE_INITIALIZE.
-	void SendRTSPUrl();
 
 	// Check if camera is registered
 	bool IsRegistered() const { return _isRegistered; }

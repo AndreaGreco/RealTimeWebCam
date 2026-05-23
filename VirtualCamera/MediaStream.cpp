@@ -7,9 +7,7 @@
 #include "MediaSource.h"
 #include "RtspReaderCallback.h"
 #include <mfreadwrite.h>
-
-#define NUM_IMAGE_COLS 1280
-#define NUM_IMAGE_ROWS 960
+#include <mfapi.h>
 
 HRESULT MediaStream::Initialize(IMFMediaSource* source, int index)
 {
@@ -24,44 +22,56 @@ HRESULT MediaStream::Initialize(IMFMediaSource* source, int index)
 
 	RETURN_IF_FAILED(MFCreateEventQueue(&_queue));
 
-	// Create media types - support RGB32 and NV12
+	// Build initial descriptor using the configured dimensions (defaults 1920x1080 until
+	// SetVideoConfig is called from SetupCameraSettings with the probe-selected values).
+	RETURN_IF_FAILED(BuildDescriptor());
+
+	return S_OK;
+}
+
+// Builds or rebuilds _descriptor using the current _videoWidth/_videoHeight/_hintFpsNum/_hintFpsDen/_format.
+HRESULT MediaStream::BuildDescriptor()
+{
 	auto types = wil::make_unique_cotaskmem_array<wil::com_ptr_nothrow<IMFMediaType>>(2);
 
-	wil::com_ptr_nothrow<IMFMediaType> rgbType;
-	RETURN_IF_FAILED(MFCreateMediaType(&rgbType));
-	rgbType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
-	rgbType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
-	MFSetAttributeSize(rgbType.get(), MF_MT_FRAME_SIZE, NUM_IMAGE_COLS, NUM_IMAGE_ROWS);
-	rgbType->SetUINT32(MF_MT_DEFAULT_STRIDE, NUM_IMAGE_COLS * 4);
-	rgbType->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
-	rgbType->SetUINT32(MF_MT_ALL_SAMPLES_INDEPENDENT, TRUE);
-	MFSetAttributeRatio(rgbType.get(), MF_MT_FRAME_RATE, 30, 1);
-	auto bitrate = (uint32_t)(NUM_IMAGE_COLS * NUM_IMAGE_ROWS * 4 * 8 * 30);
-	rgbType->SetUINT32(MF_MT_AVG_BITRATE, bitrate);
-	MFSetAttributeRatio(rgbType.get(), MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
-	types[0] = rgbType.detach();
-
+	// NV12 preferred (hardware-native for H.264 decode).
 	wil::com_ptr_nothrow<IMFMediaType> nv12Type;
 	RETURN_IF_FAILED(MFCreateMediaType(&nv12Type));
 	nv12Type->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
 	nv12Type->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_NV12);
 	nv12Type->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
 	nv12Type->SetUINT32(MF_MT_ALL_SAMPLES_INDEPENDENT, TRUE);
-	MFSetAttributeSize(nv12Type.get(), MF_MT_FRAME_SIZE, NUM_IMAGE_COLS, NUM_IMAGE_ROWS);
-	nv12Type->SetUINT32(MF_MT_DEFAULT_STRIDE, (UINT)(NUM_IMAGE_COLS * 1.5));
-	MFSetAttributeRatio(nv12Type.get(), MF_MT_FRAME_RATE, 30, 1);
-	bitrate = (uint32_t)(NUM_IMAGE_COLS * 1.5 * NUM_IMAGE_ROWS * 8 * 30);
-	nv12Type->SetUINT32(MF_MT_AVG_BITRATE, bitrate);
+	MFSetAttributeSize(nv12Type.get(), MF_MT_FRAME_SIZE, _videoWidth, _videoHeight);
+	nv12Type->SetUINT32(MF_MT_DEFAULT_STRIDE, _videoWidth);
+	MFSetAttributeRatio(nv12Type.get(), MF_MT_FRAME_RATE, _hintFpsNum, _hintFpsDen);
+	nv12Type->SetUINT32(MF_MT_AVG_BITRATE, (UINT32)(_videoWidth * _videoHeight * 12 * _hintFpsNum / _hintFpsDen / 8));
 	MFSetAttributeRatio(nv12Type.get(), MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
-	types[1] = nv12Type.detach();
+	types[0] = nv12Type.detach();
 
-	RETURN_IF_FAILED_MSG(MFCreateStreamDescriptor(_index, (DWORD)types.size(), types.get(), &_descriptor), "MFCreateStreamDescriptor failed");
+	// RGB32 as fallback.
+	wil::com_ptr_nothrow<IMFMediaType> rgbType;
+	RETURN_IF_FAILED(MFCreateMediaType(&rgbType));
+	rgbType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
+	rgbType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
+	MFSetAttributeSize(rgbType.get(), MF_MT_FRAME_SIZE, _videoWidth, _videoHeight);
+	rgbType->SetUINT32(MF_MT_DEFAULT_STRIDE, _videoWidth * 4);
+	rgbType->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
+	rgbType->SetUINT32(MF_MT_ALL_SAMPLES_INDEPENDENT, TRUE);
+	MFSetAttributeRatio(rgbType.get(), MF_MT_FRAME_RATE, _hintFpsNum, _hintFpsDen);
+	rgbType->SetUINT32(MF_MT_AVG_BITRATE, (UINT32)(_videoWidth * _videoHeight * 4 * 8 * _hintFpsNum / _hintFpsDen));
+	MFSetAttributeRatio(rgbType.get(), MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
+	types[1] = rgbType.detach();
+
+	wil::com_ptr_nothrow<IMFStreamDescriptor> newDesc;
+	RETURN_IF_FAILED_MSG(MFCreateStreamDescriptor(_index, (DWORD)types.size(), types.get(), &newDesc),
+		"BuildDescriptor: MFCreateStreamDescriptor failed");
 
 	wil::com_ptr_nothrow<IMFMediaTypeHandler> handler;
-	RETURN_IF_FAILED(_descriptor->GetMediaTypeHandler(&handler));
-	TraceMFAttributes(handler.get(), L"MediaTypeHandler");
+	RETURN_IF_FAILED(newDesc->GetMediaTypeHandler(&handler));
 	RETURN_IF_FAILED(handler->SetCurrentMediaType(types[0]));
 
+	_descriptor = std::move(newDesc);
+	WINTRACE(L"MediaStream::BuildDescriptor - %ux%u @%u/%u", _videoWidth, _videoHeight, _hintFpsNum, _hintFpsDen);
 	return S_OK;
 }
 
@@ -87,14 +97,14 @@ HRESULT MediaStream::InitializeRTSPReader()
 	callback.attach(new (std::nothrow) RtspReaderCallback());
 	RETURN_HR_IF_NULL(E_OUTOFMEMORY, callback);
 
-	// Reader attributes: async callback, video processing, low latency.
-	// NOTE: do NOT set MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING at all (leave at default FALSE).
-	// Setting it explicitly — even to FALSE — alongside MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING=TRUE
-	// triggers validation in some Windows MF builds and can cause MFCreateSourceReaderFromURL to fail.
+	// Reader attributes: async callback, advanced video processing (handles H.264 decode +
+	// format conversion + resolution scaling), low latency.
+	// NOTE: use ADVANCED_VIDEO_PROCESSING only — combining it with basic VIDEO_PROCESSING
+	// triggers validation failures on some Windows MF builds.
 	wil::com_ptr_nothrow<IMFAttributes> readerAttrs;
 	RETURN_IF_FAILED(MFCreateAttributes(&readerAttrs, 4));
 	RETURN_IF_FAILED(readerAttrs->SetUINT32(MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, TRUE));
-	RETURN_IF_FAILED(readerAttrs->SetUINT32(MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, TRUE));
+	RETURN_IF_FAILED(readerAttrs->SetUINT32(MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING, TRUE));
 	RETURN_IF_FAILED(readerAttrs->SetUINT32(MF_LOW_LATENCY, TRUE));
 	RETURN_IF_FAILED(readerAttrs->SetUnknown(MF_SOURCE_READER_ASYNC_CALLBACK, callback.get()));
 
@@ -106,47 +116,30 @@ HRESULT MediaStream::InitializeRTSPReader()
 		return hr;
 	}
 
-	// Get native resolution from the first available video type.
+	// Get native resolution from the first available video type (for logging only).
+	// Do NOT overwrite _videoWidth/_videoHeight here: they are already set to the
+	// consumer-negotiated dimensions (from Start()). The MF video processor will scale
+	// the RTSP output to those dimensions automatically.
 	wil::com_ptr_nothrow<IMFMediaType> nativeType;
 	RETURN_IF_FAILED(reader->GetNativeMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, &nativeType));
-	MFGetAttributeSize(nativeType.get(), MF_MT_FRAME_SIZE, &_videoWidth, &_videoHeight);
-	UINT32 nativeW = _videoWidth, nativeH = _videoHeight;
-	WINTRACE(L"MediaStream::InitializeRTSPReader - Native: %ux%u", nativeW, nativeH);
+	UINT32 nativeW = 0, nativeH = 0;
+	MFGetAttributeSize(nativeType.get(), MF_MT_FRAME_SIZE, &nativeW, &nativeH);
+	WINTRACE(L"MediaStream::InitializeRTSPReader - Native: %ux%u, output (consumer): %ux%u", nativeW, nativeH, _videoWidth, _videoHeight);
 
-	// Ask the source reader to decode to _format at the virtual camera's declared resolution.
-	// MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING=TRUE makes MF insert a video processor that
-	// scales + converts H.264 → _format @ 1280×960 automatically.
-	// This is mandatory: the consumer has already negotiated 1280×960 from the stream
-	// descriptor, so every sample we deliver MUST have that exact resolution.
+	// Configure source reader output: format + probe-selected resolution.
+	// ADVANCED_VIDEO_PROCESSING inserts a full video processor (EVR-quality) that handles
+	// H.264 decode + format conversion + scaling to _videoWidth×_videoHeight.
+	// Output is packed (stride = width), so CopyRtspFrame uses _videoWidth directly.
 	wil::com_ptr_nothrow<IMFMediaType> outputType;
 	RETURN_IF_FAILED(MFCreateMediaType(&outputType));
 	RETURN_IF_FAILED(outputType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video));
-	RETURN_IF_FAILED(outputType->SetGUID(MF_MT_SUBTYPE, _format == GUID_NULL ? MFVideoFormat_RGB32 : _format));
-	MFSetAttributeSize(outputType.get(), MF_MT_FRAME_SIZE, NUM_IMAGE_COLS, NUM_IMAGE_ROWS);
+	RETURN_IF_FAILED(outputType->SetGUID(MF_MT_SUBTYPE, _format == GUID_NULL ? MFVideoFormat_NV12 : _format));
+	MFSetAttributeSize(outputType.get(), MF_MT_FRAME_SIZE, _videoWidth, _videoHeight);
 	RETURN_IF_FAILED(reader->SetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM, nullptr, outputType.get()));
 
-	// Read back actual negotiated output type to get true stride.
-	wil::com_ptr_nothrow<IMFMediaType> actualType;
-	RETURN_IF_FAILED(reader->GetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM, &actualType));
-	{
-		UINT32 w = 0, h = 0;
-		MFGetAttributeSize(actualType.get(), MF_MT_FRAME_SIZE, &w, &h);
-		_videoWidth  = (w > 0) ? w : NUM_IMAGE_COLS;
-		_videoHeight = (h > 0) ? h : NUM_IMAGE_ROWS;
-
-		// MFGetStrideForBitmapInfoHeader is the reliable way to get stride for any format.
-		// MF_MT_DEFAULT_STRIDE is unreliable for planar formats (NV12) and may be absent.
-		GUID subtype = GUID_NULL;
-		actualType->GetGUID(MF_MT_SUBTYPE, &subtype);
-		LONG computedStride = 0;
-		if (SUCCEEDED(MFGetStrideForBitmapInfoHeader(subtype.Data1, _videoWidth, &computedStride)) && computedStride > 0)
-			_videoStride = (UINT32)computedStride;
-		else
-			_videoStride = _videoWidth * 4; // RGB32 safe fallback
-
-		WINTRACE(L"MediaStream::InitializeRTSPReader - Output: %ux%u stride:%u (native was %ux%u)",
-			_videoWidth, _videoHeight, _videoStride, nativeW, nativeH);
-	}
+	WINTRACE(L"MediaStream::InitializeRTSPReader - output configured: %s %ux%u (native RTSP: %ux%u)",
+		GUID_ToStringW(_format == GUID_NULL ? MFVideoFormat_NV12 : _format).c_str(),
+		_videoWidth, _videoHeight, nativeW, nativeH);
 
 	// Hand the reader to the callback and start the async chain.
 	RETURN_IF_FAILED(callback->BeginRead(reader.get()));
@@ -156,75 +149,93 @@ HRESULT MediaStream::InitializeRTSPReader()
 	return S_OK;
 }
 
-// Copies a decoded RTSP frame (any format, native resolution) into an allocator sample.
-// Source format is _format (set by InitializeRTSPReader to match what Zoom requested).
-// Handles both RGB32 and NV12 destinations (system memory or D3D IMF2DBuffer textures).
+// Copies a decoded RTSP frame
+// The source reader is configured to produce exactly the consumer-negotiated format/size,
+// so no scaling or stride calculation is needed — same pattern as VideoReaderCbk.
 HRESULT MediaStream::CopyRtspFrame(IMFSample* rtspSample, IMFSample* targetSample)
 {
 	RETURN_HR_IF_NULL(E_POINTER, rtspSample);
 	RETURN_HR_IF_NULL(E_POINTER, targetSample);
 
-	// Flatten RTSP sample to a contiguous system-memory buffer.
+	// Source: flat contiguous buffer from the source reader (packed NV12 or RGB32).
 	wil::com_ptr_nothrow<IMFMediaBuffer> srcBuffer;
 	RETURN_IF_FAILED(rtspSample->ConvertToContiguousBuffer(&srcBuffer));
+	BYTE* pbSrc = nullptr;
+	DWORD cbSrc = 0;
+	RETURN_IF_FAILED(srcBuffer->Lock(&pbSrc, nullptr, &cbSrc));
 
-	BYTE* srcData = nullptr;
-	DWORD srcLen  = 0;
-	RETURN_IF_FAILED(srcBuffer->Lock(&srcData, nullptr, &srcLen));
-
-	// Destination: prefer IMF2DBuffer2 (D3D textures from allocator), fall back to flat lock.
-	wil::com_ptr_nothrow<IMFMediaBuffer> dstBuffer;
-	RETURN_IF_FAILED_MSG(targetSample->GetBufferByIndex(0, &dstBuffer),
-		"CopyRtspFrame: GetBufferByIndex failed");
-
-	wil::com_ptr_nothrow<IMF2DBuffer2> dst2D;
-	dstBuffer->QueryInterface(&dst2D);
-
-	HRESULT hrCopy = S_OK;
-	if (dst2D)
+	// Verify the buffer size matches. InitializeRTSPReader already read back the actual
+	// negotiated type and updated _videoWidth/_videoHeight, so mismatch here should not
+	// happen. Log and skip the frame if it does (avoid overread / green stripes).
+	DWORD cbExpected = (_format == MFVideoFormat_NV12)
+		? (_videoWidth * _videoHeight * 3 / 2)
+		: (_videoWidth * _videoHeight * 4);
+	if (cbSrc < cbExpected)
 	{
-		BYTE* dstScan0 = nullptr;
-		LONG  dstPitch = 0;
-		BYTE* dstBuf   = nullptr;
-		DWORD dstBufLen = 0;
-		hrCopy = dst2D->Lock2DSize(MF2DBuffer_LockFlags_Write, &dstScan0, &dstPitch, &dstBuf, &dstBufLen);
+		WINTRACE(L"MediaStream::CopyRtspFrame - unexpected size mismatch: cbSrc=%u expected=%u "
+				 L"(%ux%u %s) — skipping frame",
+			cbSrc, cbExpected, _videoWidth, _videoHeight,
+			(_format == MFVideoFormat_NV12) ? L"NV12" : L"RGB32");
+		srcBuffer->Unlock();
+		return S_FALSE; // caller will fall through to synthetic frame
+	}
+
+	// Destination: D3D texture via IMF2DBuffer (from allocator). Lock2D gives us the
+	// real pitch of the GPU texture without guessing.
+	wil::com_ptr_nothrow<IMFMediaBuffer> dstBuffer;
+	RETURN_IF_FAILED_MSG(targetSample->GetBufferByIndex(0, &dstBuffer), "GetBufferByIndex");
+
+	BYTE* pbScan0 = nullptr;
+	LONG  lPitch  = 0;
+	HRESULT hrCopy = S_OK;
+
+	wil::com_ptr_nothrow<IMF2DBuffer> dst2D;
+	if (SUCCEEDED(dstBuffer->QueryInterface(&dst2D)))
+	{
+		hrCopy = dst2D->Lock2D(&pbScan0, &lPitch);
 		if (SUCCEEDED(hrCopy))
 		{
 			if (_format == MFVideoFormat_NV12)
-			{
-				// NV12: Y plane (full res) then UV plane (half height, interleaved).
-				// Source stride for NV12 = _videoStride (= _videoWidth for packed NV12,
-				// may be larger if the decoder aligns rows).
-				// UV plane starts at srcData + _videoStride * _videoHeight (NOT _videoWidth * _videoHeight).
-				MFCopyImage(dstScan0, dstPitch,
-					srcData, (LONG)_videoStride,
-					_videoWidth, _videoHeight);
-				MFCopyImage(dstScan0 + dstPitch * (LONG)_videoHeight, dstPitch,
-					srcData + _videoStride * _videoHeight, (LONG)_videoStride,
-					_videoWidth, _videoHeight / 2);
-			}
-			else
-			{
-				// RGB32 / other: single plane.
-				MFCopyImage(dstScan0, dstPitch, srcData, (LONG)_videoStride, _videoWidth * 4, _videoHeight);
-			}
+				{
+					WINTRACE("NV12 frame: src cb=%u, dst pitch=%d, %ux%u",
+						cbSrc, lPitch, _videoWidth, _videoHeight);
+					// Y plane: _videoHeight rows of _videoWidth bytes each.
+					MFCopyImage(pbScan0, lPitch,
+						pbSrc, (LONG)_videoWidth,
+						_videoWidth, _videoHeight);
+					// UV plane: half height. Src offset = Y plane size.
+					MFCopyImage(pbScan0 + lPitch * (LONG)_videoHeight, lPitch,
+						pbSrc  + _videoWidth * _videoHeight, (LONG)_videoWidth,
+						_videoWidth, _videoHeight / 2);
+				}
+				else // RGB32
+				{
+					DWORD cbRow = _videoWidth * 4;
+					MFCopyImage(pbScan0, lPitch, pbSrc, (LONG)cbRow, cbRow, _videoHeight);
+					WINTRACE("RGB32 frame: src cb=%u, dst pitch=%d, %ux%u",
+						cbSrc, lPitch, _videoWidth, _videoHeight);
+				}
 			dst2D->Unlock2D();
-			// SetCurrentLength: use actual locked buffer size (covers all planes including UV).
-			dstBuffer->SetCurrentLength(dstBufLen);
+			// Always report the full allocated size (_videoHeight, not effectiveHeight):
+			// the allocator owns the full texture; the consumer expects the declared size.
+			DWORD cbFull = (_format == MFVideoFormat_NV12)
+				? (_videoWidth * _videoHeight * 3 / 2)
+				: (_videoWidth * _videoHeight * 4);
+			dstBuffer->SetCurrentLength(cbFull);
 		}
 	}
 	else
 	{
-		// System-memory fallback (no D3D).
-		BYTE* dstData   = nullptr;
-		DWORD dstMaxLen = 0;
-		hrCopy = dstBuffer->Lock(&dstData, &dstMaxLen, nullptr);
+		// System-memory fallback (no D3D — rare).
+		WINTRACE("SYS memory frame: src cb=%u, %ux%u", cbSrc, _videoWidth, _videoHeight);
+		BYTE* pbDst = nullptr; DWORD cbDstMax = 0;
+		hrCopy = dstBuffer->Lock(&pbDst, &cbDstMax, nullptr);
 		if (SUCCEEDED(hrCopy))
 		{
-			DWORD copyBytes = min(srcLen, dstMaxLen);
-			CopyMemory(dstData, srcData, copyBytes);
+			DWORD cb = min(cbSrc, cbDstMax);
+			CopyMemory(pbDst, pbSrc, cb);
 			dstBuffer->Unlock();
-			dstBuffer->SetCurrentLength(copyBytes);
+			dstBuffer->SetCurrentLength(cb);
 		}
 	}
 
@@ -236,53 +247,62 @@ HRESULT MediaStream::CopyRtspFrame(IMFSample* rtspSample, IMFSample* targetSampl
 		return hrCopy;
 	}
 
-	// Do NOT copy RTSP stream timestamp: the virtual camera pipeline expects
-	// monotonically increasing presentation timestamps. When we repeat the same
-	// decoded frame (RTSP fps < pipeline fps), the RTSP ts is constant → MF drops
-	// or glitches. RequestSample already set MFGetSystemTime() on targetSample.
-	LONGLONG ts = 0;
-	rtspSample->GetSampleTime(&ts);
-	WINTRACE(L"MediaStream::CopyRtspFrame - OK rtspTs:%lld %ux%u fmt:%s",
-		ts, _videoWidth, _videoHeight, GUID_ToStringW(_format).c_str());
+	LONGLONG ts = 0; rtspSample->GetSampleTime(&ts);
+	WINTRACE(L"MediaStream::CopyRtspFrame - OK ts:%lld pitch:%d %ux%u", ts, lPitch, _videoWidth, _videoHeight);
 	return S_OK;
 }
 
 HRESULT MediaStream::Start(IMFMediaType* type)
 {
-	// ── Passo 5b del ciclo di vita ──────────────────────────────────────────
-	// Chiamato da MediaSource::Start() quando un'app apre la virtual camera.
-	// MediaSource::Start() chiama SetRTSPUrl() PRIMA di questa funzione,
-	// MA solo se ha ricevuto l'URL in Initialize() — il che NON accade ancora
-	// (BUG 3: AddProperty non mappa a IMFAttributes → _rtspUrl sempre vuoto).
-	// Finché BUG 3 non è risolto, InitializeRTSPReader() restituisce S_FALSE
-	// e vengono usati i frame sintetici FrameGenerator.
 	RETURN_HR_IF(MF_E_SHUTDOWN, !_queue || !_allocator);
 
-	if (type)
+	// _videoWidth/_videoHeight/_format are authoritative: set from the probe result
+	// via SetVideoConfig() before Start() is called. We do not infer size from
+	// the negotiated media type — the descriptor was already built at probe dimensions.
+	if (_format == GUID_NULL) _format = MFVideoFormat_NV12;
+
+	WINTRACE(L"MediaStream::Start - using probe config: %s %ux%u @%u/%u",
+		GUID_ToStringW(_format).c_str(), _videoWidth, _videoHeight, _hintFpsNum, _hintFpsDen);
+
+	if (_rtspCallback)
 	{
-		RETURN_IF_FAILED(type->GetGUID(MF_MT_SUBTYPE, &_format));
-		WINTRACE(L"MediaStream::Start format: %s", GUID_ToStringW(_format).c_str());
+		GUID targetFmt = (_format == GUID_NULL) ? MFVideoFormat_NV12 : _format;
+		LOG_IF_FAILED(_rtspCallback->SetOutputMediaType(targetFmt, _videoWidth, _videoHeight));
+		WINTRACE(L"MediaStream::Start - RTSP already connected, reconfigured output to %ux%u",
+			_videoWidth, _videoHeight);
+	}
+	else if (!_rtspInitPending.exchange(true))
+	{
+		if (!_rtspUrl.empty())
+		{
+			AddRef();
+			HANDLE hThread = CreateThread(nullptr, 0, [](LPVOID param) -> DWORD
+			{
+				auto* stream = static_cast<MediaStream*>(param);
+				HRESULT hr = stream->InitializeRTSPReader();
+				if (FAILED(hr))
+					WINTRACE(L"MediaStream - RTSP init failed: 0x%08X", hr);
+				stream->_rtspInitPending = false;
+				stream->Release();
+				return 0;
+			}, this, 0, nullptr);
+			if (hThread) CloseHandle(hThread);
+			else { _rtspInitPending = false; Release(); }
+		}
+		else
+		{
+			_rtspInitPending = false;
+			WINTRACE(L"MediaStream::Start - No RTSP URL, synthetic frames only");
+		}
+	}
+	else
+	{
+		WINTRACE(L"MediaStream::Start - RTSP init already in progress");
 	}
 
-	// Initialize RTSP async reader if URL is configured.
-	HRESULT hr = InitializeRTSPReader();
-	if (hr == S_FALSE)
-	{
-		WINTRACE(L"MediaStream::Start - No RTSP URL, using synthetic frames");
-	}
-	else if (FAILED(hr))
-	{
-		WINTRACE(L"MediaStream::Start - RTSP init failed: 0x%08X, using synthetic frames", hr);
-	}
-
-	// Allocator: always use the consumer-negotiated type (resolution fixed by stream descriptor).
-	// We must deliver exactly what was negotiated — changing resolution requires MEStreamFormatChanged.
-	// The source reader is configured to scale RTSP frames to 1280x960 automatically.
-
-	// Fallback frame generator (synthetic frames, low cost to initialize).
 	if (!_frameGenerator.HasD3DManager())
 	{
-		LOG_IF_FAILED(_frameGenerator.EnsureRenderTarget(NUM_IMAGE_COLS, NUM_IMAGE_ROWS));
+		LOG_IF_FAILED(_frameGenerator.EnsureRenderTarget(_videoWidth, _videoHeight));
 	}
 
 	RETURN_IF_FAILED(_allocator->InitializeSampleAllocator(3, type)); // 3 = low latency (decode-hold-deliver)
@@ -327,13 +347,28 @@ HRESULT MediaStream::SetD3DManager(IUnknown* manager)
 
 	_allocator->SetDirectXManager(manager);
 	_dxgiManager = manager;  // Store for later use with color converter
-	LOG_IF_FAILED(_frameGenerator.SetD3DManager(manager, NUM_IMAGE_COLS, NUM_IMAGE_ROWS));
+	LOG_IF_FAILED(_frameGenerator.SetD3DManager(manager, _videoWidth, _videoHeight));
 	return S_OK;
 }
 
 void MediaStream::SetRTSPUrl(std::wstring url)
 {
 	_rtspUrl = url;
+	WINTRACE(L"MediaStream::SetRTSPUrl - URL stored: %s", url.c_str());
+	// Thread is started from Start() once we know the consumer-negotiated type.
+}
+
+HRESULT MediaStream::SetVideoConfig(UINT32 width, UINT32 height, UINT32 fpsNum, UINT32 fpsDen, GUID format)
+{
+	if (width  > 0) _videoWidth  = width;
+	if (height > 0) _videoHeight = height;
+	if (fpsNum > 0) _hintFpsNum  = fpsNum;
+	if (fpsDen > 0) _hintFpsDen  = fpsDen;
+	if (format != GUID_NULL) _format = format;
+	WINTRACE(L"MediaStream::SetVideoConfig - %ux%u @%u/%u format=%s",
+		_videoWidth, _videoHeight, _hintFpsNum, _hintFpsDen,
+		GUID_ToStringW(_format).c_str());
+	return BuildDescriptor();
 }
 
 void MediaStream::Shutdown()

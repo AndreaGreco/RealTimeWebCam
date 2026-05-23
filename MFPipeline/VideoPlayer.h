@@ -11,6 +11,19 @@
 class VideoReaderCall;
 class CSourceOpenMonitor;
 
+struct StreamInfo
+{
+	UINT32 width = 0;
+	UINT32 height = 0;
+
+	GUID subtype = GUID_NULL;
+
+	UINT32 fpsNum = 0;
+	UINT32 fpsDen = 0;
+
+	UINT32 bitrate = 0;
+};
+
 class VideoPlayer
 {
 private:
@@ -85,6 +98,7 @@ public:
 	int play();
 	int pause();
 	int stop();
+	int getVideoStreamInfo(StreamInfo* pInfo, UINT32 max, UINT32* count);
 
 	void updateVideoPosition();  // Update video position when window is resized
 	bool getIsPlaying() const { return isPlaying; }

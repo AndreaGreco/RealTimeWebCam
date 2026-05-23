@@ -180,6 +180,108 @@ HRESULT CreateSourceReaderWithCallback(IMFMediaSource* pSource, VideoReaderCall*
 	return hr;
 }
 
+int VideoPlayer::getVideoStreamInfo(StreamInfo *pInfo, UINT32 maxBuffElement, UINT32 *count)
+{
+	IMFPresentationDescriptor* pPD = nullptr;
+	DWORD streamCount = 0;
+
+	if (!this->pVideoSource || !pInfo)
+		return E_INVALIDARG;
+
+	if (!count)
+		return E_INVALIDARG;
+
+	HRESULT hr = pVideoSource->CreatePresentationDescriptor(&pPD);
+	if (FAILED(hr))
+		return hr;
+
+	hr = pPD->GetStreamDescriptorCount(&streamCount);
+	if (FAILED(hr))
+		goto done;
+	
+	// return user correct no of streams
+	*count = streamCount;
+
+	if (streamCount > maxBuffElement)
+		streamCount = maxBuffElement;
+
+	for (DWORD i = 0; i < streamCount; i++)
+	{
+		StreamInfo *info = &pInfo[i];
+		BOOL selected = FALSE;
+
+		IMFStreamDescriptor* pSD = nullptr;
+		IMFMediaTypeHandler* pHandler = nullptr;
+
+		hr = pPD->GetStreamDescriptorByIndex(i, &selected, &pSD);
+		if (FAILED(hr))
+			continue;
+
+		hr = pSD->GetMediaTypeHandler(&pHandler);
+		if (FAILED(hr))
+		{
+			SAFE_RELEASE(pSD);
+			continue;
+		}
+
+		GUID majorType = GUID_NULL;
+
+		hr = pHandler->GetMajorType(&majorType);
+		if (FAILED(hr))
+		{
+			SAFE_RELEASE(pHandler);
+			SAFE_RELEASE(pSD);
+			continue;
+		}
+
+		if (majorType == MFMediaType_Video)
+		{
+			IMFMediaType* pType = nullptr;
+
+			hr = pHandler->GetCurrentMediaType(&pType);
+			if (SUCCEEDED(hr))
+			{
+				MFGetAttributeSize(
+					pType,
+					MF_MT_FRAME_SIZE,
+					&info->width,
+					&info->height
+				);
+
+				MFGetAttributeRatio(
+					pType,
+					MF_MT_FRAME_RATE,
+					&info->fpsNum,
+					&info->fpsDen
+				);
+
+				pType->GetGUID(
+					MF_MT_SUBTYPE,
+					&info->subtype
+				);
+
+				pType->GetUINT32(
+					MF_MT_AVG_BITRATE,
+					&info->bitrate
+				);
+
+				SAFE_RELEASE(pType);
+
+				break;
+			}
+		}
+
+		SAFE_RELEASE(pHandler);
+		SAFE_RELEASE(pSD);
+	}
+
+done:
+	SAFE_RELEASE(pPD);
+
+	return hr;
+}
+
+
 /**
 * Creates media source from URL with source open monitor.
 */

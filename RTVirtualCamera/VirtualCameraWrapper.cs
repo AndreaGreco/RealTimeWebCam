@@ -3,9 +3,26 @@ using System.Runtime.InteropServices;
 
 namespace TestVideo
 {
+    /// <summary>
+    /// Mirror of Shared/VCamConfig.h — must match byte-for-byte (x64, no packing surprises).
+    /// Filled by the C# app after probing the RTSP source and passed to the Frame Server
+    /// via IMFVirtualCamera attributes before Start().
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct VCamConfig
+    {
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 512)]
+        public string RtspUrl;   // RTSP source URL
+
+        public uint Width;       // video width  in pixels (0 = use RTSP native)
+        public uint Height;      // video height in pixels (0 = use RTSP native)
+        public uint FpsNum;      // frame-rate numerator   (0 = default 30)
+        public uint FpsDen;      // frame-rate denominator (0 = default 1)
+        public Guid Format;      // preferred output subtype (Guid.Empty = NV12 auto)
+    }
+
     public class VirtualCameraWrapper : IDisposable
     {
-        // P/Invoke declarations for VirtualCamera functions
         [DllImport("MFPipeline.dll", CallingConvention = CallingConvention.Cdecl)]
         private static extern IntPtr CreateVirtualCamera();
 
@@ -15,8 +32,8 @@ namespace TestVideo
         [DllImport("MFPipeline.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
         private static extern void SetVirtualCameraName(IntPtr vcam, string name);
 
-        [DllImport("MFPipeline.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
-        private static extern void SetVirtualCameraRTSPUrl(IntPtr vcam, string url);
+        [DllImport("MFPipeline.dll", CallingConvention = CallingConvention.Cdecl)]
+        private static extern void SetVirtualCameraConfig(IntPtr vcam, ref VCamConfig config);
 
         [DllImport("MFPipeline.dll", CallingConvention = CallingConvention.Cdecl)]
         private static extern int RegisterVCam(IntPtr vcam);
@@ -43,102 +60,65 @@ namespace TestVideo
         {
             vcamHandle = CreateVirtualCamera();
             if (vcamHandle == IntPtr.Zero)
-            {
                 throw new InvalidOperationException("Failed to create virtual camera instance");
-            }
         }
 
-        ~VirtualCameraWrapper()
-        {
-            Dispose(false);
-        }
+        ~VirtualCameraWrapper() { Dispose(false); }
 
         public void SetCameraName(string name)
         {
-            if (disposed)
-                throw new ObjectDisposedException(nameof(VirtualCameraWrapper));
-
+            if (disposed) throw new ObjectDisposedException(nameof(VirtualCameraWrapper));
             if (vcamHandle != IntPtr.Zero && !string.IsNullOrEmpty(name))
-            {
                 SetVirtualCameraName(vcamHandle, name);
-            }
         }
 
-        public void SetRTSPUrl(string url)
+        /// <summary>
+        /// Sets the full camera configuration (URL, resolution, fps, format).
+        /// Must be called before Register().
+        /// </summary>
+        public void SetConfig(VCamConfig config)
         {
-            if (disposed)
-                throw new ObjectDisposedException(nameof(VirtualCameraWrapper));
-
-            if (vcamHandle != IntPtr.Zero && !string.IsNullOrEmpty(url))
-            {
-                SetVirtualCameraRTSPUrl(vcamHandle, url);
-            }
+            if (disposed) throw new ObjectDisposedException(nameof(VirtualCameraWrapper));
+            if (vcamHandle != IntPtr.Zero)
+                SetVirtualCameraConfig(vcamHandle, ref config);
         }
 
         public bool Register()
         {
-            if (disposed)
-                throw new ObjectDisposedException(nameof(VirtualCameraWrapper));
-
-            if (vcamHandle == IntPtr.Zero)
-                return false;
-
+            if (disposed) throw new ObjectDisposedException(nameof(VirtualCameraWrapper));
+            if (vcamHandle == IntPtr.Zero) return false;
             return RegisterVCam(vcamHandle) == 0;
         }
 
         public bool Start()
         {
-            if (disposed)
-                throw new ObjectDisposedException(nameof(VirtualCameraWrapper));
-
-            if (vcamHandle == IntPtr.Zero)
-                return false;
-
+            if (disposed) throw new ObjectDisposedException(nameof(VirtualCameraWrapper));
+            if (vcamHandle == IntPtr.Zero) return false;
             return StartVCam(vcamHandle) == 0;
         }
 
         public bool Stop()
         {
-            if (disposed)
-                throw new ObjectDisposedException(nameof(VirtualCameraWrapper));
-
-            if (vcamHandle == IntPtr.Zero)
-                return false;
-
+            if (disposed) throw new ObjectDisposedException(nameof(VirtualCameraWrapper));
+            if (vcamHandle == IntPtr.Zero) return false;
             return StopVCam(vcamHandle) == 0;
         }
 
         public bool Unregister()
         {
-            if (disposed)
-                throw new ObjectDisposedException(nameof(VirtualCameraWrapper));
-
-            if (vcamHandle == IntPtr.Zero)
-                return false;
-
+            if (disposed) throw new ObjectDisposedException(nameof(VirtualCameraWrapper));
+            if (vcamHandle == IntPtr.Zero) return false;
             return UnregisterVCam(vcamHandle) == 0;
         }
 
         public bool IsRegistered
         {
-            get
-            {
-                if (disposed || vcamHandle == IntPtr.Zero)
-                    return false;
-
-                return IsVCamRegistered(vcamHandle);
-            }
+            get { return !disposed && vcamHandle != IntPtr.Zero && IsVCamRegistered(vcamHandle); }
         }
 
         public bool IsStarted
         {
-            get
-            {
-                if (disposed || vcamHandle == IntPtr.Zero)
-                    return false;
-
-                return IsVCamStarted(vcamHandle);
-            }
+            get { return !disposed && vcamHandle != IntPtr.Zero && IsVCamStarted(vcamHandle); }
         }
 
         public void Dispose()
@@ -153,21 +133,11 @@ namespace TestVideo
             {
                 if (vcamHandle != IntPtr.Zero)
                 {
-                    // Stop and unregister before destroying
-                    if (IsStarted)
-                    {
-                        StopVCam(vcamHandle);
-                    }
-
-                    if (IsRegistered)
-                    {
-                        UnregisterVCam(vcamHandle);
-                    }
-
+                    if (IsStarted)    StopVCam(vcamHandle);
+                    if (IsRegistered) UnregisterVCam(vcamHandle);
                     DestroyVirtualCamera(vcamHandle);
                     vcamHandle = IntPtr.Zero;
                 }
-
                 disposed = true;
             }
         }

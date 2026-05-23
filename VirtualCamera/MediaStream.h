@@ -1,6 +1,8 @@
 #pragma once
 #include "FrameGenerator.h"
 #include "RtspReaderCallback.h"
+#include "..\Shared\VCamConfig.h"
+#include <atomic>
 
 struct MediaStream : winrt::implements<MediaStream, CBaseAttributes<IMFAttributes>, IMFMediaStream2, IKsControl>
 {
@@ -30,9 +32,12 @@ public:
 		_index(0),
 		_state(MF_STREAM_STATE_STOPPED),
 		_format(GUID_NULL),
-		_videoWidth(0),
-		_videoHeight(0),
-		_videoStride(0)
+		_videoWidth(1920),
+		_videoHeight(1080),
+		_videoStride(0),
+		_hintFpsNum(30),
+		_hintFpsDen(1),
+		_rtspInitPending(false)
 	{
 		this->_rtspUrl = L"";
 		SetBaseAttributesTraceName(L"MediaStreamAtts");
@@ -45,10 +50,14 @@ public:
 	HRESULT Start(IMFMediaType* type);
 	HRESULT Stop();
 	void Shutdown();
-	
+
 	// RTSP configuration
 	void SetRTSPUrl(std::wstring url);
 	std::wstring GetRTSPUrl();
+
+	// Sets the exact output resolution, fps and format from the app-side probe.
+	// Must be called before Start(). Rebuilds the stream descriptor immediately.
+	HRESULT SetVideoConfig(UINT32 width, UINT32 height, UINT32 fpsNum, UINT32 fpsDen, GUID format);
 
 private:
 #if _DEBUG
@@ -60,6 +69,7 @@ private:
 
 	HRESULT InitializeRTSPReader();
 	HRESULT CopyRtspFrame(IMFSample* rtspSample, IMFSample* targetSample);
+	HRESULT BuildDescriptor();
 
 	winrt::slim_mutex  _lock;
 	MF_STREAM_STATE _state;
@@ -74,9 +84,12 @@ private:
 	// RTSP reader components
 	std::wstring _rtspUrl;
 	wil::com_ptr_nothrow<RtspReaderCallback> _rtspCallback;  // async reader; null = no RTSP
+	std::atomic<bool> _rtspInitPending; // true while background connect thread is running
 	UINT32 _videoWidth;
 	UINT32 _videoHeight;
 	UINT32 _videoStride;  // bytes per row of the actual RTSP output (may include padding)
+	UINT32 _hintFpsNum;   // fps numerator from app-side VCamConfig (default 30)
+	UINT32 _hintFpsDen;   // fps denominator from app-side VCamConfig (default 1)
 
 	// Fallback frame generator (used when RTSP is unavailable)
 	FrameGenerator _frameGenerator;

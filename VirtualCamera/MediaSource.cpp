@@ -58,12 +58,47 @@
 #include "MFTools.h"
 #include "MediaStream.h"
 #include "MediaSource.h"
+#include "..\Shared\VCamConfig.h"
 
-// Custom MF attribute GUID used to carry the RTSP URL from the app process to the
-// Frame Server. The app sets it via IMFVirtualCamera::SetString() (which works because
-// IMFVirtualCamera inherits IMFAttributes); the Frame Server forwards all attributes
-// to MediaSource::Initialize(). Must match the same GUID in MFPipeline/VirtualCamera.cpp.
-static const GUID MF_VCAM_RTSP_URL = { 0xb8e0a5c1, 0x2d3f, 0x4a6b, { 0x9c, 0x8d, 0x1e, 0x2f, 0x3a, 0x4b, 0x5c, 0x6d } };
+// MF attribute GUIDs (MF_VCAM_RTSP_URL, MF_VCAM_WIDTH, …) are defined in Shared/VCamConfig.h.
+// The app sets them via IMFVirtualCamera::SetString/SetUINT32 before Start(); the Frame
+// Server forwards them to MediaSource::Initialize().
+
+HRESULT MediaSource::SetupCameraSettings(IMFAttributes* attributes)
+{
+	// Read individual MF attributes set by the app via IMFVirtualCamera::SetString/SetUINT32.
+	// The Frame Server forwards these reliably to Initialize(); SetBlob is NOT forwarded.
+
+	// ── RTSP URL (mandatory) ─────────────────────────────────────────────────
+	wil::unique_cotaskmem_string urlStr;
+	UINT32 urlLen = 0;
+	HRESULT hr = attributes->GetAllocatedString(MF_VCAM_RTSP_URL, &urlStr, &urlLen);
+	if (FAILED(hr) || urlLen == 0)
+	{
+		WINTRACE(L"MediaSource::SetupCameraSettings - MF_VCAM_RTSP_URL not found (hr=0x%08X), black frames", hr);
+		return hr;
+	}
+	_rtspUrl = urlStr.get();
+
+	// ── Resolution / fps (optional, default to 0 = detect from RTSP) ────────
+	VCamConfig config{};
+	wcsncpy_s(config.rtspUrl, _rtspUrl.c_str(), _TRUNCATE);
+	attributes->GetUINT32(MF_VCAM_WIDTH,   &config.width);
+	attributes->GetUINT32(MF_VCAM_HEIGHT,  &config.height);
+	attributes->GetUINT32(MF_VCAM_FPS_NUM, &config.fpsNum);
+	attributes->GetUINT32(MF_VCAM_FPS_DEN, &config.fpsDen);
+	// format not sent (GUID_NULL = NV12 auto)
+
+	WINTRACE(L"MediaSource::Initialize - config received: url=%s %ux%u @%u/%u",
+		_rtspUrl.c_str(), config.width, config.height, config.fpsNum, config.fpsDen);
+
+	for (auto& stream : _streams)
+	{
+		if (stream)
+			LOG_IF_FAILED(stream->SetVideoConfig(config.width, config.height, config.fpsNum, config.fpsDen, config.format));
+	}
+	return S_OK;
+}
 
 HRESULT MediaSource::Initialize(IMFAttributes* attributes)
 {
@@ -73,48 +108,30 @@ HRESULT MediaSource::Initialize(IMFAttributes* attributes)
 	// leggere la configurazione passata da AddProperty(). Dopo questa chiamata
 	// il parametro 'attributes' non è più accessibile.
 
+	WINTRACE(L"MediaSource::PASSO %d", __LINE__);
 	if (attributes)
 	{
-		// DIAGNOSTICA: stampa TUTTI gli attributi ricevuti dal Frame Server.
-		// In TraceSpy (ETW) cerca "Initialize-attrs" per vedere la lista completa.
-		// Se {b8e0a5c1-2d3f-4a6b-...} non appare, AddProperty() non ha prodotto
-		// un IMFAttribute corrispondente e l'URL non potrà mai essere letto qui.
-		WINTRACE(L"MediaSource::Initialize - attributi ricevuti dal Frame Server:");
-		TraceMFAttributes(attributes, L"Initialize-attrs");
-
+		// WINTRACE(L"MediaSource::Initialize - attributi ricevuti dal Frame Server:");
+		// TraceMFAttributes(attributes, L"Initialize-attrs");
+		// Read config directly from the attributes parameter — the Frame Server
+		// forwards SetString/SetUINT32 values here reliably (confirmed by SetItem trace).
+		// CopyAllItems is called AFTER so the config is already in _rtspUrl/_streams.
+		HRESULT hrCfg = this->SetupCameraSettings(attributes);
+		if (FAILED(hrCfg))
+			WINTRACE(L"MediaSource::Initialize - SetupCameraSettings failed: 0x%08X (no RTSP, black frames)", hrCfg);
 		RETURN_IF_FAILED(attributes->CopyAllItems(this));
+	}
 
-		// Tenta di leggere l'URL RTSP dagli attributi.
-		// La chiave MF_VCAM_RTSP_URL è il GUID {b8e0a5c1-2d3f-4a6b-...}.
-		// In MFPipeline/VirtualCamera.cpp, AddProperty() usa un DEVPROPKEY
-		// con lo stesso fmtid; il Frame Server dovrebbe mapparli qui.
-		// Se GetStringLength fallisce, il GUID non è presente → vedere DIAGNOSTICA sopra.
-		UINT32 urlLength = 0;
-		HRESULT hr = attributes->GetStringLength(MF_VCAM_RTSP_URL, &urlLength);
-		if (SUCCEEDED(hr) && urlLength > 0)
-		{
-			_rtspUrl.resize(urlLength + 1);
-			hr = attributes->GetString(MF_VCAM_RTSP_URL, &_rtspUrl[0], urlLength + 1, &urlLength);
-			if (SUCCEEDED(hr))
-			{
-				_rtspUrl.resize(urlLength);
-				WINTRACE(L"MediaSource::Initialize - RTSP URL from property: %s", _rtspUrl.c_str());
-			}
-			else
-			{
-				_rtspUrl.clear();
-				WINTRACE(L"MediaSource::Initialize - Failed to get RTSP URL string");
-			}
-		}
-		else
-		{
-			// L'URL RTSP non è negli attributi ricevuti. Cause possibili:
-			//   A) AddProperty() lato app è fallita — controllare DebugLog in VirtualCamera.cpp
-			//   B) Il Frame Server non mappa DEVPROPKEY.fmtid → IMFAttributes per questo GUID
-			//   C) SetRTSPUrl() è stata chiamata DOPO Start() (timing errato)
-			// Vedere DIAGNOSTICA sopra (Initialize-attrs in TraceSpy) per la lista completa.
-			WINTRACE(L"MediaSource::Initialize - No RTSP URL property found, will use black frames");
-		}
+	WINTRACE(L"MediaSource::PASSO %d", __LINE__);
+
+	// ── Ricostruzione del descriptor con la risoluzione fornita dall'app ────────
+	// SetConfigHints() ha già salvato width/height/fps/format su ogni stream.
+	// RebuildDescriptor() viene chiamato sempre: se l'app ha fornito una size la usa,
+	// altrimenti scende al default 1920×1080 ma aggiorna comunque fps e format.
+	if (!_rtspUrl.empty())
+	{
+		for (uint32_t i = 0; i < _streams.size(); i++)
+			_streams[i]->SetRTSPUrl(_rtspUrl);
 	}
 
 	wil::com_ptr_nothrow<IMFSensorProfileCollection> collection;
@@ -290,6 +307,25 @@ STDMETHODIMP MediaSource::Start(IMFPresentationDescriptor* pPresentationDescript
 	RETURN_HR_IF_MSG(E_INVALIDARG, pguidTimeFormat && *pguidTimeFormat != GUID_NULL, "Unsupported guid time format");
 	winrt::slim_lock_guard lock(_lock);
 	RETURN_HR_IF(MF_E_SHUTDOWN, !_queue || !_descriptor);
+
+	// ── Lettura lazydell'URL ─────────────────────────────────────────────────
+	// Il Frame Server chiama SetItem() DOPO Initialize(), quindi l'URL arriva
+	// nel nostro store (this) solo tra Initialize e Start. Lo leggiamo qui se
+	// non era ancora disponibile in Initialize.
+	if (_rtspUrl.empty())
+	{
+		wil::unique_cotaskmem_string urlStr;
+		UINT32 urlLen = 0;
+		if (SUCCEEDED(GetAllocatedString(MF_VCAM_RTSP_URL, &urlStr, &urlLen)) && urlLen > 0 && urlStr)
+		{
+			_rtspUrl = urlStr.get();
+			WINTRACE(L"MediaSource::Start - RTSP URL read from store: %s", _rtspUrl.c_str());
+		}
+		else
+		{
+			WINTRACE(L"MediaSource::Start - RTSP URL still not available, black frames");
+		}
+	}
 
 	DWORD count;
 	RETURN_IF_FAILED(pPresentationDescriptor->GetStreamDescriptorCount(&count));
@@ -483,7 +519,6 @@ static const ULONG KSPROPID_VCam_RtspUrl  = 1;
 
 STDMETHODIMP_(NTSTATUS) MediaSource::KsProperty(PKSPROPERTY property, ULONG length, LPVOID data, ULONG dataLength, ULONG* bytesReturned)
 {
-	WINTRACE(L"MediaSource::KsProperty len:%u data:%p dataLength:%u", length, data, dataLength);
 	RETURN_HR_IF_NULL(E_POINTER, property);
 	RETURN_HR_IF_NULL(E_POINTER, bytesReturned);
 	winrt::slim_lock_guard lock(_lock);
@@ -528,22 +563,17 @@ STDMETHODIMP_(NTSTATUS) MediaSource::KsProperty(PKSPROPERTY property, ULONG leng
 
 STDMETHODIMP_(NTSTATUS) MediaSource::KsMethod(PKSMETHOD method, ULONG length, LPVOID data, ULONG dataLength, ULONG* bytesReturned)
 {
-	WINTRACE(L"MediaSource::KsMethod len:%u data:%p dataLength:%u", length, data, dataLength);
 	RETURN_HR_IF_NULL(E_POINTER, method);
 	RETURN_HR_IF_NULL(E_POINTER, bytesReturned);
 	winrt::slim_lock_guard lock(_lock);
-
-	WINTRACE(L"MediaSource::KsMethod method:%s", PKSIDENTIFIER_ToString(method, length).c_str());
 
 	return HRESULT_FROM_WIN32(ERROR_SET_NOT_FOUND);
 }
 
 STDMETHODIMP_(NTSTATUS) MediaSource::KsEvent(PKSEVENT evt, ULONG length, LPVOID data, ULONG dataLength, ULONG* bytesReturned)
 {
-	WINTRACE(L"MediaSource::KsEvent evt:%p len:%u data:%p dataLength:%u", evt, length, data, dataLength);
 	RETURN_HR_IF_NULL(E_POINTER, bytesReturned);
 	winrt::slim_lock_guard lock(_lock);
 
-	WINTRACE(L"MediaSource::KsEvent event:%s", PKSIDENTIFIER_ToString(evt, length).c_str());
 	return HRESULT_FROM_WIN32(ERROR_SET_NOT_FOUND);
 }

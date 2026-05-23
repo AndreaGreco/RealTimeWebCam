@@ -53,6 +53,7 @@ public:
 	}
 
 	HRESULT Initialize(IMFAttributes* attributes);
+	HRESULT SetupCameraSettings(IMFAttributes* attributes);
 
 	std::wstring GetRTSPUrl();
 	void SetRTSPUrl(std::wstring url);
