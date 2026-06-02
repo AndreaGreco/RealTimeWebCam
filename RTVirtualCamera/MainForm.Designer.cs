@@ -47,8 +47,8 @@ namespace TestVideo
             this.pathLabel = new System.Windows.Forms.Label();
             this.tableLayoutPanel1 = new System.Windows.Forms.TableLayoutPanel();
             this.panel1 = new System.Windows.Forms.Panel();
-            this.label2 = new System.Windows.Forms.Label();
             this.streamProp_lbl = new System.Windows.Forms.Label();
+            this.label2 = new System.Windows.Forms.Label();
             this.tableLayoutPanel1.SuspendLayout();
             this.panel1.SuspendLayout();
             this.SuspendLayout();
@@ -60,7 +60,7 @@ namespace TestVideo
             this.videoPanel.Location = new System.Drawing.Point(3, 3);
             this.videoPanel.Name = "videoPanel";
             this.videoPanel.Padding = new System.Windows.Forms.Padding(8);
-            this.videoPanel.Size = new System.Drawing.Size(909, 667);
+            this.videoPanel.Size = new System.Drawing.Size(909, 666);
             this.videoPanel.TabIndex = 0;
             // 
             // playButton
@@ -131,11 +131,19 @@ namespace TestVideo
             this.panel1.Controls.Add(this.playButton);
             this.panel1.Controls.Add(this.startVCamButton);
             this.panel1.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.panel1.Location = new System.Drawing.Point(3, 676);
+            this.panel1.Location = new System.Drawing.Point(3, 675);
             this.panel1.MinimumSize = new System.Drawing.Size(500, 90);
             this.panel1.Name = "panel1";
-            this.panel1.Size = new System.Drawing.Size(909, 97);
+            this.panel1.Size = new System.Drawing.Size(909, 98);
             this.panel1.TabIndex = 1;
+            // 
+            // streamProp_lbl
+            // 
+            this.streamProp_lbl.AutoSize = true;
+            this.streamProp_lbl.Location = new System.Drawing.Point(73, 32);
+            this.streamProp_lbl.Name = "streamProp_lbl";
+            this.streamProp_lbl.Size = new System.Drawing.Size(0, 13);
+            this.streamProp_lbl.TabIndex = 9;
             // 
             // label2
             // 
@@ -145,14 +153,6 @@ namespace TestVideo
             this.label2.Size = new System.Drawing.Size(48, 13);
             this.label2.TabIndex = 8;
             this.label2.Text = "Propelty:";
-            // 
-            // streamProp_lbl
-            // 
-            this.streamProp_lbl.AutoSize = true;
-            this.streamProp_lbl.Location = new System.Drawing.Point(73, 32);
-            this.streamProp_lbl.Name = "streamProp_lbl";
-            this.streamProp_lbl.Size = new System.Drawing.Size(0, 13);
-            this.streamProp_lbl.TabIndex = 9;
             // 
             // MainForm
             // 

@@ -4,7 +4,7 @@
 #include "EnumNames.h"
 #include "MFTools.h"
 #include "MediaStream.h"
-#include "MediaSource.h"
+#include "VCamMediaSource.h"
 #include "Activator.h"
 
 // 3cad447d-f283-4af4-a3b2-6f5363309f52

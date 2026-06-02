@@ -65,6 +65,7 @@ namespace TestVideo
                 {
                     videoPlayer.SetVideoPath(pathTextBox.Text);
 
+
                     bool init = videoPlayer.Initialize();
                     if (init)
                     {
@@ -77,11 +78,11 @@ namespace TestVideo
 
                             msg = string.Format($"Resolution:{info.width}x{info.height}@{info.getFSP()}");
 
-                            this.streamProp_lbl.Text = msg;
+                            streamProp_lbl.Text = msg;
                         }
 
-                        this.streamInfo = infos[0];
-                        this.startVCamButton.Enabled = true;
+                        streamInfo = infos[0];
+                        startVCamButton.Enabled = true;
                     }
                     else
                     {
@@ -113,11 +114,11 @@ namespace TestVideo
                     var config = new VCamConfig
                     {
                         RtspUrl = pathTextBox.Text ?? string.Empty,
-                        Width = this.streamInfo.width,
-                        Height = this.streamInfo.height,
-                        FpsNum = this.streamInfo.fpsNum,
-                        FpsDen = this.streamInfo.fpsDen,
-                        Format = this.streamInfo.subtype,
+                        Width = streamInfo.width,
+                        Height = streamInfo.height,
+                        FpsNum = streamInfo.fpsNum,
+                        FpsDen = streamInfo.fpsDen,
+                        Format = streamInfo.subtype,
                     };
                     virtualCamera.SetConfig(config);
 

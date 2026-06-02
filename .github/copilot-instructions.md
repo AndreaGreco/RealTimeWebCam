@@ -1,8 +1,7 @@
 # RealTimeWebCam — Project Context
 
 ## Scopo
-Prendere un flusso RTSP da una camera di rete e presentarlo come **virtual camera** di Windows,
-così che Zoom (che non gestisce RTSP autonomamente) la possa usare come se fosse una webcam.
+Prendere un flusso RTSP da una camera di rete e presentarlo come **virtual camera** di Windows, così che Zoom (che non gestisce RTSP autonomamente) la possa usare come se fosse una webcam.
 
 ## Ambiente di sviluppo
 - Sviluppo su Linux via Samba (`/run/user/1000/gvfs/smb-share:server=devel.local,...`)
@@ -19,7 +18,7 @@ così che Zoom (che non gestisce RTSP autonomamente) la possa usare come se foss
 - CLSID: `{3CAD447D-F283-4AF4-A3B2-6F5363309F52}` (deve corrispondere ovunque)
 - Basata su [VCamSample di Simon Mourier](https://github.com/smourier/VCamSample)
 - **Classi principali:**
-  - `MediaSource` — implementa `IMFMediaSourceEx`. In `Initialize()` legge l'attributo `MF_VCAM_RTSP_URL` e lo propaga agli stream. In `Start()` passa l'URL a `MediaStream::SetRTSPUrl()`.
+  - `MediaSource` — implementa `IMFMediaSourceEx`. In `Initialize()` legge l'attributo `MF_VCAM_RTSP_URL` e lo propaga agli stream. In `Start()` passa l'URL a `MediaStream::SetRTSPUrl()`. **Preferenza architetturale:** la configurazione della camera deve essere impostata in un solo punto chiaro; se il manager RTSP non ottiene davvero NV12/size attesi dal reader, il path va considerato failure; in stato di failure MediaStream deve produrre frame sintetici.
   - `MediaStream` — implementa `IMFMediaStream2`. In `RequestSample()` chiama `ReadRTSPFrame()` se `_rtspReader` è disponibile, altrimenti frame nero.
   - `FrameGenerator` — genera frame sintetici via Direct2D. **NON è più chiamato** in `RequestSample`; è codice morto (rimasto dall'esempio originale).
 
@@ -118,3 +117,5 @@ Il descriptor dello stream è hardcoded. Se il RTSP ha una risoluzione diversa, 
 4. Aggiungere text box RTSP URL nell'UI C# e collegare a `VirtualCameraWrapper`
 5. Adattare la risoluzione dello stream al sorgente RTSP (rimuovere hardcoding 1280×960)
 6. Eliminare il `VideoPlayer*` dal costruttore di `VirtualCamera` in MFPipeline
+7. Separare la logica del client RTSP in una classe dedicata/singleton condivisa, che deve essere aperta quando l'utente avvia la camera dall'app C#; deposita l'ultimo frame in memoria condivisa interna, e `MediaStream` legge quel frame, lo converte nel formato richiesto e lo consegna al consumer (es. Zoom).
+8. Quando si modifica una struct condivisa tra C# e C++, aggiornare anche il lato speculare/codice che la usa; preferenza per modifiche minime senza cambiamenti superflui.

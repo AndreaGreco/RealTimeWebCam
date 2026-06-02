@@ -1,4 +1,14 @@
 #pragma once
+#include "winrt/base.h"
+#include <Windows.h>
+#include <cassert>
+#include <d2d1.h>
+#include <mfapi.h>
+#include <mfidl.h>
+#include <mfobjects.h>
+#include <sal.h>
+#include <string>
+#include <wil/resource.h>
 
 std::string to_string(const std::wstring& ws);
 std::wstring to_wstring(const std::string& s);
@@ -11,6 +21,7 @@ const LSTATUS RegWriteKey(HKEY key, PCWSTR path, HKEY* outKey);
 const LSTATUS RegWriteValue(HKEY key, PCWSTR name, const std::wstring& value);
 const LSTATUS RegWriteValue(HKEY key, PCWSTR name, DWORD value);
 HRESULT RGB32ToNV12(BYTE* input, ULONG inputSize, LONG inputStride, UINT width, UINT height, BYTE* output, ULONG ouputSize, LONG outputStride);
+std::wstring MFVideoFormatToString(const GUID& guid);
 
 _Ret_range_(== , _expr)
 inline bool assert_true(bool _expr)
@@ -73,3 +84,5 @@ struct registry_traits
 		return nullptr;
 	}
 };
+
+std::wstring MFVideoFormatToString(const GUID& guid);

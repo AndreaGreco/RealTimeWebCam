@@ -1,7 +1,6 @@
 #pragma once
 #include "FrameGenerator.h"
-#include "RtspReaderCallback.h"
-#include "..\Shared\VCamConfig.h"
+#include "RtspSessionManager.h"
 #include <atomic>
 
 struct MediaStream : winrt::implements<MediaStream, CBaseAttributes<IMFAttributes>, IMFMediaStream2, IKsControl>
@@ -36,10 +35,8 @@ public:
 		_videoHeight(1080),
 		_videoStride(0),
 		_hintFpsNum(30),
-		_hintFpsDen(1),
-		_rtspInitPending(false)
+		_hintFpsDen(1)
 	{
-		this->_rtspUrl = L"";
 		SetBaseAttributesTraceName(L"MediaStreamAtts");
 	}
 
@@ -50,10 +47,7 @@ public:
 	HRESULT Start(IMFMediaType* type);
 	HRESULT Stop();
 	void Shutdown();
-
-	// RTSP configuration
-	void SetRTSPUrl(std::wstring url);
-	std::wstring GetRTSPUrl();
+	HRESULT SetRuntimeContext(const StreamRuntimeContext& context);
 
 	// Sets the exact output resolution, fps and format from the app-side probe.
 	// Must be called before Start(). Rebuilds the stream descriptor immediately.
@@ -67,8 +61,9 @@ private:
 	}
 #endif
 
-	HRESULT InitializeRTSPReader();
-	HRESULT CopyRtspFrame(IMFSample* rtspSample, IMFSample* targetSample);
+	// HRESULT InitializeRTSPReader();
+	HRESULT CopyRtspFrame(const RtspFrameSnapshot& frame, IMFSample* targetSample);
+	HRESULT BuildFrameTypeNV12(wil::com_ptr_nothrow<IMFMediaType>& nv12Type);
 	HRESULT BuildDescriptor();
 
 	winrt::slim_mutex  _lock;
@@ -80,16 +75,14 @@ private:
 	wil::com_ptr_nothrow<IMFVideoSampleAllocatorEx> _allocator;
 	wil::com_ptr_nothrow<IUnknown> _dxgiManager;
 	int _index;
-	
-	// RTSP reader components
-	std::wstring _rtspUrl;
-	wil::com_ptr_nothrow<RtspReaderCallback> _rtspCallback;  // async reader; null = no RTSP
-	std::atomic<bool> _rtspInitPending; // true while background connect thread is running
+
 	UINT32 _videoWidth;
 	UINT32 _videoHeight;
 	UINT32 _videoStride;  // bytes per row of the actual RTSP output (may include padding)
 	UINT32 _hintFpsNum;   // fps numerator from app-side VCamConfig (default 30)
 	UINT32 _hintFpsDen;   // fps denominator from app-side VCamConfig (default 1)
+	UINT64 _generation = 0;
+	IRtspSessionManager* _rtspManager = nullptr;
 
 	// Fallback frame generator (used when RTSP is unavailable)
 	FrameGenerator _frameGenerator;

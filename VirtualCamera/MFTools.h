@@ -1,4 +1,5 @@
 #pragma once
+#include "EnumNames.h"
 
 void TraceMFAttributes(IUnknown* unknown, PCWSTR prefix);
 std::wstring PKSIDENTIFIER_ToString(PKSIDENTIFIER id, ULONG length);
