@@ -119,3 +119,4 @@ Il descriptor dello stream è hardcoded. Se il RTSP ha una risoluzione diversa, 
 6. Eliminare il `VideoPlayer*` dal costruttore di `VirtualCamera` in MFPipeline
 7. Separare la logica del client RTSP in una classe dedicata/singleton condivisa, che deve essere aperta quando l'utente avvia la camera dall'app C#; deposita l'ultimo frame in memoria condivisa interna, e `MediaStream` legge quel frame, lo converte nel formato richiesto e lo consegna al consumer (es. Zoom).
 8. Quando si modifica una struct condivisa tra C# e C++, aggiornare anche il lato speculare/codice che la usa; preferenza per modifiche minime senza cambiamenti superflui.
+9. Evitare indagini sull'Output di Visual Studio e procedere direttamente sulle modifiche al codice.

@@ -4,6 +4,7 @@
 #include <mfidl.h>
 #include <mfreadwrite.h>
 #include <evr.h>
+#include <string>
 #include <windows.h>
 #include "MediaEventHandler.h"
 
@@ -62,7 +63,8 @@ private:
 	IMFSample* pD3DVideoSample;
 
 	// Configuration
-	LPWSTR filePath;
+	std::wstring filePath;
+	std::wstring captureDeviceName;
 	HWND windowHandle;
 	BOOL fSelected;
 	bool isPlaying;
@@ -92,7 +94,8 @@ public:
 	VideoPlayer();
 	~VideoPlayer();
 
-	void setVideoPath(LPWSTR path);
+	void setVideoPath(LPCWSTR path);
+	void setCaptureDeviceName(LPCWSTR name);
 	void setWindowHandle(HWND hwnd);
 	int initialize();
 	int play();

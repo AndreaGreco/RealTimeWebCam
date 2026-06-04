@@ -8,12 +8,17 @@
 #define SAMPLE_ALLOCATOR_COUNT 100
 
 VideoReaderCall::VideoReaderCall(IMFStreamSink* pSink) : m_pStreamSink(pSink), m_width(0), m_height(0) {
+    InitializeCriticalSection(&m_lock);
+
     if (m_pStreamSink)
         m_pStreamSink->AddRef();
+
     m_subtype = GUID_NULL;
 }
 
 VideoReaderCall::~VideoReaderCall() {   
+    Shutdown();
+
     if (m_pStreamSink)
         m_pStreamSink->Release();
 
@@ -22,6 +27,8 @@ VideoReaderCall::~VideoReaderCall() {
 
     if (pVideoSampleAllocator)
         pVideoSampleAllocator->Release();
+
+    DeleteCriticalSection(&m_lock);
 }
 
 // Helper function to copy NV12 format
@@ -148,7 +155,22 @@ HRESULT VideoReaderCall::CopyRGB32Buffer(IMF2DBuffer* p2DBuffer, BYTE* pbSrcData
 HRESULT VideoReaderCall::AllocateInternalBuffer(IMFMediaType* SinkMediaType, IMFSourceReader* pReader) {
     HRESULT ret;
 
-    this->pReader = pReader;
+    if (!pReader) {
+        return E_POINTER;
+    }
+
+    {
+        EnterCriticalSection(&m_lock);
+        if (this->pReader) {
+            this->pReader->Release();
+            this->pReader = nullptr;
+        }
+
+        pReader->AddRef();
+        this->pReader = pReader;
+        m_shutdown = 0;
+        LeaveCriticalSection(&m_lock);
+    }
 
     // Get video format information for proper buffer size calculation
     ret = MFGetAttributeSize(SinkMediaType, MF_MT_FRAME_SIZE, &m_width, &m_height);
@@ -192,6 +214,21 @@ HRESULT VideoReaderCall::AllocateInternalBuffer(IMFMediaType* SinkMediaType, IMF
     return S_OK;
 }
 
+void VideoReaderCall::Shutdown()
+{
+    IMFSourceReader* readerToRelease = nullptr;
+
+    EnterCriticalSection(&m_lock);
+    m_shutdown = 1;
+    readerToRelease = pReader;
+    pReader = nullptr;
+    LeaveCriticalSection(&m_lock);
+
+    if (readerToRelease) {
+        readerToRelease->Release();
+    }
+}
+
 STDMETHODIMP VideoReaderCall::QueryInterface(REFIID riid, void** ppv) {
     static const QITAB qit[] = {
         QITABENT(VideoReaderCall, IMFSourceReaderCallback),
@@ -218,6 +255,14 @@ STDMETHODIMP VideoReaderCall::OnReadSample(HRESULT hrStatus,
     IMFSample* pSample)
 {
     HRESULT ret;
+    IMFSourceReader* readerForNextSample = nullptr;
+
+    EnterCriticalSection(&m_lock);
+    if (!m_shutdown && pReader) {
+        readerForNextSample = pReader;
+        readerForNextSample->AddRef();
+    }
+    LeaveCriticalSection(&m_lock);
 
     char logBuffer[256];
     snprintf(logBuffer, sizeof(logBuffer),
@@ -225,21 +270,32 @@ STDMETHODIMP VideoReaderCall::OnReadSample(HRESULT hrStatus,
         hrStatus, dwStreamIndex, dwStreamFlags, llTimestamp, pSample);
 	DebugLog(logBuffer);
 
+    auto RequestNextSample = [&readerForNextSample]() {
+        if (readerForNextSample) {
+            readerForNextSample->ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, nullptr, nullptr, nullptr, nullptr);
+            readerForNextSample->Release();
+            readerForNextSample = nullptr;
+        }
+    };
+
+    if (!readerForNextSample) {
+        return S_OK;
+    }
+
     if (FAILED(hrStatus)) {
         DebugLog("OnReadSample failed status");
+        readerForNextSample->Release();
         return hrStatus;
     }
 
     if (pSample == NULL) {
-        // Request next frame
-        if (pReader) {
-            pReader->ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, nullptr, nullptr, nullptr, nullptr);
-        }
+        RequestNextSample();
         return S_OK;
     }
 
     if (dwStreamFlags & MF_SOURCE_READERF_ENDOFSTREAM) {
         DebugLog("End of stream reached");
+        readerForNextSample->Release();
         return S_OK;
     }
 
@@ -248,10 +304,7 @@ STDMETHODIMP VideoReaderCall::OnReadSample(HRESULT hrStatus,
     ret = pVideoSampleAllocator->AllocateSample(&pD3DSample);
     if (ret != S_OK) {
         DebugLog("Failed to allocate D3D sample from pool");
-        // Request next frame anyway
-        if (pReader) {
-            pReader->ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, nullptr, nullptr, nullptr, nullptr);
-        }
+        RequestNextSample();
         return ret;
     }
 
@@ -267,10 +320,7 @@ STDMETHODIMP VideoReaderCall::OnReadSample(HRESULT hrStatus,
     if (ret != S_OK) {
         pD3DSample->Release();
         DebugLog("Failed to get contiguous buffer from source");
-        // Request next frame anyway
-        if (pReader) {
-            pReader->ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, nullptr, nullptr, nullptr, nullptr);
-        }
+        RequestNextSample();
         return ret;
     }
 
@@ -281,9 +331,7 @@ STDMETHODIMP VideoReaderCall::OnReadSample(HRESULT hrStatus,
         pSrcBuffer->Release();
         pD3DSample->Release();
         DebugLog("Failed to get destination buffer");
-        if (pReader) {
-            pReader->ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, nullptr, nullptr, nullptr, nullptr);
-        }
+        RequestNextSample();
         return ret;
     }
 
@@ -296,9 +344,7 @@ STDMETHODIMP VideoReaderCall::OnReadSample(HRESULT hrStatus,
         pSrcBuffer->Release();
         pD3DSample->Release();
         DebugLog("Failed to lock source buffer");
-        if (pReader) {
-            pReader->ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, nullptr, nullptr, nullptr, nullptr);
-        }
+        RequestNextSample();
         return ret;
     }
 
@@ -368,9 +414,7 @@ STDMETHODIMP VideoReaderCall::OnReadSample(HRESULT hrStatus,
     pD3DSample->Release();
 
     // Request next frame asynchronously
-    if (pReader) {
-        pReader->ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, nullptr, nullptr, nullptr, nullptr);
-    }
+    RequestNextSample();
 
     return S_OK;
 }

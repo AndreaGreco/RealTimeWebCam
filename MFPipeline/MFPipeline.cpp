@@ -42,6 +42,14 @@ extern "C" {
 		}
 	}
 
+	__declspec(dllexport) void SetVideoCaptureDeviceName(VideoPlayer* player, LPCWSTR name)
+	{
+		if (player)
+		{
+			player->setCaptureDeviceName(name);
+		}
+	}
+
 	__declspec(dllexport) void SetWindowHandle(VideoPlayer* player, HWND hwnd)
 	{
 		if (player)
@@ -119,6 +127,14 @@ extern "C" {
 			return player->getIsPaused();
 		}
 		return false;
+	}
+
+	__declspec(dllexport) void ClearVideoCaptureDeviceName(VideoPlayer* player)
+	{
+		if (player)
+		{
+			player->setCaptureDeviceName(nullptr);
+		}
 	}
 }
 

@@ -223,21 +223,18 @@ HRESULT MediaStream::CopyRtspFrame(const RtspFrameSnapshot& frame, IMFSample* ta
 HRESULT MediaStream::Start(IMFMediaType* type)
 {
 	RETURN_HR_IF(MF_E_SHUTDOWN, !_queue || !_allocator);
+	RETURN_HR_IF_NULL(E_POINTER, type);
 
-	auto formatName = MFVideoFormatToString(_format);
-	WINTRACE(L"MediaStream::Start - using descriptor config: %ls %u x %u @ %u / %u",
-		formatName.c_str(),
-		static_cast<unsigned>(_videoWidth),
-		static_cast<unsigned>(_videoHeight),
-		static_cast<unsigned>(_hintFpsNum),
-		static_cast<unsigned>(_hintFpsDen));
+	WINTRACE(L"MediaStream::Start - using descriptor config: %s %ux%u @%u/%u",
+		MFVideoFormatToString(_format).c_str(), _videoWidth, _videoHeight, _hintFpsNum, _hintFpsDen);
 
 	if (!_frameGenerator.HasD3DManager())
 	{
 		LOG_IF_FAILED(_frameGenerator.EnsureRenderTarget(_videoWidth, _videoHeight));
 	}
 
-	RETURN_IF_FAILED(_allocator->InitializeSampleAllocator(3, type)); // 3 = low latency (decode-hold-deliver)
+	constexpr DWORD kAllocatorSampleCount = 8;
+	RETURN_IF_FAILED(_allocator->InitializeSampleAllocator(kAllocatorSampleCount, type));
 	RETURN_IF_FAILED(_queue->QueueEventParamVar(MEStreamStarted, GUID_NULL, S_OK, nullptr));
 
 	_state = MF_STREAM_STATE_RUNNING;
@@ -283,13 +280,9 @@ HRESULT MediaStream::SetVideoConfig(UINT32 width, UINT32 height, UINT32 fpsNum, 
 	if (fpsNum > 0) _hintFpsNum = fpsNum;
 	if (fpsDen > 0) _hintFpsDen = fpsDen;
 	if (format != GUID_NULL) _format = format;
-	auto formatGuid = GUID_ToStringW(_format);
-	WINTRACE(L"MediaStream::SetVideoConfig - %u x %u @ %u / %u format=%ls",
-		static_cast<unsigned>(_videoWidth),
-		static_cast<unsigned>(_videoHeight),
-		static_cast<unsigned>(_hintFpsNum),
-		static_cast<unsigned>(_hintFpsDen),
-		formatGuid.c_str());
+	WINTRACE(L"MediaStream::SetVideoConfig - %ux%u @%u/%u format=%s",
+		_videoWidth, _videoHeight, _hintFpsNum, _hintFpsDen,
+		GUID_ToStringW(_format).c_str());
 	return BuildDescriptor();
 }
 
@@ -391,7 +384,13 @@ STDMETHODIMP MediaStream::RequestSample(IUnknown* pToken)
 	RETURN_HR_IF(MF_E_SHUTDOWN, !_allocator || !_queue);
 
 	wil::com_ptr_nothrow<IMFSample> sample;
-	RETURN_IF_FAILED(_allocator->AllocateSample(&sample));
+	HRESULT hr = _allocator->AllocateSample(&sample);
+	if (hr == MF_E_SAMPLEALLOCATOR_EMPTY)
+	{
+		WINTRACE(L"MediaStream::RequestSample - sample allocator empty, outstanding requests still in flight");
+		return hr;
+	}
+	RETURN_IF_FAILED(hr);
 	RETURN_IF_FAILED(sample->SetSampleTime(MFGetSystemTime()));
 	RETURN_IF_FAILED(sample->SetSampleDuration(333333));
 

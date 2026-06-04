@@ -8,7 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-namespace TestVideo.Properties
+namespace RTVirtualCamera.Properties
 {
 
 

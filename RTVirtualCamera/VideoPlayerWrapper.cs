@@ -2,7 +2,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
-namespace TestVideo
+namespace RTVirtualCamera
 {
     [StructLayout(LayoutKind.Sequential)]
     public struct StreamInfo
@@ -38,8 +38,17 @@ namespace TestVideo
         [DllImport("MFPipeline.dll")]
         private static extern void DestroyVideoPlayer(IntPtr player);
 
+        [DllImport("kernel32.dll")]
+        private static extern uint GetLastError();
+
         [DllImport("MFPipeline.dll", CharSet = CharSet.Unicode)]
         private static extern void SetVideoPath(IntPtr player, string path);
+
+        [DllImport("MFPipeline.dll", CharSet = CharSet.Unicode)]
+        private static extern void SetVideoCaptureDeviceName(IntPtr player, string name);
+
+        [DllImport("MFPipeline.dll")]
+        private static extern void ClearVideoCaptureDeviceName(IntPtr player);
 
         [DllImport("MFPipeline.dll")]
         private static extern int GetVideoStreamInfo(IntPtr player,
@@ -68,6 +77,8 @@ namespace TestVideo
         [DllImport("MFPipeline.dll")]
         private static extern bool IsPaused(IntPtr player);
 
+        public uint LastWin32Error { get; private set; }
+
         public VideoPlayerWrapper()
         {
             playerInstance = CreateVideoPlayer();
@@ -83,6 +94,22 @@ namespace TestVideo
                 throw new ObjectDisposedException(nameof(VideoPlayerWrapper));
 
             SetVideoPath(playerInstance, videoPath);
+        }
+
+        public void SetCaptureDeviceName(string deviceName)
+        {
+            if (disposed)
+                throw new ObjectDisposedException(nameof(VideoPlayerWrapper));
+
+            SetVideoCaptureDeviceName(playerInstance, deviceName);
+        }
+
+        public void ClearCaptureDeviceName()
+        {
+            if (disposed)
+                throw new ObjectDisposedException(nameof(VideoPlayerWrapper));
+
+            ClearVideoCaptureDeviceName(playerInstance);
         }
 
         public StreamInfo[] GetStreamInfos()
@@ -119,7 +146,9 @@ namespace TestVideo
             if (disposed)
                 throw new ObjectDisposedException(nameof(VideoPlayerWrapper));
 
-            return InitializePlayer(playerInstance) == 0;
+            int result = InitializePlayer(playerInstance);
+            LastWin32Error = GetLastError();
+            return result == 0;
         }
 
         public bool Play()
@@ -127,7 +156,9 @@ namespace TestVideo
             if (disposed)
                 throw new ObjectDisposedException(nameof(VideoPlayerWrapper));
 
-            return PlayVideo(playerInstance) == 0;
+            int result = PlayVideo(playerInstance);
+            LastWin32Error = GetLastError();
+            return result == 0;
         }
 
         public bool Pause()
@@ -135,7 +166,9 @@ namespace TestVideo
             if (disposed)
                 throw new ObjectDisposedException(nameof(VideoPlayerWrapper));
 
-            return PauseVideo(playerInstance) == 0;
+            int result = PauseVideo(playerInstance);
+            LastWin32Error = GetLastError();
+            return result == 0;
         }
 
         public bool Stop()
@@ -143,7 +176,9 @@ namespace TestVideo
             if (disposed)
                 throw new ObjectDisposedException(nameof(VideoPlayerWrapper));
 
-            return StopVideo(playerInstance) == 0;
+            int result = StopVideo(playerInstance);
+            LastWin32Error = GetLastError();
+            return result == 0;
         }
 
         public bool IsCurrentlyPlaying

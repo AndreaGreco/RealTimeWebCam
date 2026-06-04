@@ -46,7 +46,7 @@
     
     mimetype: application/x-microsoft.net.object.binary.base64
     value   : The object must be serialized with 
-            : System.Serialization.Formatters.Binary.BinaryFormatter
+            : System.Runtime.Serialization.Formatters.Binary.BinaryFormatter
             : and then encoded with base64 encoding.
     
     mimetype: application/x-microsoft.net.object.soap.base64
@@ -60,6 +60,7 @@
             : and then encoded with base64 encoding.
     -->
   <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
     <xsd:element name="root" msdata:IsDataSet="true">
       <xsd:complexType>
         <xsd:choice maxOccurs="unbounded">
@@ -68,9 +69,10 @@
               <xsd:sequence>
                 <xsd:element name="value" type="xsd:string" minOccurs="0" />
               </xsd:sequence>
-              <xsd:attribute name="name" type="xsd:string" />
+              <xsd:attribute name="name" use="required" type="xsd:string" />
               <xsd:attribute name="type" type="xsd:string" />
               <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
             </xsd:complexType>
           </xsd:element>
           <xsd:element name="assembly">
@@ -85,9 +87,10 @@
                 <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
                 <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
               </xsd:sequence>
-              <xsd:attribute name="name" type="xsd:string" msdata:Ordinal="1" />
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
               <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
               <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
             </xsd:complexType>
           </xsd:element>
           <xsd:element name="resheader">
@@ -109,9 +112,147 @@
     <value>2.0</value>
   </resheader>
   <resheader name="reader">
-    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
   <resheader name="writer">
-    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
+  <data name="App_Title" xml:space="preserve">
+    <value>RT Virtual Camera</value>
+  </data>
+  <data name="Button_StartPreview" xml:space="preserve">
+    <value>Start Preview</value>
+  </data>
+  <data name="Button_Browse" xml:space="preserve">
+    <value>Browse</value>
+  </data>
+  <data name="Button_StartVCam" xml:space="preserve">
+    <value>Start VCam</value>
+  </data>
+  <data name="Button_StopVCam" xml:space="preserve">
+    <value>Stop VCam</value>
+  </data>
+  <data name="Preview_Inactive" xml:space="preserve">
+    <value>Preview not active</value>
+  </data>
+  <data name="Language_System" xml:space="preserve">
+    <value>System</value>
+  </data>
+  <data name="Language_Updated_Title" xml:space="preserve">
+    <value>Language updated</value>
+  </data>
+  <data name="Language_Updated_Message" xml:space="preserve">
+    <value>Restart the application to apply the new language.</value>
+  </data>
+  <data name="Source_Missing_Title" xml:space="preserve">
+    <value>Source missing</value>
+  </data>
+  <data name="Source_Unavailable_Title" xml:space="preserve">
+    <value>Source unavailable</value>
+  </data>
+  <data name="Source_SelectPrompt" xml:space="preserve">
+    <value>Select a video file or enter a valid RTSP URL.</value>
+  </data>
+  <data name="Preview_Error_Title" xml:space="preserve">
+    <value>Preview error</value>
+  </data>
+  <data name="Preview_Error_Start" xml:space="preserve">
+    <value>Unable to start preview.</value>
+  </data>
+  <data name="Preview_OpenFail_Title" xml:space="preserve">
+    <value>Preview open failed</value>
+  </data>
+  <data name="Preview_OpenFail_Message" xml:space="preserve">
+    <value>The player could not open the video source.</value>
+  </data>
+  <data name="Preview_OpenFail_Details" xml:space="preserve">
+    <value>The source may be unreachable, slow to respond, or unsupported.</value>
+  </data>
+  <data name="Preview_PlayFail_Title" xml:space="preserve">
+    <value>Preview start failed</value>
+  </data>
+  <data name="Preview_PlayFail_Message" xml:space="preserve">
+    <value>The source opened but playback did not start.</value>
+  </data>
+  <data name="Preview_PlayFail_Details" xml:space="preserve">
+    <value>Possible network, decoding, or video format compatibility error.</value>
+  </data>
+  <data name="Probe_Timeout_Message" xml:space="preserve">
+    <value>The source did not respond in time. Check network, credentials, and stream availability.</value>
+  </data>
+  <data name="Probe_Timeout_Details" xml:space="preserve">
+    <value>Probe timeout after {0} ms.</value>
+  </data>
+  <data name="Probe_Validation_Details" xml:space="preserve">
+    <value>Source validation failed before probing.</value>
+  </data>
+  <data name="Probe_InitFail_Message" xml:space="preserve">
+    <value>Unable to open the video source.</value>
+  </data>
+  <data name="Probe_InitFail_Details" xml:space="preserve">
+    <value>InitializePlayer returned an error.</value>
+  </data>
+  <data name="Probe_NoStreams_Message" xml:space="preserve">
+    <value>The source opened but does not expose a usable video stream.</value>
+  </data>
+  <data name="Probe_NoStreams_Details" xml:space="preserve">
+    <value>GetVideoStreamInfo returned no video streams.</value>
+  </data>
+  <data name="Probe_COM_Message" xml:space="preserve">
+    <value>Media Foundation rejected opening the source.</value>
+  </data>
+  <data name="Probe_SEH_Message" xml:space="preserve">
+    <value>The native component raised an internal error during probing.</value>
+  </data>
+  <data name="Probe_Unexpected_Message" xml:space="preserve">
+    <value>Unexpected error while checking the source.</value>
+  </data>
+  <data name="Path_Invalid" xml:space="preserve">
+    <value>The specified path is invalid. Use an existing local file or a valid RTSP/HTTP URL.</value>
+  </data>
+  <data name="Path_FileMissing" xml:space="preserve">
+    <value>The selected file does not exist.</value>
+  </data>
+  <data name="VirtualCamera_Error_Title" xml:space="preserve">
+    <value>Virtual camera error</value>
+  </data>
+  <data name="VirtualCamera_Error_Message" xml:space="preserve">
+    <value>Unable to complete the virtual camera operation.</value>
+  </data>
+  <data name="VirtualCamera_RegisterFail_Title" xml:space="preserve">
+    <value>Virtual camera registration failed</value>
+  </data>
+  <data name="VirtualCamera_RegisterFail_Message" xml:space="preserve">
+    <value>Windows did not accept the virtual camera registration.</value>
+  </data>
+  <data name="VirtualCamera_RegisterFail_Details" xml:space="preserve">
+    <value>Verify that VCamSampleSource.dll is registered, the system supports virtual cameras, and Media Foundation is available.</value>
+  </data>
+  <data name="VirtualCamera_StartFail_Title" xml:space="preserve">
+    <value>Virtual camera start failed</value>
+  </data>
+  <data name="VirtualCamera_StartFail_Message" xml:space="preserve">
+    <value>The virtual camera was registered but failed to start.</value>
+  </data>
+  <data name="VirtualCamera_StartFail_Details" xml:space="preserve">
+    <value>Possible causes: RTSP stream unavailable, negotiated format unsupported, or internal Media Foundation error.</value>
+  </data>
+  <data name="Info_Title" xml:space="preserve">
+    <value>Information</value>
+  </data>
+  <data name="VirtualCamera_Stopped" xml:space="preserve">
+    <value>Virtual Camera stopped</value>
+  </data>
+  <data name="Tech_Details" xml:space="preserve">
+    <value>Technical details:</value>
+  </data>
+  <data name="Preview_VCamStarted" xml:space="preserve">
+    <value>Virtual Camera started</value>
+  </data>
+  <data name="Resolution_Format" xml:space="preserve">
+    <value>Resolution:{0}x{1}@{2}</value>
+  </data>
+  <data name="Menu_Language" xml:space="preserve">
+    <value>Language</value>
+  </data>
 </root>

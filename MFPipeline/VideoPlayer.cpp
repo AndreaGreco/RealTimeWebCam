@@ -15,6 +15,7 @@
 #include <mfreadwrite.h>
 #include <PropIdl.h>
 #include <sstream>
+#include <cwchar>
 #include <Unknwnbase.h>
 #include <windows.h>
 
@@ -285,7 +286,7 @@ done:
 /**
 * Creates media source from URL with source open monitor.
 */
-HRESULT CreateMediaSourceFromURL(LPWSTR path, CSourceOpenMonitor* pMonitor, IMFMediaSource** ppSource)
+HRESULT CreateMediaSourceFromURL(LPCWSTR path, CSourceOpenMonitor* pMonitor, IMFMediaSource** ppSource)
 {
 	IMFSourceResolver* pSourceResolver = NULL;
 	IUnknown* uSource = NULL;
@@ -330,6 +331,62 @@ done:
 	SAFE_RELEASE(pSourceResolver);
 	SAFE_RELEASE(uSource);
 	SAFE_RELEASE(pConfig);
+	return hr;
+}
+
+HRESULT CreateMediaSourceFromCaptureDevice(LPCWSTR deviceName, IMFMediaSource** ppSource)
+{
+	IMFAttributes* pAttributes = NULL;
+	IMFActivate** ppDevices = NULL;
+	UINT32 deviceCount = 0;
+	HRESULT hr = MFCreateAttributes(&pAttributes, 1);
+	if (FAILED(hr))
+	{
+		LogError("MFCreateAttributes for capture devices", hr);
+		return hr;
+	}
+
+	hr = pAttributes->SetGUID(MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE, MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID);
+	if (FAILED(hr))
+	{
+		LogError("SetGUID MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE", hr);
+		SAFE_RELEASE(pAttributes);
+		return hr;
+	}
+
+	hr = MFEnumDeviceSources(pAttributes, &ppDevices, &deviceCount);
+	if (FAILED(hr))
+	{
+		LogError("MFEnumDeviceSources", hr);
+		SAFE_RELEASE(pAttributes);
+		return hr;
+	}
+
+	hr = HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
+	for (UINT32 i = 0; i < deviceCount; i++)
+	{
+		WCHAR* friendlyName = nullptr;
+		UINT32 friendlyNameLength = 0;
+		HRESULT hrName = ppDevices[i]->GetAllocatedString(MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME, &friendlyName, &friendlyNameLength);
+		if (SUCCEEDED(hrName) && friendlyName != nullptr)
+		{
+			if (_wcsicmp(friendlyName, deviceName) == 0)
+			{
+				hr = ppDevices[i]->ActivateObject(IID_PPV_ARGS(ppSource));
+				CoTaskMemFree(friendlyName);
+				break;
+			}
+			CoTaskMemFree(friendlyName);
+		}
+	}
+
+	for (UINT32 i = 0; i < deviceCount; i++)
+	{
+		SAFE_RELEASE(ppDevices[i]);
+	}
+
+	CoTaskMemFree(ppDevices);
+	SAFE_RELEASE(pAttributes);
 	return hr;
 }
 
@@ -405,7 +462,6 @@ HRESULT CreateNV12VideoOutputType(IMFMediaType* pSourceType, IMFMediaType** ppOu
 VideoPlayer::VideoPlayer()
 {
 	InitializeVariables();
-	filePath = nullptr;
 	windowHandle = nullptr;
 	fSelected = false;
 	isPlaying = false;
@@ -470,6 +526,20 @@ void VideoPlayer::ReleasePlaybackResources()
 		pClock->Stop();
 	}
 
+	if (videoReaderCallback)
+	{
+		videoReaderCallback->Shutdown();
+	}
+
+	if (pVideoReader)
+	{
+		HRESULT hrFlush = pVideoReader->Flush((DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM);
+		if (FAILED(hrFlush))
+		{
+			LogError("IMFSourceReader::Flush", hrFlush);
+		}
+	}
+
 	// Release source reader and related
 	SAFE_RELEASE(pVideoReader);
 	SAFE_RELEASE(videoSourceOutputType);
@@ -486,8 +556,12 @@ void VideoPlayer::ReleasePlaybackResources()
 	SAFE_RELEASE(pClock);
 	SAFE_RELEASE(pTimeSource);
 
-	// Delete callback and monitor
-	SAFE_DELETE(videoReaderCallback);
+	// Release callback and monitor
+	if (videoReaderCallback)
+	{
+		videoReaderCallback->Release();
+		videoReaderCallback = NULL;
+	}
 	SAFE_RELEASE(pSourceOpenMonitor);
 
 	DebugLog("ReleasePlaybackResources - complete");
@@ -527,9 +601,16 @@ void VideoPlayer::ReleaseAllResources()
 // VideoPlayer Implementation - Setters
 // ============================================================================
 
-void VideoPlayer::setVideoPath(LPWSTR path)
+void VideoPlayer::setVideoPath(LPCWSTR path)
 {
-	filePath = path;
+	filePath = (path != nullptr) ? path : L"";
+	captureDeviceName.clear();
+}
+
+void VideoPlayer::setCaptureDeviceName(LPCWSTR name)
+{
+	captureDeviceName = (name != nullptr) ? name : L"";
+	filePath.clear();
 }
 
 void VideoPlayer::setWindowHandle(HWND hwnd)
@@ -555,9 +636,9 @@ HRESULT VideoPlayer::ValidateInitializationParameters()
 		return E_INVALIDARG;
 	}
 
-	if (filePath == nullptr)
+	if (filePath.empty() && captureDeviceName.empty())
 	{
-		DebugLog("VideoPlayer::initialize() - filePath is null");
+		DebugLog("VideoPlayer::initialize() - no input source configured");
 		return E_INVALIDARG;
 	}
 
@@ -673,24 +754,40 @@ HRESULT VideoPlayer::GetStreamSinkAndMediaTypeHandler()
 
 HRESULT VideoPlayer::CreateVideoSourceAndReader()
 {
-	// Create the source open monitor
-	pSourceOpenMonitor = new (std::nothrow) CSourceOpenMonitor();
-	if (pSourceOpenMonitor == NULL)
-	{
-		LogError("Failed to create CSourceOpenMonitor", E_OUTOFMEMORY);
-		return E_OUTOFMEMORY;
-	}
+	HRESULT hr = S_OK;
 
-	// Create media source from URL
-	HRESULT hr = CreateMediaSourceFromURL(filePath, pSourceOpenMonitor, &pVideoSource);
-	if (FAILED(hr))
+	if (!captureDeviceName.empty())
 	{
-		LogError("CreateMediaSourceFromURL", hr);
-		return hr;
-	}
+		hr = CreateMediaSourceFromCaptureDevice(captureDeviceName.c_str(), &pVideoSource);
+		if (FAILED(hr))
+		{
+			LogError("CreateMediaSourceFromCaptureDevice", hr);
+			return hr;
+		}
 
-	// Configure for low latency
-	ConfigureSourceForLowLatency(pVideoSource);
+		DebugLog("VideoPlayer using video capture device source");
+	}
+	else
+	{
+		// Create the source open monitor
+		pSourceOpenMonitor = new (std::nothrow) CSourceOpenMonitor();
+		if (pSourceOpenMonitor == NULL)
+		{
+			LogError("Failed to create CSourceOpenMonitor", E_OUTOFMEMORY);
+			return E_OUTOFMEMORY;
+		}
+
+		// Create media source from URL
+		hr = CreateMediaSourceFromURL(filePath.c_str(), pSourceOpenMonitor, &pVideoSource);
+		if (FAILED(hr))
+		{
+			LogError("CreateMediaSourceFromURL", hr);
+			return hr;
+		}
+
+		// Configure for low latency
+		ConfigureSourceForLowLatency(pVideoSource);
+	}
 
 	// Create video reader callback
 	videoReaderCallback = new (std::nothrow) VideoReaderCall(pStreamSink);

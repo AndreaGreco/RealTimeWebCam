@@ -28,11 +28,13 @@ template <class T> inline void SAFE_RELEASE(T*& pT);
 class VideoReaderCall : public IMFSourceReaderCallback {
 
 private:
-    IMFVideoSampleAllocator* pVideoSampleAllocator;
+    IMFVideoSampleAllocator* pVideoSampleAllocator = nullptr;
     IMFStreamSink* m_pStreamSink = nullptr;
-    IDirect3DDeviceManager9* pD3DManager;
+    IDirect3DDeviceManager9* pD3DManager = nullptr;
     IMFSourceReader* pReader = nullptr;
     long m_cRef = 1;
+    CRITICAL_SECTION m_lock;
+    long m_shutdown = 0;
     
     // Video format info
     UINT32 m_width;
@@ -49,6 +51,7 @@ public:
     ~VideoReaderCall();
 
     HRESULT AllocateInternalBuffer(IMFMediaType* SinkMediaType, IMFSourceReader* pReader);
+    void Shutdown();
 
     // IUnknown methods
     STDMETHODIMP QueryInterface(REFIID riid, void** ppv);

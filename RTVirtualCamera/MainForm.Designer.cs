@@ -2,7 +2,7 @@
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace TestVideo
+namespace RTVirtualCamera
 {
     partial class MainForm
     {
@@ -17,6 +17,7 @@ namespace TestVideo
         private Button startVCamButton;
         private TextBox pathTextBox;
         private Label pathLabel;
+        private Label previewStatusLabel;
 
         /// <summary>
         /// Pulire le risorse in uso.
@@ -41,6 +42,7 @@ namespace TestVideo
         {
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(MainForm));
             this.videoPanel = new System.Windows.Forms.Panel();
+            this.previewStatusLabel = new System.Windows.Forms.Label();
             this.playButton = new System.Windows.Forms.Button();
             this.startVCamButton = new System.Windows.Forms.Button();
             this.pathTextBox = new System.Windows.Forms.TextBox();
@@ -49,125 +51,134 @@ namespace TestVideo
             this.panel1 = new System.Windows.Forms.Panel();
             this.streamProp_lbl = new System.Windows.Forms.Label();
             this.label2 = new System.Windows.Forms.Label();
+            this.menuStrip1 = new System.Windows.Forms.MenuStrip();
+            this.fileToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.exitToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.settingsToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.aboutToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
+            this.videoPanel.SuspendLayout();
             this.tableLayoutPanel1.SuspendLayout();
             this.panel1.SuspendLayout();
+            this.menuStrip1.SuspendLayout();
             this.SuspendLayout();
             // 
             // videoPanel
             // 
+            resources.ApplyResources(this.videoPanel, "videoPanel");
             this.videoPanel.BackColor = System.Drawing.Color.Black;
-            this.videoPanel.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.videoPanel.Location = new System.Drawing.Point(3, 3);
+            this.videoPanel.Controls.Add(this.previewStatusLabel);
             this.videoPanel.Name = "videoPanel";
-            this.videoPanel.Padding = new System.Windows.Forms.Padding(8);
-            this.videoPanel.Size = new System.Drawing.Size(909, 666);
-            this.videoPanel.TabIndex = 0;
+            // 
+            // previewStatusLabel
+            // 
+            resources.ApplyResources(this.previewStatusLabel, "previewStatusLabel");
+            this.previewStatusLabel.ForeColor = System.Drawing.Color.White;
+            this.previewStatusLabel.Name = "previewStatusLabel";
             // 
             // playButton
             // 
-            this.playButton.Location = new System.Drawing.Point(3, 61);
+            resources.ApplyResources(this.playButton, "playButton");
             this.playButton.Name = "playButton";
-            this.playButton.Size = new System.Drawing.Size(75, 30);
-            this.playButton.TabIndex = 4;
-            this.playButton.Text = "Probe";
             this.playButton.UseVisualStyleBackColor = true;
             this.playButton.Click += new System.EventHandler(this.PlayButton_Click);
             // 
             // startVCamButton
             // 
+            resources.ApplyResources(this.startVCamButton, "startVCamButton");
             this.startVCamButton.BackColor = System.Drawing.Color.LightGreen;
-            this.startVCamButton.Enabled = false;
-            this.startVCamButton.Location = new System.Drawing.Point(84, 61);
             this.startVCamButton.Name = "startVCamButton";
-            this.startVCamButton.Size = new System.Drawing.Size(100, 30);
-            this.startVCamButton.TabIndex = 7;
-            this.startVCamButton.Text = "Start VCam";
             this.startVCamButton.UseVisualStyleBackColor = false;
             this.startVCamButton.Click += new System.EventHandler(this.StartVCamButton_Click);
             // 
             // pathTextBox
             // 
-            this.pathTextBox.Location = new System.Drawing.Point(73, 3);
+            resources.ApplyResources(this.pathTextBox, "pathTextBox");
             this.pathTextBox.Name = "pathTextBox";
-            this.pathTextBox.Size = new System.Drawing.Size(833, 20);
-            this.pathTextBox.TabIndex = 2;
-            this.pathTextBox.Text = "rtsp://192.168.178.66:8554/webcam";
             // 
             // pathLabel
             // 
-            this.pathLabel.AutoSize = true;
-            this.pathLabel.Location = new System.Drawing.Point(3, 6);
+            resources.ApplyResources(this.pathLabel, "pathLabel");
             this.pathLabel.Name = "pathLabel";
-            this.pathLabel.Size = new System.Drawing.Size(64, 13);
-            this.pathLabel.TabIndex = 1;
-            this.pathLabel.Text = "RTSP URL:";
             // 
             // tableLayoutPanel1
             // 
-            this.tableLayoutPanel1.ColumnCount = 1;
-            this.tableLayoutPanel1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 50F));
-            this.tableLayoutPanel1.Controls.Add(this.videoPanel, 0, 0);
+            resources.ApplyResources(this.tableLayoutPanel1, "tableLayoutPanel1");
             this.tableLayoutPanel1.Controls.Add(this.panel1, 0, 1);
-            this.tableLayoutPanel1.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.tableLayoutPanel1.Location = new System.Drawing.Point(0, 0);
+            this.tableLayoutPanel1.Controls.Add(this.videoPanel, 0, 0);
             this.tableLayoutPanel1.Name = "tableLayoutPanel1";
-            this.tableLayoutPanel1.RowCount = 2;
-            this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 86.72681F));
-            this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 13.2732F));
-            this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 20F));
-            this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 20F));
-            this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 20F));
-            this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 20F));
-            this.tableLayoutPanel1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 20F));
-            this.tableLayoutPanel1.Size = new System.Drawing.Size(915, 776);
-            this.tableLayoutPanel1.TabIndex = 7;
             // 
             // panel1
             // 
+            resources.ApplyResources(this.panel1, "panel1");
             this.panel1.Controls.Add(this.streamProp_lbl);
             this.panel1.Controls.Add(this.label2);
             this.panel1.Controls.Add(this.pathLabel);
             this.panel1.Controls.Add(this.pathTextBox);
             this.panel1.Controls.Add(this.playButton);
             this.panel1.Controls.Add(this.startVCamButton);
-            this.panel1.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.panel1.Location = new System.Drawing.Point(3, 675);
-            this.panel1.MinimumSize = new System.Drawing.Size(500, 90);
             this.panel1.Name = "panel1";
-            this.panel1.Size = new System.Drawing.Size(909, 98);
-            this.panel1.TabIndex = 1;
+            this.panel1.Paint += new System.Windows.Forms.PaintEventHandler(this.panel1_Paint);
             // 
             // streamProp_lbl
             // 
-            this.streamProp_lbl.AutoSize = true;
-            this.streamProp_lbl.Location = new System.Drawing.Point(73, 32);
+            resources.ApplyResources(this.streamProp_lbl, "streamProp_lbl");
             this.streamProp_lbl.Name = "streamProp_lbl";
-            this.streamProp_lbl.Size = new System.Drawing.Size(0, 13);
-            this.streamProp_lbl.TabIndex = 9;
             // 
             // label2
             // 
-            this.label2.AutoSize = true;
-            this.label2.Location = new System.Drawing.Point(3, 32);
+            resources.ApplyResources(this.label2, "label2");
             this.label2.Name = "label2";
-            this.label2.Size = new System.Drawing.Size(48, 13);
-            this.label2.TabIndex = 8;
-            this.label2.Text = "Propelty:";
+            // 
+            // menuStrip1
+            // 
+            resources.ApplyResources(this.menuStrip1, "menuStrip1");
+            this.menuStrip1.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.fileToolStripMenuItem,
+            this.settingsToolStripMenuItem,
+            this.aboutToolStripMenuItem});
+            this.menuStrip1.Name = "menuStrip1";
+            // 
+            // fileToolStripMenuItem
+            // 
+            resources.ApplyResources(this.fileToolStripMenuItem, "fileToolStripMenuItem");
+            this.fileToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.exitToolStripMenuItem});
+            this.fileToolStripMenuItem.Name = "fileToolStripMenuItem";
+            // 
+            // exitToolStripMenuItem
+            // 
+            resources.ApplyResources(this.exitToolStripMenuItem, "exitToolStripMenuItem");
+            this.exitToolStripMenuItem.Name = "exitToolStripMenuItem";
+            this.exitToolStripMenuItem.Click += new System.EventHandler(this.exitToolStripMenuItem_Click);
+            // 
+            // settingsToolStripMenuItem
+            // 
+            resources.ApplyResources(this.settingsToolStripMenuItem, "settingsToolStripMenuItem");
+            this.settingsToolStripMenuItem.Name = "settingsToolStripMenuItem";
+            this.settingsToolStripMenuItem.Click += new System.EventHandler(this.settingsToolStripMenuItem_Click);
+            // 
+            // aboutToolStripMenuItem
+            // 
+            resources.ApplyResources(this.aboutToolStripMenuItem, "aboutToolStripMenuItem");
+            this.aboutToolStripMenuItem.Name = "aboutToolStripMenuItem";
             // 
             // MainForm
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
+            resources.ApplyResources(this, "$this");
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(915, 776);
             this.Controls.Add(this.tableLayoutPanel1);
-            this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
+            this.Controls.Add(this.menuStrip1);
+            this.MainMenuStrip = this.menuStrip1;
             this.Name = "MainForm";
-            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
-            this.Text = "Video Player Test";
+            this.Load += new System.EventHandler(this.MainForm_Load);
+            this.videoPanel.ResumeLayout(false);
             this.tableLayoutPanel1.ResumeLayout(false);
             this.panel1.ResumeLayout(false);
             this.panel1.PerformLayout();
+            this.menuStrip1.ResumeLayout(false);
+            this.menuStrip1.PerformLayout();
             this.ResumeLayout(false);
+            this.PerformLayout();
 
         }
 
@@ -177,6 +188,11 @@ namespace TestVideo
         private Panel panel1;
         private Label label2;
         private Label streamProp_lbl;
+        private MenuStrip menuStrip1;
+        private ToolStripMenuItem fileToolStripMenuItem;
+        private ToolStripMenuItem settingsToolStripMenuItem;
+        private ToolStripMenuItem aboutToolStripMenuItem;
+        private ToolStripMenuItem exitToolStripMenuItem;
     }
 }
 

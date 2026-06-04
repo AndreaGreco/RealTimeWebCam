@@ -1,7 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 
-namespace TestVideo
+namespace RTVirtualCamera
 {
     /// <summary>
     /// Mirror of Shared/VCamConfig.h — must match byte-for-byte (x64, no packing surprises).
@@ -29,6 +29,9 @@ namespace TestVideo
         [DllImport("MFPipeline.dll", CallingConvention = CallingConvention.Cdecl)]
         private static extern void DestroyVirtualCamera(IntPtr vcam);
 
+        [DllImport("kernel32.dll")]
+        private static extern uint GetLastError();
+
         [DllImport("MFPipeline.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
         private static extern void SetVirtualCameraName(IntPtr vcam, string name);
 
@@ -55,6 +58,8 @@ namespace TestVideo
 
         private IntPtr vcamHandle;
         private bool disposed = false;
+
+        public uint LastWin32Error { get; private set; }
 
         public VirtualCameraWrapper()
         {
@@ -87,28 +92,36 @@ namespace TestVideo
         {
             if (disposed) throw new ObjectDisposedException(nameof(VirtualCameraWrapper));
             if (vcamHandle == IntPtr.Zero) return false;
-            return RegisterVCam(vcamHandle) == 0;
+            int result = RegisterVCam(vcamHandle);
+            LastWin32Error = GetLastError();
+            return result == 0;
         }
 
         public bool Start()
         {
             if (disposed) throw new ObjectDisposedException(nameof(VirtualCameraWrapper));
             if (vcamHandle == IntPtr.Zero) return false;
-            return StartVCam(vcamHandle) == 0;
+            int result = StartVCam(vcamHandle);
+            LastWin32Error = GetLastError();
+            return result == 0;
         }
 
         public bool Stop()
         {
             if (disposed) throw new ObjectDisposedException(nameof(VirtualCameraWrapper));
             if (vcamHandle == IntPtr.Zero) return false;
-            return StopVCam(vcamHandle) == 0;
+            int result = StopVCam(vcamHandle);
+            LastWin32Error = GetLastError();
+            return result == 0;
         }
 
         public bool Unregister()
         {
             if (disposed) throw new ObjectDisposedException(nameof(VirtualCameraWrapper));
             if (vcamHandle == IntPtr.Zero) return false;
-            return UnregisterVCam(vcamHandle) == 0;
+            int result = UnregisterVCam(vcamHandle);
+            LastWin32Error = GetLastError();
+            return result == 0;
         }
 
         public bool IsRegistered
