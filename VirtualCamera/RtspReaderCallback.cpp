@@ -51,9 +51,10 @@ STDMETHODIMP RtspReaderCallback::OnReadSample(HRESULT hrStatus, DWORD dwStreamIn
 {
 	// Grab reader reference under the lock so Shutdown() can't tear it out mid-flight.
 	wil::com_ptr_nothrow<IMFSourceReader> reader;
+	bool broken = false;
 	{
 		winrt::slim_lock_guard lock(_lock);
-		if (_shutdown || !_reader) 
+		if (_shutdown || !_reader)
 			return S_OK;
 
 		reader = _reader;
@@ -66,13 +67,24 @@ STDMETHODIMP RtspReaderCallback::OnReadSample(HRESULT hrStatus, DWORD dwStreamIn
 		}
 		else if (FAILED(hrStatus))
 		{
-			WINTRACE(L"RtspReaderCallback::OnReadSample - error 0x%08X", hrStatus);
+			WINTRACE(L"RtspReaderCallback::OnReadSample - error 0x%08X, stream broken", hrStatus);
+			broken = true; // network drop / camera gone -> trigger reconnection
 		}
 		else if (dwStreamFlags & MF_SOURCE_READERF_ENDOFSTREAM)
 		{
-			WINTRACE(L"RtspReaderCallback::OnReadSample - end of stream");
-			return S_OK; // Stop re-requesting; RTSP streams don't loop.
+			WINTRACE(L"RtspReaderCallback::OnReadSample - end of stream, stream broken");
+			broken = true; // RTSP source ended -> trigger reconnection
 		}
+	}
+
+	if (broken)
+	{
+		// Notify the session manager exactly once, OUTSIDE our _lock to avoid a lock
+		// inversion (manager->_lock is taken before callback->_lock elsewhere). Stop
+		// re-issuing reads; the manager will rebuild the reader on its reconnect thread.
+		if (!_brokenSignaled.exchange(true) && _onBroken)
+			_onBroken();
+		return S_OK;
 	}
 
 	// Re-issue ReadSample immediately to keep the async chain running.

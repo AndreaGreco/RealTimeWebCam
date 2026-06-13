@@ -1,6 +1,8 @@
 #pragma once
 #include "pch.h"
 #include <mfreadwrite.h>
+#include <functional>
+#include <atomic>
 
 // Async IMFSourceReaderCallback for RTSP streaming.
 //
@@ -38,6 +40,10 @@ public:
 	// Start the async read chain. Call once after creating the source reader.
 	HRESULT BeginRead(IMFSourceReader* reader);
 
+	// Sets the handler fired once when the stream breaks (read error or end of stream).
+	// Must be called before BeginRead(); not changed afterward, so it is read without a lock.
+	void SetBrokenHandler(std::function<void()> handler) { _onBroken = std::move(handler); }
+
 	// Reconfigures the source reader's output type. Called from MediaStream::Start()
 	// when the consumer (Zoom) negotiates a format that differs from the initial NV12.
 	HRESULT SetOutputMediaType(const GUID& subtype, UINT32 width, UINT32 height);
@@ -55,4 +61,6 @@ private:
 	wil::com_ptr_nothrow<IMFSourceReader> _reader;
 	wil::com_ptr_nothrow<IMFSample>       _latestSample;
 	bool _shutdown;
+	std::function<void()> _onBroken;        // fired once on disconnect; set before BeginRead
+	std::atomic<bool> _brokenSignaled{ false };
 };

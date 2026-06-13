@@ -148,6 +148,10 @@ The decoded RTSP frame reaches the consumer's sample through `MediaStream::CopyR
 
 `RtspFrameSnapshot` carries the decoded `IMFSample` by reference (AddRef), not a pixel copy — `RtspSessionManager::TryGetLatestFrame` holds the session lock only long enough to grab that reference. The D3D device manager flows from `VCamMediaSource::SetD3DManager` → `RtspSessionManager::SetD3DManager` (for the reader) and → each `MediaStream::SetD3DManager` (which opens a cached device handle for the copy). **`SetD3DManager` must arrive before `RtspSessionManager::Start()`** for the GPU path to engage; otherwise the reader runs in system memory and the CPU fallback is used. Check the `WINTRACE` in `RtspSessionManager::Start` to confirm which path is active.
 
+## RTSP reconnection
+
+When the stream drops (network blip, camera reboot), `RtspReaderCallback::OnReadSample` sees a failed `hrStatus` or end-of-stream and fires its broken-handler **once** (outside the callback lock, to avoid a lock inversion with the manager). `RtspSessionManager::NotifyStreamBroken` then sets state `Reconnecting` and spawns a single reconnect thread (`ReconnectLoop`) that retries `OpenReaderLocked` **`kMaxReconnectAttempts` (60) times, `kReconnectIntervalMs` (1000 ms) apart** — i.e. 60 attempts at 1/sec. On success → `Running`; after 60 failures → `Failed`. While `Reconnecting`, `TryGetLatestFrame` returns `MF_E_SHUTDOWN` so the consumer sees the `FrameGenerator` "Camera IP non connessa" frame, not a frozen last image. The reconnect thread is signalled+joined (outside `_lock`) by `Start`/`Stop` via `StopReconnectThread`. There is no single MF flag that yields exactly "60×1s" for RTSP (`MFNETSOURCE_AUTORECONNECTLIMIT` exists but timing isn't controllable and RTSP honoring is uncertain), hence the explicit loop.
+
 ---
 
 ## Known bugs

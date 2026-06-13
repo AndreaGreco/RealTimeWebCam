@@ -4,6 +4,8 @@
 #include "..\Shared\VCamConfig.h"
 #include <memory>
 #include <vector>
+#include <thread>
+#include <atomic>
 
 struct CameraSessionConfig
 {
@@ -35,6 +37,7 @@ enum class RtspSessionState
 	Stopped,
 	Starting,
 	Running,
+	Reconnecting, // stream broke; reconnect thread is retrying (synthetic frames shown meanwhile)
 	Failed,
 };
 
@@ -72,10 +75,21 @@ public:
 	HRESULT TryGetLatestFrame(RtspFrameSnapshot& frame) override;
 	void SetD3DManager(IUnknown* manager) override;
 
+	// Reconnection policy: on a stream break we retry kMaxReconnectAttempts times,
+	// kReconnectIntervalMs apart (60 attempts, one per second).
+	static constexpr int kMaxReconnectAttempts = 60;
+	static constexpr int kReconnectIntervalMs = 1000;
+
 private:
 	RtspSessionManager() = default;
+	~RtspSessionManager();
 	HRESULT BuildRequestedType(const CameraSessionConfig& config, IMFMediaType** ppType);
-	void StopNoLock();
+	HRESULT OpenReaderLocked(const CameraSessionConfig& config); // (re)creates the reader; _lock held
+	void ReleaseReaderLocked();                                  // tears down reader/callback; _lock held
+	void StopNoLock();                                           // ReleaseReaderLocked + reset session state
+	void StopReconnectThread();                                  // signals + joins reconnect thread; no _lock held
+	void NotifyStreamBroken(UINT64 generation);                  // called by the reader callback on disconnect
+	void ReconnectLoop(CameraSessionConfig config, UINT64 generation);
 
 	mutable winrt::slim_mutex _lock;
 	CameraSessionConfig _config{};
@@ -88,4 +102,6 @@ private:
 	wil::com_ptr_nothrow<IMFSourceReader> _reader;
 	wil::com_ptr_nothrow<RtspReaderCallback> _callback;
 	wil::com_ptr_nothrow<IMFDXGIDeviceManager> _dxgiManager; // shared GPU device for DXVA decode
+	std::thread _reconnectThread;
+	std::atomic<bool> _stopReconnect{ false };
 };
