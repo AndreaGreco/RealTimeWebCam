@@ -46,11 +46,24 @@ HRESULT RtspSessionManager::Start(const CameraSessionConfig& config)
 	RETURN_HR_IF_NULL(E_OUTOFMEMORY, callback);
 
 	wil::com_ptr_nothrow<IMFAttributes> attrs;
-	RETURN_IF_FAILED(MFCreateAttributes(&attrs, 4));
+	RETURN_IF_FAILED(MFCreateAttributes(&attrs, 5));
 	RETURN_IF_FAILED(attrs->SetUnknown(MF_SOURCE_READER_ASYNC_CALLBACK, callback.get()));
 	RETURN_IF_FAILED(attrs->SetUINT32(MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, TRUE));
 	RETURN_IF_FAILED(attrs->SetUINT32(MF_LOW_LATENCY, TRUE));
 	RETURN_IF_FAILED(attrs->SetUINT32(MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING, TRUE));
+
+	// Share the Frame Server's D3D11 device so the decoder runs on the GPU (DXVA)
+	// and emits DXGI textures we can copy GPU->GPU. Without it the reader produces
+	// system-memory frames and MediaStream falls back to a single CPU copy.
+	if (_dxgiManager)
+	{
+		RETURN_IF_FAILED(attrs->SetUnknown(MF_SOURCE_READER_D3D_MANAGER, _dxgiManager.get()));
+		WINTRACE(L"RtspSessionManager::Start - D3D manager set on reader (GPU decode path)");
+	}
+	else
+	{
+		WINTRACE(L"RtspSessionManager::Start - no D3D manager, reader will use system memory");
+	}
 
 	wil::com_ptr_nothrow<IMFSourceReader> reader;
 	HRESULT hr = MFCreateSourceReaderFromURL(config.rtspUrl, attrs.get(), &reader);
@@ -164,9 +177,10 @@ HRESULT RtspSessionManager::TryGetLatestFrame(RtspFrameSnapshot& frame)
 	UINT32 stride = 0;
 	UINT64 generation = 0;
 
-	// Hold lock only long enough to grab a reference to the latest sample and metadata.
-	// The actual buffer lock + memcpy happens outside so Stop()/Start() are not blocked
-	// for the full duration of a 3 MB copy at 30 fps.
+	// Grab a reference (AddRef) to the latest decoded sample under the lock, then
+	// release the lock immediately. No pixel copy or allocation happens here — the
+	// sample carries its own buffer (GPU texture or system memory) and the actual
+	// copy is done by MediaStream::CopyRtspFrame outside any session lock.
 	{
 		winrt::slim_lock_guard lock(_lock);
 		frame = {};
@@ -180,26 +194,19 @@ HRESULT RtspSessionManager::TryGetLatestFrame(RtspFrameSnapshot& frame)
 		generation = _config.generation;
 	}
 
-	wil::com_ptr_nothrow<IMFMediaBuffer> buffer;
-	RETURN_IF_FAILED(sample->ConvertToContiguousBuffer(&buffer));
-	BYTE* src = nullptr;
-	DWORD dataSize = 0;
-	RETURN_IF_FAILED(buffer->Lock(&src, nullptr, &dataSize));
-	auto bytes = std::make_shared<std::vector<BYTE>>(dataSize);
-	if (!bytes)
-	{
-		buffer->Unlock();
-		return E_OUTOFMEMORY;
-	}
-	CopyMemory(bytes->data(), src, dataSize);
-	buffer->Unlock();
-
 	frame.valid = true;
 	frame.stride = stride;
 	frame.generation = generation;
-	frame.bytes = std::move(bytes);
-	frame.dataSize = dataSize;
 	sample->GetSampleTime(&frame.sampleTime);
 	sample->GetSampleDuration(&frame.sampleDuration);
+	frame.sample = std::move(sample);
 	return S_OK;
+}
+
+void RtspSessionManager::SetD3DManager(IUnknown* manager)
+{
+	winrt::slim_lock_guard lock(_lock);
+	_dxgiManager.reset();
+	if (manager)
+		manager->QueryInterface(IID_PPV_ARGS(&_dxgiManager));
 }

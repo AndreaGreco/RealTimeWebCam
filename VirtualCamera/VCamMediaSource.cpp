@@ -414,6 +414,11 @@ STDMETHODIMP VCamMediaSource::SetD3DManager(IUnknown* pManager)
 	RETURN_HR_IF_NULL(E_POINTER, pManager);
 	winrt::slim_lock_guard lock(_lock);
 
+	// Share the same device manager with the RTSP reader so the decoder produces
+	// GPU textures that MediaStream copies GPU->GPU. Forwarded before Start() runs.
+	if (_rtspManager)
+		_rtspManager->SetD3DManager(pManager);
+
 	for (DWORD i = 0; i < _streams.size(); i++)
 	{
 		RETURN_IF_FAILED(_streams[i]->SetD3DManager(pManager));

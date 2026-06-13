@@ -24,8 +24,10 @@ struct RtspFrameSnapshot
 	LONGLONG sampleTime = 0;
 	LONGLONG sampleDuration = 0;
 	UINT64 generation = 0;
-	std::shared_ptr<std::vector<BYTE>> bytes;
-	DWORD dataSize = 0;
+	// Holds the decoded RTSP sample directly (GPU texture or system-memory buffer).
+	// No pixel copy happens here — MediaStream::CopyRtspFrame copies straight from
+	// this sample's buffer into the consumer's sample (GPU->GPU when possible).
+	wil::com_ptr_nothrow<IMFSample> sample;
 };
 
 enum class RtspSessionState
@@ -45,6 +47,10 @@ struct IRtspSessionManager
 	virtual UINT64 GetGeneration() const = 0;
 	virtual RtspSessionState GetState() const = 0;
 	virtual HRESULT TryGetLatestFrame(RtspFrameSnapshot& frame) = 0;
+	// Shares the Frame Server's D3D11 device manager with the source reader so the
+	// RTSP decoder produces GPU textures (DXVA). Must be set before Start() to take
+	// effect; if unset, the reader falls back to system-memory output.
+	virtual void SetD3DManager(IUnknown* manager) = 0;
 };
 
 struct StreamRuntimeContext
@@ -64,6 +70,7 @@ public:
 	UINT64 GetGeneration() const override;
 	RtspSessionState GetState() const override;
 	HRESULT TryGetLatestFrame(RtspFrameSnapshot& frame) override;
+	void SetD3DManager(IUnknown* manager) override;
 
 private:
 	RtspSessionManager() = default;
@@ -80,4 +87,5 @@ private:
 	bool _running = false;
 	wil::com_ptr_nothrow<IMFSourceReader> _reader;
 	wil::com_ptr_nothrow<RtspReaderCallback> _callback;
+	wil::com_ptr_nothrow<IMFDXGIDeviceManager> _dxgiManager; // shared GPU device for DXVA decode
 };

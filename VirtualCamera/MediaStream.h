@@ -63,6 +63,10 @@ private:
 
 	// HRESULT InitializeRTSPReader();
 	HRESULT CopyRtspFrame(const RtspFrameSnapshot& frame, IMFSample* targetSample);
+	// GPU zero-copy: CopySubresourceRegion between two DXGI textures on the shared device.
+	HRESULT CopyRtspFrameGpu(IMFDXGIBuffer* srcDxgi, IMFDXGIBuffer* dstDxgi);
+	// CPU fallback: a single MFCopyImage from the source MF buffer into the dest buffer.
+	HRESULT CopyRtspFrameCpu(IMFMediaBuffer* srcBuffer, IMFMediaBuffer* dstBuffer);
 	HRESULT BuildFrameTypeNV12(wil::com_ptr_nothrow<IMFMediaType>& nv12Type);
 	HRESULT BuildDescriptor();
 
@@ -75,6 +79,8 @@ private:
 	wil::com_ptr_nothrow<IMFVideoSampleAllocatorEx> _allocator;
 	wil::com_ptr_nothrow<IMFMediaType> _currentType; // cached from last Start(), used by SetStreamState(RUNNING)
 	wil::com_ptr_nothrow<IUnknown> _dxgiManager;
+	wil::com_ptr_nothrow<IMFDXGIDeviceManager> _deviceManager; // QI of _dxgiManager, for GPU copy
+	HANDLE _deviceHandle = nullptr;                            // open device handle for LockDevice
 	int _index;
 
 	UINT32 _videoWidth;

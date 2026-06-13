@@ -130,94 +130,149 @@ HRESULT MediaStream::Initialize(IMFMediaSource* source, int index)
 	return S_OK;
 }
 
-// Copies a decoded RTSP frame
-// The source reader is configured to produce exactly the consumer-negotiated format/size,
-// so no scaling or stride calculation is needed — same pattern as VideoReaderCbk.
+// Copies the latest decoded RTSP frame into the consumer's sample.
+// The source reader is configured to produce exactly the consumer-negotiated NV12
+// size, so no scaling or stride math is needed. Two paths:
+//   - GPU (fast): both buffers are DXGI textures on the shared device → CopySubresourceRegion.
+//   - CPU (fallback): source is system memory → a single MFCopyImage into the dest buffer.
 HRESULT MediaStream::CopyRtspFrame(const RtspFrameSnapshot& frame, IMFSample* targetSample)
 {
 	RETURN_HR_IF_NULL(E_POINTER, targetSample);
-	RETURN_HR_IF(E_INVALIDARG, !frame.valid || !frame.bytes || frame.dataSize == 0 || _videoWidth == 0 || _videoHeight == 0);
-	const BYTE* pbSrc = frame.bytes->data();
-	DWORD cbSrc = frame.dataSize;
-	GUID subtype = MFVideoFormat_NV12;
-	UINT32 width = _videoWidth;
-	UINT32 height = _videoHeight;
+	RETURN_HR_IF(E_INVALIDARG, !frame.valid || !frame.sample || _videoWidth == 0 || _videoHeight == 0);
 
-	DWORD cbExpected = (subtype == MFVideoFormat_NV12)
-		? (width * height * 3 / 2)
-		: (width * height * 4);
-	if (cbSrc < cbExpected)
-	{
-		WINTRACE(L"MediaStream::CopyRtspFrame - unexpected size mismatch: cbSrc=%u expected=%u "
-			L"(%ux%u %s) — skipping frame",
-			cbSrc, cbExpected, width, height,
-			(subtype == MFVideoFormat_NV12) ? L"NV12" : L"RGB32");
-		return S_FALSE; // caller will fall through to synthetic frame
-	}
+	wil::com_ptr_nothrow<IMFMediaBuffer> srcBuffer;
+	RETURN_IF_FAILED(frame.sample->GetBufferByIndex(0, &srcBuffer));
 
-	// Destination: D3D texture via IMF2DBuffer (from allocator). Lock2D gives us the
-	// real pitch of the GPU texture without guessing.
 	wil::com_ptr_nothrow<IMFMediaBuffer> dstBuffer;
 	RETURN_IF_FAILED_MSG(targetSample->GetBufferByIndex(0, &dstBuffer), "GetBufferByIndex");
 
-	BYTE* pbScan0 = nullptr;
-	LONG  lPitch = 0;
-	HRESULT hrCopy = S_OK;
-
-	wil::com_ptr_nothrow<IMF2DBuffer> dst2D;
-	if (SUCCEEDED(dstBuffer->QueryInterface(&dst2D)))
+	// GPU zero-copy path: both sides are DXGI textures on the shared device.
+	wil::com_ptr_nothrow<IMFDXGIBuffer> srcDxgi;
+	wil::com_ptr_nothrow<IMFDXGIBuffer> dstDxgi;
+	if (_deviceManager && _deviceHandle &&
+		SUCCEEDED(srcBuffer->QueryInterface(IID_PPV_ARGS(&srcDxgi))) &&
+		SUCCEEDED(dstBuffer->QueryInterface(IID_PPV_ARGS(&dstDxgi))))
 	{
-		hrCopy = dst2D->Lock2D(&pbScan0, &lPitch);
+		HRESULT hrGpu = CopyRtspFrameGpu(srcDxgi.get(), dstDxgi.get());
+		if (SUCCEEDED(hrGpu))
+			return S_OK;
+		WINTRACE(L"MediaStream::CopyRtspFrame - GPU copy failed 0x%08X, falling back to CPU", hrGpu);
+	}
+
+	return CopyRtspFrameCpu(srcBuffer.get(), dstBuffer.get());
+}
+
+// GPU->GPU copy of an NV12 texture. Both textures live on the device owned by the
+// Frame Server's device manager, so a same-device CopySubresourceRegion suffices.
+HRESULT MediaStream::CopyRtspFrameGpu(IMFDXGIBuffer* srcDxgi, IMFDXGIBuffer* dstDxgi)
+{
+	RETURN_HR_IF(E_NOT_VALID_STATE, !_deviceManager || !_deviceHandle);
+
+	wil::com_ptr_nothrow<ID3D11Texture2D> srcTex;
+	wil::com_ptr_nothrow<ID3D11Texture2D> dstTex;
+	UINT srcSub = 0, dstSub = 0;
+	RETURN_IF_FAILED(srcDxgi->GetResource(IID_PPV_ARGS(&srcTex)));
+	RETURN_IF_FAILED(srcDxgi->GetSubresourceIndex(&srcSub));
+	RETURN_IF_FAILED(dstDxgi->GetResource(IID_PPV_ARGS(&dstTex)));
+	RETURN_IF_FAILED(dstDxgi->GetSubresourceIndex(&dstSub));
+
+	// LockDevice serializes access to the immediate context shared with the decoder.
+	wil::com_ptr_nothrow<ID3D11Device> device;
+	HRESULT hr = _deviceManager->LockDevice(_deviceHandle, IID_PPV_ARGS(&device), TRUE);
+	if (hr == MF_E_DXGI_NEW_VIDEO_DEVICE)
+	{
+		// The video device was reset/recreated — reopen the handle and retry once.
+		_deviceManager->CloseDeviceHandle(_deviceHandle);
+		_deviceHandle = nullptr;
+		RETURN_IF_FAILED(_deviceManager->OpenDeviceHandle(&_deviceHandle));
+		hr = _deviceManager->LockDevice(_deviceHandle, IID_PPV_ARGS(&device), TRUE);
+	}
+	RETURN_IF_FAILED(hr);
+
+	// No early returns between LockDevice success and UnlockDevice.
+	wil::com_ptr_nothrow<ID3D11DeviceContext> ctx;
+	device->GetImmediateContext(&ctx);
+	ctx->CopySubresourceRegion(dstTex.get(), dstSub, 0, 0, 0, srcTex.get(), srcSub, nullptr);
+	ctx->Flush();
+
+	_deviceManager->UnlockDevice(_deviceHandle, FALSE);
+	return S_OK;
+}
+
+// Single-copy CPU fallback. Handles a padded source (IMF2DBuffer) without an
+// intermediate contiguous buffer, copying straight into the dest with MFCopyImage.
+HRESULT MediaStream::CopyRtspFrameCpu(IMFMediaBuffer* srcBuffer, IMFMediaBuffer* dstBuffer)
+{
+	const UINT32 width = _videoWidth;
+	const UINT32 height = _videoHeight;
+	const DWORD cbExpected = width * height * 3 / 2; // NV12
+
+	// Source: prefer the 2D view to honor the decoder's real pitch; fall back to a flat lock.
+	BYTE* pbSrc = nullptr;
+	LONG srcPitch = (LONG)width;
+	DWORD cbSrc = 0;
+	wil::com_ptr_nothrow<IMF2DBuffer> src2D;
+	bool srcLocked2D = false;
+	if (SUCCEEDED(srcBuffer->QueryInterface(IID_PPV_ARGS(&src2D))) &&
+		SUCCEEDED(src2D->Lock2D(&pbSrc, &srcPitch)))
+	{
+		srcLocked2D = true;
+	}
+	else
+	{
+		RETURN_IF_FAILED(srcBuffer->Lock(&pbSrc, nullptr, &cbSrc));
+		if (cbSrc < cbExpected)
+		{
+			srcBuffer->Unlock();
+			WINTRACE(L"MediaStream::CopyRtspFrameCpu - size mismatch cbSrc=%u expected=%u (%ux%u) - skipping",
+				cbSrc, cbExpected, width, height);
+			return S_FALSE; // caller falls through to synthetic frame
+		}
+	}
+
+	auto unlockSrc = [&]() {
+		if (srcLocked2D) src2D->Unlock2D();
+		else srcBuffer->Unlock();
+	};
+
+	// Destination: D3D texture via IMF2DBuffer gives the real GPU pitch; else flat copy.
+	HRESULT hrCopy = S_OK;
+	BYTE* pbScan0 = nullptr;
+	LONG  dstPitch = 0;
+	wil::com_ptr_nothrow<IMF2DBuffer> dst2D;
+	if (SUCCEEDED(dstBuffer->QueryInterface(IID_PPV_ARGS(&dst2D))))
+	{
+		hrCopy = dst2D->Lock2D(&pbScan0, &dstPitch);
 		if (SUCCEEDED(hrCopy))
 		{
-			if (subtype == MFVideoFormat_NV12)
-			{
-				WINTRACE("NV12 frame: src cb=%u, dst pitch=%d, %ux%u",
-					cbSrc, lPitch, width, height);
-				// Y plane: height rows of width bytes each.
-				MFCopyImage(pbScan0, lPitch,
-					pbSrc, (LONG)width,
-					width, height);
-				// UV plane: half height. Src offset = Y plane size.
-				MFCopyImage(pbScan0 + lPitch * (LONG)height, lPitch,
-					pbSrc + width * height, (LONG)width,
-					width, height / 2);
-			}
-			else // RGB32
-			{
-				DWORD cbRow = width * 4;
-				MFCopyImage(pbScan0, lPitch, pbSrc, (LONG)cbRow, cbRow, height);
-				WINTRACE("RGB32 frame: src cb=%u, dst pitch=%d, %ux%u",
-					cbSrc, lPitch, width, height);
-			}
+			// Y plane: height rows of width bytes.
+			MFCopyImage(pbScan0, dstPitch, pbSrc, srcPitch, width, height);
+			// UV plane: half height. Src UV follows the Y plane at srcPitch * height.
+			MFCopyImage(pbScan0 + dstPitch * (LONG)height, dstPitch,
+				pbSrc + srcPitch * (LONG)height, srcPitch,
+				width, height / 2);
 			dst2D->Unlock2D();
-			DWORD cbFull = (subtype == MFVideoFormat_NV12)
-				? (width * height * 3 / 2)
-				: (width * height * 4);
-			dstBuffer->SetCurrentLength(cbFull);
+			dstBuffer->SetCurrentLength(cbExpected);
 		}
 	}
 	else
 	{
-		// System-memory fallback (no D3D — rare).
-		WINTRACE("SYS memory frame: src cb=%u, %ux%u", cbSrc, width, height);
 		BYTE* pbDst = nullptr; DWORD cbDstMax = 0;
 		hrCopy = dstBuffer->Lock(&pbDst, &cbDstMax, nullptr);
 		if (SUCCEEDED(hrCopy))
 		{
-			DWORD cb = min(cbSrc, cbDstMax);
-			CopyMemory(pbDst, pbSrc, cb);
+			DWORD cb = min(cbExpected, cbDstMax);
+			MFCopyImage(pbDst, (LONG)width, pbSrc, srcPitch, width, height);
+			MFCopyImage(pbDst + width * height, (LONG)width,
+				pbSrc + srcPitch * (LONG)height, srcPitch,
+				width, height / 2);
 			dstBuffer->Unlock();
 			dstBuffer->SetCurrentLength(cb);
 		}
 	}
 
-	if (FAILED(hrCopy))
-	{
-		//WINTRACE(L"MediaStream::CopyRtspFrame - copy failed: 0x%08X", hrCopy);
-		return hrCopy;
-	}
-	return S_OK;
+	unlockSrc();
+	return hrCopy;
 }
 
 HRESULT MediaStream::Start(IMFMediaType* type)
@@ -270,6 +325,20 @@ HRESULT MediaStream::SetD3DManager(IUnknown* manager)
 
 	_allocator->SetDirectXManager(manager);
 	_dxgiManager = manager;  // Store for later use with color converter
+
+	// Cache the device manager + an open device handle so RequestSample can do a
+	// GPU->GPU CopySubresourceRegion without re-resolving the device every frame.
+	if (_deviceManager && _deviceHandle)
+	{
+		_deviceManager->CloseDeviceHandle(_deviceHandle);
+		_deviceHandle = nullptr;
+	}
+	_deviceManager.reset();
+	if (SUCCEEDED(manager->QueryInterface(IID_PPV_ARGS(&_deviceManager))))
+	{
+		LOG_IF_FAILED(_deviceManager->OpenDeviceHandle(&_deviceHandle));
+	}
+
 	LOG_IF_FAILED(_frameGenerator.SetD3DManager(manager, _videoWidth, _videoHeight));
 	return S_OK;
 }
@@ -306,6 +375,13 @@ void MediaStream::Shutdown()
 		LOG_IF_FAILED_MSG(_queue->Shutdown(), "Queue shutdown failed");
 		_queue.reset();
 	}
+
+	if (_deviceManager && _deviceHandle)
+	{
+		LOG_IF_FAILED(_deviceManager->CloseDeviceHandle(_deviceHandle));
+		_deviceHandle = nullptr;
+	}
+	_deviceManager.reset();
 
 	_descriptor.reset();
 	_source.reset();

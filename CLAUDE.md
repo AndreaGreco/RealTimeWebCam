@@ -139,6 +139,17 @@ Start()              →     IMFVirtualCamera::Start()   →   ActivateObject()
 
 ---
 
+## Frame copy path (latency-critical)
+
+The decoded RTSP frame reaches the consumer's sample through `MediaStream::CopyRtspFrame`, which has two paths:
+
+- **GPU zero-copy (hot path)** — `CopyRtspFrameGpu`. When the source reader is given the Frame Server's `IMFDXGIDeviceManager` (via `MF_SOURCE_READER_D3D_MANAGER`), the H.264/H.265 decoder runs on the GPU (DXVA) and emits NV12 textures. Both the source and the allocator-provided destination buffers are `IMFDXGIBuffer` on the **same** D3D11 device, so the copy is a single `ID3D11DeviceContext::CopySubresourceRegion` — **no CPU copy, no allocation**. The shared immediate context is serialized with `IMFDXGIDeviceManager::LockDevice/UnlockDevice`; `MF_E_DXGI_NEW_VIDEO_DEVICE` triggers a handle reopen + one retry.
+- **CPU fallback** — `CopyRtspFrameCpu`. Used during pipeline warmup or when HW decode is unavailable (source buffer is system memory, not a DXGI texture). A **single** `MFCopyImage` (Y + UV planes) straight from the source MF buffer into the destination — no intermediate `std::vector`. Honors the decoder's real source pitch via `IMF2DBuffer::Lock2D`.
+
+`RtspFrameSnapshot` carries the decoded `IMFSample` by reference (AddRef), not a pixel copy — `RtspSessionManager::TryGetLatestFrame` holds the session lock only long enough to grab that reference. The D3D device manager flows from `VCamMediaSource::SetD3DManager` → `RtspSessionManager::SetD3DManager` (for the reader) and → each `MediaStream::SetD3DManager` (which opens a cached device handle for the copy). **`SetD3DManager` must arrive before `RtspSessionManager::Start()`** for the GPU path to engage; otherwise the reader runs in system memory and the CPU fallback is used. Check the `WINTRACE` in `RtspSessionManager::Start` to confirm which path is active.
+
+---
+
 ## Known bugs
 
 | # | Severity | File / Location | Description |
