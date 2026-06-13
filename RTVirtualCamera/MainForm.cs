@@ -44,7 +44,7 @@ namespace RTVirtualCamera
         {
             statsLabel = new Label
             {
-                Dock = DockStyle.Bottom,
+                Dock = DockStyle.Top,
                 Height = 22,
                 TextAlign = ContentAlignment.MiddleLeft,
                 BackColor = Color.Black,
