@@ -495,17 +495,10 @@ STDMETHODIMP_(NTSTATUS) VCamMediaSource::KsProperty(PKSPROPERTY property, ULONG 
 
 		WINTRACE(L"VCamMediaSource::KsProperty - RTSP URL received: %s", newUrl.c_str());
 
-		// Propagate to all streams (in case Start() was already called)
-#if 0
-		for (auto& stream : _streams)
-		{
-			if (stream)
-				stream->SetRTSPUrl(_rtspUrl.c_str());
-		}
-#endif
-
+		// Runtime URL update via KsProperty not yet implemented.
+		// Config is passed at Start() time via IMFVirtualCamera attributes.
 		*bytesReturned = 0;
-		return S_OK;
+		return HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED);
 	}
 
 	return HRESULT_FROM_WIN32(ERROR_SET_NOT_FOUND);

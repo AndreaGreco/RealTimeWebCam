@@ -73,6 +73,7 @@ private:
 	wil::com_ptr_nothrow<IMFMediaEventQueue> _queue;
 	wil::com_ptr_nothrow<IMFMediaSource> _source;
 	wil::com_ptr_nothrow<IMFVideoSampleAllocatorEx> _allocator;
+	wil::com_ptr_nothrow<IMFMediaType> _currentType; // cached from last Start(), used by SetStreamState(RUNNING)
 	wil::com_ptr_nothrow<IUnknown> _dxgiManager;
 	int _index;
 

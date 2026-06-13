@@ -160,14 +160,25 @@ RtspSessionState RtspSessionManager::GetState() const
 
 HRESULT RtspSessionManager::TryGetLatestFrame(RtspFrameSnapshot& frame)
 {
-	winrt::slim_lock_guard lock(_lock);
-	frame = {};
-	RETURN_HR_IF(MF_E_SHUTDOWN, !_running || !_callback);
-
 	wil::com_ptr_nothrow<IMFSample> sample;
-	HRESULT hr = _callback->TakeLatestSample(&sample);
-	if (FAILED(hr) || !sample)
-		return hr;
+	UINT32 stride = 0;
+	UINT64 generation = 0;
+
+	// Hold lock only long enough to grab a reference to the latest sample and metadata.
+	// The actual buffer lock + memcpy happens outside so Stop()/Start() are not blocked
+	// for the full duration of a 3 MB copy at 30 fps.
+	{
+		winrt::slim_lock_guard lock(_lock);
+		frame = {};
+		RETURN_HR_IF(MF_E_SHUTDOWN, !_running || !_callback);
+
+		HRESULT hr = _callback->TakeLatestSample(&sample);
+		if (FAILED(hr) || !sample)
+			return hr;
+
+		stride = _actualStride;
+		generation = _config.generation;
+	}
 
 	wil::com_ptr_nothrow<IMFMediaBuffer> buffer;
 	RETURN_IF_FAILED(sample->ConvertToContiguousBuffer(&buffer));
@@ -184,8 +195,8 @@ HRESULT RtspSessionManager::TryGetLatestFrame(RtspFrameSnapshot& frame)
 	buffer->Unlock();
 
 	frame.valid = true;
-	frame.stride = _actualStride;
-	frame.generation = _config.generation;
+	frame.stride = stride;
+	frame.generation = generation;
 	frame.bytes = std::move(bytes);
 	frame.dataSize = dataSize;
 	sample->GetSampleTime(&frame.sampleTime);

@@ -117,32 +117,6 @@ HRESULT VirtualCamera::StartVirtualCamera()
 
 	DebugLog("StartVirtualCamera - start");
 
-	// Test: Verifica se il CLSID � registrato
-	IUnknown* pTest = nullptr;
-	HRESULT hrTest = CoCreateInstance(CLSID_VCam, nullptr, CLSCTX_INPROC_SERVER, IID_IUnknown, (void**)&pTest);
-	if (FAILED(hrTest))
-	{
-		std::ostringstream oss;
-		oss << "CoCreateInstance test failed with HRESULT: 0x" << std::hex << hrTest;
-		DebugLog(oss.str().c_str());
-		
-		if (hrTest == 0x80040154) // REGDB_E_CLASSNOTREG
-		{
-			DebugLog("ERROR: VCamSampleSource.dll is NOT registered!");
-			DebugLog("Run: regsvr32 VCamSampleSource.dll");
-		}
-		else if (hrTest == E_ACCESSDENIED)
-		{
-			DebugLog("ERROR: Access denied when creating COM object");
-			DebugLog("Try running as Administrator");
-		}
-	}
-	else
-	{
-		DebugLog("CoCreateInstance test succeeded - DLL is registered");
-		pTest->Release();
-	}
-
 	// Config attributes already set in RegisterVirtualCamera() via SetString/SetUINT32.
 	// Start with no callback: the Frame Server will forward them to MediaSource::Initialize().
 	HRESULT hr = _vcam->Start(nullptr);

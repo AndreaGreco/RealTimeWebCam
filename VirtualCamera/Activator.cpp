@@ -18,9 +18,6 @@ HRESULT Activator::Initialize()
 	hr = SetGUID(MFT_TRANSFORM_CLSID_Attribute, CLSID_VCam);
 	RETURN_IF_FAILED(hr);
 
-	// hr = vcam_media_source->Initialize(this);
-	RETURN_IF_FAILED(hr);
-
 	return S_OK;
 }
 

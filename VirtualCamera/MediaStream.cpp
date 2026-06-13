@@ -224,6 +224,7 @@ HRESULT MediaStream::Start(IMFMediaType* type)
 {
 	RETURN_HR_IF(MF_E_SHUTDOWN, !_queue || !_allocator);
 	RETURN_HR_IF_NULL(E_POINTER, type);
+	_currentType = type;
 
 	WINTRACE(L"MediaStream::Start - using descriptor config: %s %ux%u @%u/%u",
 		MFVideoFormatToString(_format).c_str(), _videoWidth, _videoHeight, _hintFpsNum, _hintFpsDen);
@@ -392,7 +393,7 @@ STDMETHODIMP MediaStream::RequestSample(IUnknown* pToken)
 	}
 	RETURN_IF_FAILED(hr);
 	RETURN_IF_FAILED(sample->SetSampleTime(MFGetSystemTime()));
-	RETURN_IF_FAILED(sample->SetSampleDuration(333333));
+	RETURN_IF_FAILED(sample->SetSampleDuration((10000000LL * _hintFpsDen) / max(1u, _hintFpsNum)));
 
 	wil::com_ptr_nothrow<IMFSample> outSample;
 	RtspSessionState rtspState = _rtspManager ? _rtspManager->GetState() : RtspSessionState::Stopped;
@@ -445,7 +446,7 @@ STDMETHODIMP MediaStream::SetStreamState(MF_STREAM_STATE value)
 		break;
 
 	case MF_STREAM_STATE_RUNNING:
-		RETURN_IF_FAILED(Start(nullptr));
+		RETURN_IF_FAILED(Start(_currentType.get()));
 		break;
 
 	case MF_STREAM_STATE_STOPPED:
