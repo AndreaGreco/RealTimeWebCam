@@ -31,6 +31,7 @@ namespace RTVirtualCamera
             ApplyLocalizedTexts();
             InitializeVideoPlayer();
             videoPanel.Resize += VideoPanel_Resize;
+            Shown += MainForm_Shown;
         }
 
 
@@ -493,15 +494,55 @@ namespace RTVirtualCamera
         {
             Settings.Load();
             this.pathTextBox.Text = Settings.Current.RtspURL?.ToString() ?? "rtsp://example.io:1234/webcam";
+            // Autostart is handled in MainForm_Shown (after the window is visible) on a
+            // background thread, so an unreachable source never blocks the UI thread.
+        }
 
-            if (Settings.Current.RtspURL?.ToString() != null && Settings.Current.AutoStart)
+        // Runs after the window is first shown. If autostart is configured, probe the
+        // source on a background thread and only touch the UI via BeginInvoke. No
+        // async/await — a single fire-and-forget worker keeps the UI thread free.
+        private void MainForm_Shown(object sender, EventArgs e)
+        {
+            if (Settings.Current.RtspURL == null || !Settings.Current.AutoStart)
+                return;
+
+            string path = pathTextBox.Text;
+            if (string.IsNullOrWhiteSpace(path))
+                return;
+
+            IntPtr previewHandle = videoPanel.Handle; // must be read on the UI thread
+
+            System.Threading.Thread worker = new System.Threading.Thread(delegate ()
             {
-                bool activated = this.StartPreviewFromPath();
-                if (activated)
+                SourceProbeResult probe = ProbeSource(path, previewHandle);
+
+                if (IsDisposed || !IsHandleCreated)
+                    return;
+
+                try
                 {
-                    startVCamButton.Enabled = true;
+                    BeginInvoke((Action)delegate ()
+                    {
+                        if (!probe.Success)
+                        {
+                            SetPreviewStatus(AppStrings.Get("Preview_Inactive"));
+                            ShowFriendlyError(AppStrings.Get("Source_Unavailable_Title"), probe.UserMessage, probe.TechnicalDetails);
+                            return;
+                        }
+
+                        ApplyStreamInfo(probe.Streams);
+                        if (StartPreviewFromPath())
+                            startVCamButton.Enabled = true;
+                    });
                 }
-            }
+                catch (InvalidOperationException)
+                {
+                    // Window was closed between the IsHandleCreated check and BeginInvoke — ignore.
+                }
+            });
+            worker.IsBackground = true;
+            worker.Name = "AutostartProbe";
+            worker.Start();
         }
 
         private void exitToolStripMenuItem_Click(object sender, EventArgs e)
