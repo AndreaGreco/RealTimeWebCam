@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
-VisualStudioVersion = 18.6.11822.322 stable
+VisualStudioVersion = 18.6.11822.322
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MFPipeline", "MFPipeline\MFPipeline.vcxproj", "{4E2A38E1-FDFE-43AB-8D43-2F10A491E573}"
 EndProject
@@ -11,6 +11,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RTVirtualCamera", "RTVirtua
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "VirtualCamera", "VirtualCamera\VCamSampleSource.vcxproj", "{52FB6B93-3AA6-4369-BED4-D4BFF1F97B78}"
+EndProject
+Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "Installer", "Installer\Installer.vdproj", "{52B20422-474D-5734-629F-99A1F7DE9787}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -58,6 +60,12 @@ Global
 		{52FB6B93-3AA6-4369-BED4-D4BFF1F97B78}.Release|x64.Build.0 = Release|x64
 		{52FB6B93-3AA6-4369-BED4-D4BFF1F97B78}.Release|x86.ActiveCfg = Release|Win32
 		{52FB6B93-3AA6-4369-BED4-D4BFF1F97B78}.Release|x86.Build.0 = Release|Win32
+		{52B20422-474D-5734-629F-99A1F7DE9787}.Debug|ARM64.ActiveCfg = Debug
+		{52B20422-474D-5734-629F-99A1F7DE9787}.Debug|x64.ActiveCfg = Debug
+		{52B20422-474D-5734-629F-99A1F7DE9787}.Debug|x86.ActiveCfg = Debug
+		{52B20422-474D-5734-629F-99A1F7DE9787}.Release|ARM64.ActiveCfg = Release
+		{52B20422-474D-5734-629F-99A1F7DE9787}.Release|x64.ActiveCfg = Release
+		{52B20422-474D-5734-629F-99A1F7DE9787}.Release|x86.ActiveCfg = Release
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
