@@ -1,0 +1,38 @@
+// Version resource for MFPipeline.dll.
+// FILE/PRODUCT version come from build/Version.g.h, generated from git by
+// build/Set-GitVersion.ps1 (regenerated before each build). Do not hardcode.
+#include <winres.h>
+#include "..\build\Version.g.h"
+
+VS_VERSION_INFO VERSIONINFO
+  FILEVERSION    VER_FILEVERSION
+  PRODUCTVERSION VER_PRODUCTVERSION
+  FILEFLAGSMASK  0x3fL
+#ifdef _DEBUG
+  FILEFLAGS 0x1L
+#else
+  FILEFLAGS 0x0L
+#endif
+  FILEOS 0x40004L
+  FILETYPE 0x2L
+  FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName",      "Andrea Greco"
+            VALUE "FileDescription",  "RTVirtualCamera Media Foundation bridge"
+            VALUE "FileVersion",      VER_FILEVERSION_STR
+            VALUE "InternalName",     "MFPipeline.dll"
+            VALUE "LegalCopyright",   "Copyright (C) 2026 Andrea Greco. MIT License."
+            VALUE "OriginalFilename", "MFPipeline.dll"
+            VALUE "ProductName",      "RTVirtualCamera"
+            VALUE "ProductVersion",   VER_PRODUCTVERSION_STR
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

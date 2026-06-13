@@ -7,4 +7,5 @@
     <ProjectReference Include="..\RTVirtualCamera\RTVirtualCamera.csproj" />
     <ProjectReference Include="..\VirtualCamera\VCamSampleSource.vcxproj" />
   </ItemGroup>
+  <Import Project="..\build\GitVersion.targets" />
 </Project>

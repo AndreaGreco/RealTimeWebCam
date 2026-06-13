@@ -398,3 +398,8 @@ FodyWeavers.xsd
 *.sln.iml
 /c9.bat
 /cr9.bat
+
+# Generated version files (derived from git at build time)
+/build/Version.g.cs
+/build/Version.g.h
+/Setup/Version.g.wxi

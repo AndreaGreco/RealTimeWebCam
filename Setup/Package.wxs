@@ -1,9 +1,12 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
 	 xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
 
+	<!-- BuildVersion is generated from git into Version.g.wxi (build/Set-GitVersion.ps1). -->
+	<?include Version.g.wxi ?>
+
 	<Package Name="RTVirtualCamera"
 			 Manufacturer="RTVirtualCamera"
-			 Version="1.0.0"
+			 Version="$(BuildVersion)"
 			 InstallerVersion="500"
 			 UpgradeCode="e562ae5c-6739-11f1-a64b-80fa5b84a72b"
 			 Compressed="yes"

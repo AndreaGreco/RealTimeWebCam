@@ -1,0 +1,15 @@
+<Project>
+  <!--
+    Regenerates the git-derived version artifacts before each build. Imported by
+    every component project. Runs early enough that the generated files exist
+    before the C# compile, the RC compile and the WiX preprocessor run.
+    ContinueOnError so a git hiccup never blocks the build (the script emits a
+    0.0.0 fallback instead).
+  -->
+  <Target Name="SetGitVersion"
+          BeforeTargets="PrepareForBuild;BeforeBuild;BeforeCompile;CoreCompile;ResourceCompile;ClCompile">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)Set-GitVersion.ps1&quot;"
+          WorkingDirectory="$(MSBuildThisFileDirectory)"
+          ContinueOnError="true" />
+  </Target>
+</Project>
