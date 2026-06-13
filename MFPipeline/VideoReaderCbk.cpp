@@ -4,8 +4,14 @@
 #include <string>
 #include <stdio.h>
 
-/* Frame aviable for the pipeline */
-#define SAMPLE_ALLOCATOR_COUNT 100
+// Depth of the EVR sample pool. This bounds how many decoded frames can be
+// in-flight/queued in the renderer at once. The EVR honors each sample's
+// presentation time against the presentation clock, so a deep pool lets a live
+// stream accumulate a multi-second backlog that never drains (latency that
+// "grows over time"). Keep it tiny for a live preview: when the pool is empty
+// AllocateSample fails and OnReadSample drops the frame, so only the freshest
+// frames reach the screen. ~3 = triple buffer; raise to 4-5 only if you see stutter.
+#define SAMPLE_ALLOCATOR_COUNT 3
 
 VideoReaderCall::VideoReaderCall(IMFStreamSink* pSink) : m_pStreamSink(pSink), m_width(0), m_height(0) {
     InitializeCriticalSection(&m_lock);
@@ -169,6 +175,15 @@ HRESULT VideoReaderCall::AllocateInternalBuffer(IMFMediaType* SinkMediaType, IMF
         pReader->AddRef();
         this->pReader = pReader;
         m_shutdown = 0;
+
+        // Reset live stats for the new playback session.
+        m_statReceived = 0;
+        m_statRendered = 0;
+        m_statDropped = 0;
+        m_driftMs = 0.0;
+        m_driftBaseSet = false;
+        m_lastRenderTick = 0;
+        m_lastRenderCostMs = 0;
         LeaveCriticalSection(&m_lock);
     }
 
@@ -214,18 +229,57 @@ HRESULT VideoReaderCall::AllocateInternalBuffer(IMFMediaType* SinkMediaType, IMF
     return S_OK;
 }
 
+// Snapshot the live preview stats for the UI. Lock-protected; safe to call from
+// any thread while OnReadSample runs on the source reader's worker thread.
+void VideoReaderCall::GetStats(PreviewStats* pStats)
+{
+    if (!pStats)
+        return;
+
+    EnterCriticalSection(&m_lock);
+    pStats->receivedFrames = m_statReceived;
+    pStats->renderedFrames = m_statRendered;
+    pStats->droppedFrames = m_statDropped;
+    pStats->driftMs = m_driftMs;
+    pStats->lastRenderMs = (double)m_lastRenderCostMs;
+    LeaveCriticalSection(&m_lock);
+}
+
+// Wire the EVR's presentation clock so OnReadSample can stamp each frame with
+// "now" instead of the source PTS (see OnReadSample for why). Ref-counted; the
+// reference is dropped in Shutdown()/destructor.
+void VideoReaderCall::SetPresentationClock(IMFPresentationClock* pClock)
+{
+    EnterCriticalSection(&m_lock);
+    if (m_pClock) {
+        m_pClock->Release();
+        m_pClock = nullptr;
+    }
+    m_pClock = pClock;
+    if (m_pClock) {
+        m_pClock->AddRef();
+    }
+    LeaveCriticalSection(&m_lock);
+}
+
 void VideoReaderCall::Shutdown()
 {
     IMFSourceReader* readerToRelease = nullptr;
+    IMFPresentationClock* clockToRelease = nullptr;
 
     EnterCriticalSection(&m_lock);
     m_shutdown = 1;
     readerToRelease = pReader;
     pReader = nullptr;
+    clockToRelease = m_pClock;
+    m_pClock = nullptr;
     LeaveCriticalSection(&m_lock);
 
     if (readerToRelease) {
         readerToRelease->Release();
+    }
+    if (clockToRelease) {
+        clockToRelease->Release();
     }
 }
 
@@ -247,7 +301,7 @@ STDMETHODIMP_(ULONG) VideoReaderCall::Release() {
     return uCount;
 }
 
-// Callback chiamato quando un frame è pronto dal decoder
+// Callback chiamato quando un frame ï¿½ pronto dal decoder
 STDMETHODIMP VideoReaderCall::OnReadSample(HRESULT hrStatus,
     DWORD dwStreamIndex,
     DWORD dwStreamFlags,
@@ -257,10 +311,21 @@ STDMETHODIMP VideoReaderCall::OnReadSample(HRESULT hrStatus,
     HRESULT ret;
     IMFSourceReader* readerForNextSample = nullptr;
 
+    // Default to the source PTS; overwritten with the live clock time below if a
+    // presentation clock is wired. Read under the lock (GetTime is cheap) so we
+    // don't have to hold an extra ref across the function.
+    LONGLONG presentTime = llTimestamp;
+
     EnterCriticalSection(&m_lock);
     if (!m_shutdown && pReader) {
         readerForNextSample = pReader;
         readerForNextSample->AddRef();
+    }
+    if (!m_shutdown && m_pClock) {
+        MFTIME clockNow = 0;
+        if (SUCCEEDED(m_pClock->GetTime(&clockNow))) {
+            presentTime = clockNow;
+        }
     }
     LeaveCriticalSection(&m_lock);
 
@@ -299,6 +364,45 @@ STDMETHODIMP VideoReaderCall::OnReadSample(HRESULT hrStatus,
         return S_OK;
     }
 
+    // Count this received frame and update the drift: how far wall-clock has run
+    // ahead of the media timeline since the first frame. Flat drift => latency is
+    // a fixed offset; rising drift => the pipeline is accumulating delay. The UI
+    // reads this via GetStats. (MF_MT_FRAME_RATE is only the nominal value; the
+    // real input rate is derived from receivedFrames by the caller.)
+    ULONGLONG nowTick = GetTickCount64();
+    EnterCriticalSection(&m_lock);
+    m_statReceived++;
+    {
+        LONGLONG ptsMs = llTimestamp / 10000; // 100ns -> ms
+        if (!m_driftBaseSet) {
+            m_driftBaseSet = true;
+            m_driftBaseTickMs = nowTick;
+            m_driftBasePtsMs = ptsMs;
+            m_driftMs = 0.0;
+        } else {
+            double wallElapsed = (double)(nowTick - m_driftBaseTickMs);
+            double mediaElapsed = (double)(ptsMs - m_driftBasePtsMs);
+            m_driftMs = wallElapsed - mediaElapsed;
+        }
+    }
+    LeaveCriticalSection(&m_lock);
+
+    // Resync / drop the excess. The expensive work below (CPU->GPU copy +
+    // ProcessSample) can't always run at the source fps; rendering every frame
+    // would make us fall behind and the RTSP source would buffer a growing
+    // backlog -> latency that climbs. Instead, while we're still inside the last
+    // frame's render budget we SKIP this frame (cheap: just pull the next one),
+    // draining the backlog and always rendering the freshest frame. Self-adapting:
+    // the cadence equals the measured render cost, so a fast machine drops nothing
+    // and a slow one drops just enough to stay in real time.
+    if (m_lastRenderTick != 0 && (nowTick - m_lastRenderTick) < m_lastRenderCostMs) {
+        EnterCriticalSection(&m_lock);
+        m_statDropped++;
+        LeaveCriticalSection(&m_lock);
+        RequestNextSample();
+        return S_OK;
+    }
+
     // Get a new D3D surface from the allocator pool
     IMFSample* pD3DSample = nullptr;
     ret = pVideoSampleAllocator->AllocateSample(&pD3DSample);
@@ -308,11 +412,16 @@ STDMETHODIMP VideoReaderCall::OnReadSample(HRESULT hrStatus,
         return ret;
     }
 
-    // Copy timing information with NORMALIZED timestamp for smooth playback
-    LONGLONG sampleDuration;
+    // Present-on-arrival. Stamp the sample with the CURRENT presentation-clock
+    // time instead of the source PTS. With the source PTS the EVR schedules each
+    // frame for its timestamp; fed faster than realtime (connect bursts / clock
+    // drift) it builds a backlog it never drains -> latency that grows over time.
+    // Stamping "now" makes the EVR render the freshest frame immediately
+    // (latest-frame-wins), bounding preview latency to ~one refresh.
+    LONGLONG sampleDuration = 0;
     pSample->GetSampleDuration(&sampleDuration);
     pD3DSample->SetSampleDuration(sampleDuration);
-    pD3DSample->SetSampleTime(llTimestamp);
+    pD3DSample->SetSampleTime(presentTime);
 
     // Get source buffer
     IMFMediaBuffer* pSrcBuffer = nullptr;
@@ -412,6 +521,21 @@ STDMETHODIMP VideoReaderCall::OnReadSample(HRESULT hrStatus,
     }
     
     pD3DSample->Release();
+
+    // Record how long this render (allocate + CPU->GPU copy + ProcessSample) took,
+    // so the pacing/drop decision above adapts to this machine. Clamp to avoid a
+    // pathological spike starving the preview. nowTick was taken just before the
+    // render work, so it doubles as the render start.
+    {
+        ULONGLONG endTick = GetTickCount64();
+        ULONGLONG cost = endTick - nowTick;
+        if (cost > 200) cost = 200;
+        m_lastRenderCostMs = cost;
+        m_lastRenderTick = endTick;
+        EnterCriticalSection(&m_lock);
+        m_statRendered++;
+        LeaveCriticalSection(&m_lock);
+    }
 
     // Request next frame asynchronously
     RequestNextSample();

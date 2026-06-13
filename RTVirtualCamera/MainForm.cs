@@ -16,6 +16,11 @@ namespace RTVirtualCamera
         private bool isVCamRunning = false;
         private StreamInfo streamInfo;
 
+        // Live preview diagnostics (preview path only — the VCam/Zoom path runs in
+        // the Frame Server process and can't be read from here).
+        private System.Windows.Forms.Timer statsTimer;
+        private Label statsLabel;
+
         private sealed class SourceProbeResult
         {
             public bool Success { get; set; }
@@ -30,8 +35,55 @@ namespace RTVirtualCamera
 
             ApplyLocalizedTexts();
             InitializeVideoPlayer();
+            InitializeStatsOverlay();
             videoPanel.Resize += VideoPanel_Resize;
             Shown += MainForm_Shown;
+        }
+
+        private void InitializeStatsOverlay()
+        {
+            statsLabel = new Label
+            {
+                Dock = DockStyle.Bottom,
+                Height = 22,
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Black,
+                ForeColor = Color.Lime,
+                Font = new Font("Consolas", 9f),
+                Text = "preview stats: --"
+            };
+            Controls.Add(statsLabel);
+            statsLabel.BringToFront();
+
+            statsTimer = new System.Windows.Forms.Timer { Interval = 500 };
+            statsTimer.Tick += StatsTimer_Tick;
+            statsTimer.Start();
+        }
+
+        private void StatsTimer_Tick(object sender, EventArgs e)
+        {
+            try
+            {
+                PreviewRates r;
+                if (videoPlayer != null && !isVCamRunning && videoPlayer.TryGetRates(out r))
+                {
+                    statsLabel.Text = string.Format(
+                        "RX {0:0.0} fps  |  render {1:0.0} fps  |  drop {2:0.0} fps  |  drift {3:+0;-0} ms  |  copy {4:0} ms",
+                        r.ReceivedFps, r.RenderedFps, r.DroppedFps, r.DriftMs, r.LastRenderMs);
+                }
+                else if (isVCamRunning)
+                {
+                    statsLabel.Text = "preview stats: n/d (camera virtuale attiva — gira nel Frame Server)";
+                }
+                else
+                {
+                    statsLabel.Text = "preview stats: anteprima non attiva";
+                }
+            }
+            catch
+            {
+                // Diagnostics only — never let a stats hiccup disturb the UI.
+            }
         }
 
 
@@ -257,6 +309,13 @@ namespace RTVirtualCamera
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
+            if (statsTimer != null)
+            {
+                statsTimer.Stop();
+                statsTimer.Dispose();
+                statsTimer = null;
+            }
+
             if (isVCamRunning && virtualCamera != null)
             {
                 try

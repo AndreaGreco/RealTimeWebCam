@@ -26,10 +26,36 @@ namespace RTVirtualCamera
         }
     }
 
+    // Mirror of MFPipeline/VideoReaderCbk.h::PreviewStats (byte-for-byte).
+    [StructLayout(LayoutKind.Sequential)]
+    public struct PreviewStats
+    {
+        public ulong receivedFrames; // delivered by the source reader
+        public ulong renderedFrames; // sent to the EVR
+        public ulong droppedFrames;  // skipped by the adaptive drop
+        public double driftMs;       // wall - media elapsed since first frame; rising => accumulating delay
+        public double lastRenderMs;  // last CPU->GPU copy + ProcessSample cost
+    }
+
+    // Live preview rates derived from two PreviewStats snapshots over wall-clock.
+    public struct PreviewRates
+    {
+        public double ReceivedFps;
+        public double RenderedFps;
+        public double DroppedFps;
+        public double DriftMs;
+        public double LastRenderMs;
+    }
+
     public class VideoPlayerWrapper : IDisposable
     {
         private IntPtr playerInstance;
         private bool disposed = false;
+
+        // Previous snapshot + timestamp for computing live fps from counter deltas.
+        private PreviewStats prevStats;
+        private long prevStatsTicks = 0;
+        private bool hasPrevStats = false;
 
         // Import delle funzioni dalla DLL C++
         [DllImport("MFPipeline.dll")]
@@ -55,6 +81,9 @@ namespace RTVirtualCamera
             [Out] StreamInfo[] infos,
             uint maxCount,
             out uint writtenCount);
+
+        [DllImport("MFPipeline.dll")]
+        private static extern int GetPreviewStats(IntPtr player, out PreviewStats stats);
 
         [DllImport("MFPipeline.dll")]
         private static extern void SetWindowHandle(IntPtr player, IntPtr hwnd);
@@ -126,6 +155,50 @@ namespace RTVirtualCamera
             }
 
             return outs;
+        }
+
+        // Raw counters snapshot from the native preview path.
+        public bool TryGetStats(out PreviewStats stats)
+        {
+            stats = default(PreviewStats);
+            if (disposed)
+                return false;
+
+            return GetPreviewStats(playerInstance, out stats) == 0;
+        }
+
+        // Live rates: call on a UI timer. fps are derived from counter deltas
+        // since the previous call, so the cadence of your timer sets the window.
+        public bool TryGetRates(out PreviewRates rates)
+        {
+            rates = default(PreviewRates);
+
+            PreviewStats now;
+            if (!TryGetStats(out now))
+            {
+                hasPrevStats = false;
+                return false;
+            }
+
+            long nowTicks = DateTime.UtcNow.Ticks;
+            rates.DriftMs = now.driftMs;
+            rates.LastRenderMs = now.lastRenderMs;
+
+            if (hasPrevStats)
+            {
+                double secs = (nowTicks - prevStatsTicks) / (double)TimeSpan.TicksPerSecond;
+                if (secs > 0.0)
+                {
+                    rates.ReceivedFps = (now.receivedFrames - prevStats.receivedFrames) / secs;
+                    rates.RenderedFps = (now.renderedFrames - prevStats.renderedFrames) / secs;
+                    rates.DroppedFps = (now.droppedFrames - prevStats.droppedFrames) / secs;
+                }
+            }
+
+            prevStats = now;
+            prevStatsTicks = nowTicks;
+            hasPrevStats = true;
+            return true;
         }
 
         public void SetWindowHandle(IntPtr windowHandle)

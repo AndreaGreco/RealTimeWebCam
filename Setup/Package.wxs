@@ -1,0 +1,86 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+	 xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+	<Package Name="RTVirtualCamera"
+			 Manufacturer="RTVirtualCamera"
+			 Version="1.0.0"
+			 InstallerVersion="500"
+			 UpgradeCode="e562ae5c-6739-11f1-a64b-80fa5b84a72b"
+			 Compressed="yes"
+			 >
+
+		<!-- Embed the cab inside the MSI so the installer is a single file -->
+		<MediaTemplate EmbedCab="yes" />
+
+		<StandardDirectory Id="ProgramFiles64Folder">
+			<Directory Id="INSTALLFOLDER" Name="RTVirtualCamera">
+				<!-- COM DLL: esplicita perche' serve la registrazione <Class>.
+				     Tutto il resto dell'app viene raccolto da <Files> qui sotto. -->
+				<Component Id="CameraCOM">
+					<File Id="VCamComDll" Source="$(var.VCamSampleSource.TargetPath)" />
+					<Class Id="3CAD447D-F283-4AF4-A3B2-6F5363309F52"
+						Context="InprocServer32"
+						ThreadingModel="both"
+						Description="Virtual Camera COM object"
+						Server="VCamComDll"
+						   />
+				</Component>
+			</Directory>
+		</StandardDirectory>
+
+		<!-- App C# + dipendenze gestite + risorse localizzate.
+		     Raccolte dalla cartella di output del progetto (bin condivisa dai 3 progetti),
+		     escludendo gli artefatti di build, i log e la VirtualCamera.dll (gia' esplicita). -->
+		<ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+			<Files Include="$(var.RTVirtualCamera.TargetDir)**">
+				<Exclude Files="$(var.RTVirtualCamera.TargetDir)**\*.pdb" />
+				<Exclude Files="$(var.RTVirtualCamera.TargetDir)**\*.lib" />
+				<Exclude Files="$(var.RTVirtualCamera.TargetDir)**\*.exp" />
+				<Exclude Files="$(var.RTVirtualCamera.TargetDir)**\*.metagen" />
+				<Exclude Files="$(var.RTVirtualCamera.TargetDir)**\*.xml" />
+				<Exclude Files="$(var.RTVirtualCamera.TargetDir)**\*.log" />
+				<Exclude Files="$(var.RTVirtualCamera.TargetDir)**\settings.json" />
+				<Exclude Files="$(var.RTVirtualCamera.TargetDir)VirtualCamera.dll" />
+			</Files>
+		</ComponentGroup>
+
+		<!-- Optional desktop shortcut (own component so it can be a selectable feature) -->
+		<StandardDirectory Id="DesktopFolder">
+			<Component Id="DesktopShortcut" Guid="*">
+				<Shortcut Id="AppDesktopShortcut"
+						  Name="RTVirtualCamera"
+						  Description="RTSP Virtual Camera"
+						  Target="[INSTALLFOLDER]RTVirtualCamera.exe"
+						  WorkingDirectory="INSTALLFOLDER" />
+				<RegistryValue Root="HKCU"
+							   Key="Software\RTVirtualCamera"
+							   Name="DesktopShortcut"
+							   Type="integer"
+							   Value="1"
+							   KeyPath="yes" />
+			</Component>
+		</StandardDirectory>
+
+		<!-- MIT license shown + accepted before install -->
+		<WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
+		<ui:WixUI Id="WixUI_FeatureTree" />
+
+		<!-- Main app: required. Desktop shortcut: optional, user-selectable. -->
+		<Feature Id="MainApplication"
+				 Title="RTVirtualCamera"
+				 Description="Applicazione, pipeline e camera virtuale COM."
+				 Level="1"
+				 AllowAbsent="no"
+				 Display="expand">
+			<ComponentGroupRef Id="AppFiles" />
+			<ComponentRef Id="CameraCOM" />
+
+			<Feature Id="DesktopShortcut"
+					 Title="Collegamento sul desktop"
+					 Description="Crea un'icona sul desktop per avviare RTVirtualCamera."
+					 Level="1">
+				<ComponentRef Id="DesktopShortcut" />
+			</Feature>
+		</Feature>
+	</Package>
+</Wix>

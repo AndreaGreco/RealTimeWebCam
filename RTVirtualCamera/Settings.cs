@@ -11,7 +11,16 @@ namespace RTVirtualCamera
     {
         private static string FileName
         {
-            get { return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "settings.json"); }
+            get
+            {
+                // %LOCALAPPDATA%\RTVirtualCamera — the install dir (Program Files)
+                // is not writable for standard users.
+                string dir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "RTVirtualCamera");
+                Directory.CreateDirectory(dir); // idempotent
+                return Path.Combine(dir, "settings.json");
+            }
         }
 
         public static Settings Current { get; private set; } = new Settings();

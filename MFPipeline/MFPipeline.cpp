@@ -103,6 +103,15 @@ extern "C" {
 		return -1;
 	}
 
+	__declspec(dllexport) int GetPreviewStats(VideoPlayer* player, PreviewStats* stats)
+	{
+		if (player)
+		{
+			return player->getPreviewStats(stats);
+		}
+		return -1;
+	}
+
 	__declspec(dllexport) void UpdateVideoPosition(VideoPlayer* player)
 	{
 		if (player)

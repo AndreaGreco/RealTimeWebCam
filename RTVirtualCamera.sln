@@ -12,7 +12,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RTVirtualCamera", "RTVirtua
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "VirtualCamera", "VirtualCamera\VCamSampleSource.vcxproj", "{52FB6B93-3AA6-4369-BED4-D4BFF1F97B78}"
 EndProject
-Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "Installer", "Installer\Installer.vdproj", "{52B20422-474D-5734-629F-99A1F7DE9787}"
+Project("{B7DD6F7E-DEF8-4E67-B5B7-07EF123DB6F0}") = "Setup", "Setup\Setup.wixproj", "{43D12D5A-AD48-44FB-9478-5D95AE26D6C8}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -60,12 +60,18 @@ Global
 		{52FB6B93-3AA6-4369-BED4-D4BFF1F97B78}.Release|x64.Build.0 = Release|x64
 		{52FB6B93-3AA6-4369-BED4-D4BFF1F97B78}.Release|x86.ActiveCfg = Release|Win32
 		{52FB6B93-3AA6-4369-BED4-D4BFF1F97B78}.Release|x86.Build.0 = Release|Win32
-		{52B20422-474D-5734-629F-99A1F7DE9787}.Debug|ARM64.ActiveCfg = Debug
-		{52B20422-474D-5734-629F-99A1F7DE9787}.Debug|x64.ActiveCfg = Debug
-		{52B20422-474D-5734-629F-99A1F7DE9787}.Debug|x86.ActiveCfg = Debug
-		{52B20422-474D-5734-629F-99A1F7DE9787}.Release|ARM64.ActiveCfg = Release
-		{52B20422-474D-5734-629F-99A1F7DE9787}.Release|x64.ActiveCfg = Release
-		{52B20422-474D-5734-629F-99A1F7DE9787}.Release|x86.ActiveCfg = Release
+		{43D12D5A-AD48-44FB-9478-5D95AE26D6C8}.Debug|ARM64.ActiveCfg = Debug|ARM64
+		{43D12D5A-AD48-44FB-9478-5D95AE26D6C8}.Debug|ARM64.Build.0 = Debug|ARM64
+		{43D12D5A-AD48-44FB-9478-5D95AE26D6C8}.Debug|x64.ActiveCfg = Debug|x64
+		{43D12D5A-AD48-44FB-9478-5D95AE26D6C8}.Debug|x64.Build.0 = Debug|x64
+		{43D12D5A-AD48-44FB-9478-5D95AE26D6C8}.Debug|x86.ActiveCfg = Debug|x86
+		{43D12D5A-AD48-44FB-9478-5D95AE26D6C8}.Debug|x86.Build.0 = Debug|x86
+		{43D12D5A-AD48-44FB-9478-5D95AE26D6C8}.Release|ARM64.ActiveCfg = Release|ARM64
+		{43D12D5A-AD48-44FB-9478-5D95AE26D6C8}.Release|ARM64.Build.0 = Release|ARM64
+		{43D12D5A-AD48-44FB-9478-5D95AE26D6C8}.Release|x64.ActiveCfg = Release|x64
+		{43D12D5A-AD48-44FB-9478-5D95AE26D6C8}.Release|x64.Build.0 = Release|x64
+		{43D12D5A-AD48-44FB-9478-5D95AE26D6C8}.Release|x86.ActiveCfg = Release|x86
+		{43D12D5A-AD48-44FB-9478-5D95AE26D6C8}.Release|x86.Build.0 = Release|x86
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

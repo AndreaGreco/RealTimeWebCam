@@ -8,6 +8,9 @@
 #include <combaseapi.h>
 #include <evr.h>
 #include <guiddef.h>
+#include <mftransform.h>
+// Note: ICodecAPI / CODECAPI_* come in transitively via strmif.h here; including
+// <icodecapi.h> as well causes a CodecAPIEventData redefinition (C2011).
 #include <ios>
 #include <mfapi.h>
 #include <mfidl.h>
@@ -130,6 +133,52 @@ void ConfigureSourceForLowLatency(IMFMediaSource* pSource)
 		DebugLog("Network source configured with minimal buffering (0ms)");
 		SAFE_RELEASE(pSourceConfig);
 	}
+}
+
+/**
+* Force any decoder MFT in the reader's video stream into low-latency mode.
+* MF_LOW_LATENCY on the reader is not always honored by the decoder, which can
+* keep a multi-frame buffer. Setting CODECAPI_AVLowLatencyMode directly on the
+* decoder collapses it. GUID defined locally to avoid a codec-API GUID lib link.
+* Harmless if the decoder does not expose ICodecAPI.
+*/
+static void ApplyDecoderLowLatency(IMFSourceReader* pReader)
+{
+	// CODECAPI_AVLowLatencyMode {9C27891A-ED7A-40E1-88E8-B22727A024EE}
+	static const GUID kAVLowLatencyMode =
+		{ 0x9c27891a, 0xed7a, 0x40e1, { 0x88, 0xe8, 0xb2, 0x27, 0x27, 0xa0, 0x24, 0xee } };
+
+	IMFSourceReaderEx* pReaderEx = nullptr;
+	if (FAILED(pReader->QueryInterface(IID_PPV_ARGS(&pReaderEx))) || !pReaderEx)
+	{
+		DebugLog("ApplyDecoderLowLatency - IMFSourceReaderEx unavailable, skipping");
+		return;
+	}
+
+	for (DWORD i = 0; ; i++)
+	{
+		GUID category = GUID_NULL;
+		IMFTransform* pMft = nullptr;
+		if (FAILED(pReaderEx->GetTransformForStream(MF_SOURCE_READER_FIRST_VIDEO_STREAM, i, &category, &pMft)) || !pMft)
+			break;
+
+		ICodecAPI* pCodec = nullptr;
+		if (SUCCEEDED(pMft->QueryInterface(IID_PPV_ARGS(&pCodec))) && pCodec)
+		{
+			VARIANT v;
+			VariantInit(&v);
+			v.vt = VT_BOOL;
+			v.boolVal = VARIANT_TRUE;
+			HRESULT hr = pCodec->SetValue(&kAVLowLatencyMode, &v);
+			char msg[128];
+			snprintf(msg, sizeof(msg), "ApplyDecoderLowLatency - transform %lu SetValue: 0x%08X", i, hr);
+			DebugLog(msg);
+			pCodec->Release();
+		}
+		pMft->Release();
+	}
+
+	pReaderEx->Release();
 }
 
 /**
@@ -452,6 +501,18 @@ HRESULT CreateNV12VideoOutputType(IMFMediaType* pSourceType, IMFMediaType** ppOu
 		return hr;
 	}
 
+	return S_OK;
+}
+
+int VideoPlayer::getPreviewStats(PreviewStats* pStats)
+{
+	if (!pStats)
+		return E_INVALIDARG;
+
+	if (!videoReaderCallback)
+		return E_FAIL;
+
+	videoReaderCallback->GetStats(pStats);
 	return S_OK;
 }
 
@@ -1020,6 +1081,13 @@ HRESULT VideoPlayer::SetupPresentationClock()
 		return hr;
 	}
 
+	// Hand the clock to the reader callback so it stamps frames "now" (present-on-
+	// arrival) rather than honoring the source PTS, which would let the EVR queue.
+	if (videoReaderCallback)
+	{
+		videoReaderCallback->SetPresentationClock(pClock);
+	}
+
 	return S_OK;
 }
 
@@ -1107,6 +1175,10 @@ int VideoPlayer::initialize()
 	{
 		return -8;
 	}
+
+	// Collapse the decoder's internal frame buffer now that it has been
+	// instantiated (the media type is set). Must run before the first read.
+	ApplyDecoderLowLatency(pVideoReader);
 
 	// Set up presentation clock
 	hr = SetupPresentationClock();

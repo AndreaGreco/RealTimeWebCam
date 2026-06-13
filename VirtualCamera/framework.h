@@ -33,6 +33,7 @@
 #include <dwrite.h>
 #include <wincodec.h>
 #include <uuids.h>
+#include <icodecapi.h>
 #include "winrt\Windows.ApplicationModel.h"
 
 // std

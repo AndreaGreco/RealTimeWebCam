@@ -2,9 +2,11 @@
 #include "RtspSessionManager.h"
 #include "Tools.h"
 #include "MFTools.h"
-#include <mfreadwrite.h>
-#include <mfapi.h>
+#include <propsys.h>    // PSCreateMemoryPropertyStore (not in PCH)
 #include <chrono>
+
+#pragma comment(lib, "mfuuid.lib")   // MFNETSOURCE_* property keys
+#pragma comment(lib, "propsys.lib")  // PSCreateMemoryPropertyStore
 
 RtspSessionManager& RtspSessionManager::Instance()
 {
@@ -27,6 +29,47 @@ HRESULT RtspSessionManager::BuildRequestedType(const CameraSessionConfig& config
 }
 
 // Creates (or re-creates) the source reader for the given config and starts the
+// Force any decoder MFT in the reader's video stream into low-latency mode.
+// MF_LOW_LATENCY on the reader is NOT always honored by hardware (DXVA) H.264/H.265
+// decoders, which keep a multi-frame reorder/DPB buffer -> the consumer sees delayed
+// frames even though we only ever keep the latest one (no app-level queue exists).
+// Setting CODECAPI_AVLowLatencyMode directly on the decoder collapses that buffer.
+// The GUID is defined locally to avoid a link-time dependency on the codec API GUID lib.
+static void ApplyDecoderLowLatency(IMFSourceReader* reader)
+{
+	// CODECAPI_AVLowLatencyMode {9C27891A-ED7A-40E1-88E8-B22727A024EE}
+	static const GUID kAVLowLatencyMode =
+		{ 0x9c27891a, 0xed7a, 0x40e1, { 0x88, 0xe8, 0xb2, 0x27, 0x27, 0xa0, 0x24, 0xee } };
+
+	wil::com_ptr_nothrow<IMFSourceReaderEx> readerEx;
+	if (FAILED(reader->QueryInterface(__uuidof(IMFSourceReaderEx), readerEx.put_void())) || !readerEx)
+	{
+		WINTRACE(L"ApplyDecoderLowLatency - IMFSourceReaderEx unavailable, skipping");
+		return;
+	}
+
+	// Walk the transform chain for the video stream; set the flag on every MFT that
+	// exposes ICodecAPI (the H.264/H.265 decoder). WINTRACE the result so the actual
+	// path can be confirmed by attaching to svchost.exe.
+	for (DWORD i = 0; ; i++)
+	{
+		GUID category{};
+		wil::com_ptr_nothrow<IMFTransform> mft;
+		if (FAILED(readerEx->GetTransformForStream(MF_SOURCE_READER_FIRST_VIDEO_STREAM, i, &category, mft.put())) || !mft)
+			break;
+
+		wil::com_ptr_nothrow<ICodecAPI> codec;
+		if (FAILED(mft->QueryInterface(__uuidof(ICodecAPI), codec.put_void())) || !codec)
+			continue;
+
+		VARIANT v{};
+		v.vt = VT_BOOL;
+		v.boolVal = VARIANT_TRUE;
+		HRESULT hr = codec->SetValue(&kAVLowLatencyMode, &v);
+		WINTRACE(L"ApplyDecoderLowLatency - transform %u CODECAPI_AVLowLatencyMode SetValue: 0x%08X", i, hr);
+	}
+}
+
 // async read chain. Assumes _lock is held. On success sets _reader/_callback/_config
 // and _state = Running. Shared by Start() and the reconnect loop.
 HRESULT RtspSessionManager::OpenReaderLocked(const CameraSessionConfig& config)
@@ -61,6 +104,41 @@ HRESULT RtspSessionManager::OpenReaderLocked(const CameraSessionConfig& config)
 		WINTRACE(L"RtspSessionManager::OpenReaderLocked - no D3D manager, reader will use system memory");
 	}
 
+	// Minimize RTSP network buffering. Forwarded to the network source via a property
+	// store. NOTE: these keys come from the Windows Media network source; the built-in
+	// RTSP source may ignore some/all of them. Harmless if unsupported. Check the
+	// WINTRACE below + the observed latency to tell whether they took effect.
+	wil::com_ptr_nothrow<IPropertyStore> netConfig;
+	if (SUCCEEDED(PSCreateMemoryPropertyStore(__uuidof(IPropertyStore), netConfig.put_void())) && netConfig)
+	{
+		PROPVARIANT pv;
+		PROPERTYKEY pk;
+
+		// Initial accelerated pre-buffer (default 5000 ms): 0 = none -> lower startup latency.
+		// MFNETSOURCE_* are GUIDs; IPropertyStore expects PROPERTYKEY {fmtid, pid}.
+		// The convention for MF network source properties is fmtid = the GUID, pid = 0.
+		PropVariantInit(&pv);
+		pv.vt = VT_UI4;
+		pv.ulVal = 0;
+		pk.fmtid = MFNETSOURCE_ACCELERATEDSTREAMINGDURATION;
+		pk.pid = 0;
+		netConfig->SetValue(pk, pv);
+		PropVariantClear(&pv);
+
+		// Steady-state buffering window in seconds: 0 = minimum -> lower ongoing delay
+		// (at the cost of being more sensitive to network jitter).
+		PropVariantInit(&pv);
+		pv.vt = VT_UI4;
+		pv.ulVal = 0;
+		pk.fmtid = MFNETSOURCE_BUFFERINGTIME;
+		pk.pid = 0;
+		netConfig->SetValue(pk, pv);
+		PropVariantClear(&pv);
+
+		RETURN_IF_FAILED(attrs->SetUnknown(MF_SOURCE_READER_MEDIASOURCE_CONFIG, netConfig.get()));
+		WINTRACE(L"RtspSessionManager::OpenReaderLocked - RTSP network buffering minimized (accelerated/buffering = 0)");
+	}
+
 	wil::com_ptr_nothrow<IMFSourceReader> reader;
 	RETURN_IF_FAILED(MFCreateSourceReaderFromURL(config.rtspUrl, attrs.get(), &reader));
 
@@ -88,6 +166,11 @@ HRESULT RtspSessionManager::OpenReaderLocked(const CameraSessionConfig& config)
 			stride = static_cast<UINT32>(abs(s));
 	}
 	_actualStride = stride;
+
+	// Collapse the decoder's internal frame buffer (esp. hardware DXVA decoders) so the
+	// consumer always pulls the freshest frame. Must run after the decoder exists
+	// (post media-type negotiation) and before reads start.
+	ApplyDecoderLowLatency(reader.get());
 
 	RETURN_IF_FAILED(callback->BeginRead(reader.get()));
 

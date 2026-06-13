@@ -11,6 +11,7 @@
 // Forward declarations
 class VideoReaderCall;
 class CSourceOpenMonitor;
+struct PreviewStats; // defined in VideoReaderCbk.h
 
 struct StreamInfo
 {
@@ -102,6 +103,7 @@ public:
 	int pause();
 	int stop();
 	int getVideoStreamInfo(StreamInfo* pInfo, UINT32 max, UINT32* count);
+	int getPreviewStats(PreviewStats* pStats);
 
 	void updateVideoPosition();  // Update video position when window is resized
 	bool getIsPlaying() const { return isPlaying; }

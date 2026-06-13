@@ -1,0 +1,10 @@
+﻿<Project Sdk="WixToolset.Sdk/7.0.0">
+  <ItemGroup>
+    <PackageReference Include="WixToolset.UI.wixext" Version="7.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\MFPipeline\MFPipeline.vcxproj" />
+    <ProjectReference Include="..\RTVirtualCamera\RTVirtualCamera.csproj" />
+    <ProjectReference Include="..\VirtualCamera\VCamSampleSource.vcxproj" />
+  </ItemGroup>
+</Project>
