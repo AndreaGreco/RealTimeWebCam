@@ -1,4 +1,8 @@
 ﻿<Project Sdk="WixToolset.Sdk/7.0.0">
+  <PropertyGroup>
+    <!-- MSI filename: RT-VirtualCam-Setup.msi (default would be the project name, Setup). -->
+    <OutputName>RT-VirtualCam-Setup</OutputName>
+  </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="WixToolset.UI.wixext" Version="7.0.0" />
   </ItemGroup>
