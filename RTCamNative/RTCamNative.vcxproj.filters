@@ -24,9 +24,6 @@
     <ClInclude Include="VideoReaderCbk.h">
       <Filter>File di intestazione</Filter>
     </ClInclude>
-    <ClInclude Include="MediaEventHandler.h">
-      <Filter>File di intestazione</Filter>
-    </ClInclude>
     <ClInclude Include="Logger.h">
       <Filter>File di intestazione</Filter>
     </ClInclude>
@@ -45,9 +42,6 @@
       <Filter>File di origine</Filter>
     </ClCompile>
     <ClCompile Include="VideoReaderCbk.cpp">
-      <Filter>File di origine</Filter>
-    </ClCompile>
-    <ClCompile Include="MediaEventHandler.cpp">
       <Filter>File di origine</Filter>
     </ClCompile>
     <ClCompile Include="Logger.cpp">

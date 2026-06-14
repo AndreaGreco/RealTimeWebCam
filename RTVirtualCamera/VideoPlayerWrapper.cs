@@ -70,12 +70,6 @@ namespace RTVirtualCamera
         [DllImport("RTCamNative.dll", CharSet = CharSet.Unicode)]
         private static extern void SetVideoPath(IntPtr player, string path);
 
-        [DllImport("RTCamNative.dll", CharSet = CharSet.Unicode)]
-        private static extern void SetVideoCaptureDeviceName(IntPtr player, string name);
-
-        [DllImport("RTCamNative.dll")]
-        private static extern void ClearVideoCaptureDeviceName(IntPtr player);
-
         [DllImport("RTCamNative.dll")]
         private static extern int GetVideoStreamInfo(IntPtr player,
             [Out] StreamInfo[] infos,
@@ -123,22 +117,6 @@ namespace RTVirtualCamera
                 throw new ObjectDisposedException(nameof(VideoPlayerWrapper));
 
             SetVideoPath(playerInstance, videoPath);
-        }
-
-        public void SetCaptureDeviceName(string deviceName)
-        {
-            if (disposed)
-                throw new ObjectDisposedException(nameof(VideoPlayerWrapper));
-
-            SetVideoCaptureDeviceName(playerInstance, deviceName);
-        }
-
-        public void ClearCaptureDeviceName()
-        {
-            if (disposed)
-                throw new ObjectDisposedException(nameof(VideoPlayerWrapper));
-
-            ClearVideoCaptureDeviceName(playerInstance);
         }
 
         public StreamInfo[] GetStreamInfos()

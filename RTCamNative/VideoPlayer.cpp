@@ -2,7 +2,6 @@
 #include "pch.h"
 #include "VideoPlayer.h"
 #include "Logger.h"
-#include "MediaEventHandler.h"
 #include "VideoReaderCbk.h"
 #include "CSourceOpenMonitor.h"
 #include <combaseapi.h>
@@ -383,62 +382,6 @@ done:
 	return hr;
 }
 
-HRESULT CreateMediaSourceFromCaptureDevice(LPCWSTR deviceName, IMFMediaSource** ppSource)
-{
-	IMFAttributes* pAttributes = NULL;
-	IMFActivate** ppDevices = NULL;
-	UINT32 deviceCount = 0;
-	HRESULT hr = MFCreateAttributes(&pAttributes, 1);
-	if (FAILED(hr))
-	{
-		LogError("MFCreateAttributes for capture devices", hr);
-		return hr;
-	}
-
-	hr = pAttributes->SetGUID(MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE, MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID);
-	if (FAILED(hr))
-	{
-		LogError("SetGUID MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE", hr);
-		SAFE_RELEASE(pAttributes);
-		return hr;
-	}
-
-	hr = MFEnumDeviceSources(pAttributes, &ppDevices, &deviceCount);
-	if (FAILED(hr))
-	{
-		LogError("MFEnumDeviceSources", hr);
-		SAFE_RELEASE(pAttributes);
-		return hr;
-	}
-
-	hr = HRESULT_FROM_WIN32(ERROR_NOT_FOUND);
-	for (UINT32 i = 0; i < deviceCount; i++)
-	{
-		WCHAR* friendlyName = nullptr;
-		UINT32 friendlyNameLength = 0;
-		HRESULT hrName = ppDevices[i]->GetAllocatedString(MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME, &friendlyName, &friendlyNameLength);
-		if (SUCCEEDED(hrName) && friendlyName != nullptr)
-		{
-			if (_wcsicmp(friendlyName, deviceName) == 0)
-			{
-				hr = ppDevices[i]->ActivateObject(IID_PPV_ARGS(ppSource));
-				CoTaskMemFree(friendlyName);
-				break;
-			}
-			CoTaskMemFree(friendlyName);
-		}
-	}
-
-	for (UINT32 i = 0; i < deviceCount; i++)
-	{
-		SAFE_RELEASE(ppDevices[i]);
-	}
-
-	CoTaskMemFree(ppDevices);
-	SAFE_RELEASE(pAttributes);
-	return hr;
-}
-
 /**
 * Creates NV12 media type for video output (optimal for Direct3D/GPU).
 */
@@ -566,15 +509,6 @@ void VideoPlayer::InitializeVariables()
 	pTimeSource = NULL;
 	videoReaderCallback = NULL;
 	pSourceOpenMonitor = NULL;
-
-	// Event handlers
-	pEventGenerator = NULL;
-	pstreamSinkEventGenerator = NULL;
-
-	// Unused
-	pvideoSourceModType = NULL;
-	pHintMediaType = NULL;
-	pD3DVideoSample = NULL;
 }
 
 void VideoPlayer::ReleasePlaybackResources()
@@ -635,10 +569,6 @@ void VideoPlayer::ReleaseAllResources()
 	// First release playback resources
 	ReleasePlaybackResources();
 
-	// Then release event handlers
-	SAFE_RELEASE(pstreamSinkEventGenerator);
-	SAFE_RELEASE(pEventGenerator);
-
 	// Release one-time sink resources
 	SAFE_RELEASE(pSinkMediaTypeHandler);
 	SAFE_RELEASE(pStreamSink);
@@ -647,11 +577,6 @@ void VideoPlayer::ReleaseAllResources()
 	SAFE_RELEASE(pVideoRenderer);
 	SAFE_RELEASE(pVideoSink);
 	SAFE_RELEASE(pActive);
-
-	// Release unused resources
-	SAFE_RELEASE(pvideoSourceModType);
-	SAFE_RELEASE(pHintMediaType);
-	SAFE_RELEASE(pD3DVideoSample);
 
 	isInitialized = false;
 
@@ -665,13 +590,6 @@ void VideoPlayer::ReleaseAllResources()
 void VideoPlayer::setVideoPath(LPCWSTR path)
 {
 	filePath = (path != nullptr) ? path : L"";
-	captureDeviceName.clear();
-}
-
-void VideoPlayer::setCaptureDeviceName(LPCWSTR name)
-{
-	captureDeviceName = (name != nullptr) ? name : L"";
-	filePath.clear();
 }
 
 void VideoPlayer::setWindowHandle(HWND hwnd)
@@ -697,7 +615,7 @@ HRESULT VideoPlayer::ValidateInitializationParameters()
 		return E_INVALIDARG;
 	}
 
-	if (filePath.empty() && captureDeviceName.empty())
+	if (filePath.empty())
 	{
 		DebugLog("VideoPlayer::initialize() - no input source configured");
 		return E_INVALIDARG;
@@ -817,38 +735,24 @@ HRESULT VideoPlayer::CreateVideoSourceAndReader()
 {
 	HRESULT hr = S_OK;
 
-	if (!captureDeviceName.empty())
+	// Create the source open monitor
+	pSourceOpenMonitor = new (std::nothrow) CSourceOpenMonitor();
+	if (pSourceOpenMonitor == NULL)
 	{
-		hr = CreateMediaSourceFromCaptureDevice(captureDeviceName.c_str(), &pVideoSource);
-		if (FAILED(hr))
-		{
-			LogError("CreateMediaSourceFromCaptureDevice", hr);
-			return hr;
-		}
-
-		DebugLog("VideoPlayer using video capture device source");
+		LogError("Failed to create CSourceOpenMonitor", E_OUTOFMEMORY);
+		return E_OUTOFMEMORY;
 	}
-	else
+
+	// Create media source from URL
+	hr = CreateMediaSourceFromURL(filePath.c_str(), pSourceOpenMonitor, &pVideoSource);
+	if (FAILED(hr))
 	{
-		// Create the source open monitor
-		pSourceOpenMonitor = new (std::nothrow) CSourceOpenMonitor();
-		if (pSourceOpenMonitor == NULL)
-		{
-			LogError("Failed to create CSourceOpenMonitor", E_OUTOFMEMORY);
-			return E_OUTOFMEMORY;
-		}
-
-		// Create media source from URL
-		hr = CreateMediaSourceFromURL(filePath.c_str(), pSourceOpenMonitor, &pVideoSource);
-		if (FAILED(hr))
-		{
-			LogError("CreateMediaSourceFromURL", hr);
-			return hr;
-		}
-
-		// Configure for low latency
-		ConfigureSourceForLowLatency(pVideoSource);
+		LogError("CreateMediaSourceFromURL", hr);
+		return hr;
 	}
+
+	// Configure for low latency
+	ConfigureSourceForLowLatency(pVideoSource);
 
 	// Create video reader callback
 	videoReaderCallback = new (std::nothrow) VideoReaderCall(pStreamSink);
@@ -1018,39 +922,6 @@ HRESULT VideoPlayer::CreateAndSetMediaTypes()
 	return S_OK;
 }
 
-HRESULT VideoPlayer::SetupEventHandlers()
-{
-	HRESULT hr = pVideoSink->QueryInterface(IID_IMFMediaEventGenerator, (void**)&pEventGenerator);
-	if (FAILED(hr))
-	{
-		LogError("QueryInterface for IMFMediaEventGenerator (sink)", hr);
-		return hr;
-	}
-
-	hr = pEventGenerator->BeginGetEvent((IMFAsyncCallback*)&mediaEvtHandler, pEventGenerator);
-	if (FAILED(hr))
-	{
-		LogError("BeginGetEvent for event generator", hr);
-		return hr;
-	}
-
-	hr = pStreamSink->QueryInterface(IID_IMFMediaEventGenerator, (void**)&pstreamSinkEventGenerator);
-	if (FAILED(hr))
-	{
-		LogError("QueryInterface for IMFMediaEventGenerator (stream sink)", hr);
-		return hr;
-	}
-
-	hr = pstreamSinkEventGenerator->BeginGetEvent((IMFAsyncCallback*)&streamSinkMediaEvtHandler, pstreamSinkEventGenerator);
-	if (FAILED(hr))
-	{
-		LogError("BeginGetEvent for stream sink event generator", hr);
-		return hr;
-	}
-
-	return S_OK;
-}
-
 HRESULT VideoPlayer::SetupPresentationClock()
 {
 	HRESULT hr = MFCreatePresentationClock(&pClock);
@@ -1134,13 +1005,6 @@ int VideoPlayer::initialize()
 		if (FAILED(hr))
 		{
 			return -4;
-		}
-
-		// Set up event handlers - ONE TIME
-		hr = SetupEventHandlers();
-		if (FAILED(hr))
-		{
-			return -9;
 		}
 
 		isInitialized = true;

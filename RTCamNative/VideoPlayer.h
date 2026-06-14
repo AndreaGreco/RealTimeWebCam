@@ -6,7 +6,6 @@
 #include <evr.h>
 #include <string>
 #include <windows.h>
-#include "MediaEventHandler.h"
 
 // Forward declarations
 class VideoReaderCall;
@@ -52,20 +51,8 @@ private:
 	VideoReaderCall* videoReaderCallback;
 	CSourceOpenMonitor* pSourceOpenMonitor;
 
-	// Event handlers
-	IMFMediaEventGenerator* pEventGenerator;
-	IMFMediaEventGenerator* pstreamSinkEventGenerator;
-	MediaEventHandler mediaEvtHandler;
-	MediaEventHandler streamSinkMediaEvtHandler;
-
-	// Unused/deprecated members
-	IMFMediaType* pvideoSourceModType;
-	IMFMediaType* pHintMediaType;
-	IMFSample* pD3DVideoSample;
-
 	// Configuration
 	std::wstring filePath;
-	std::wstring captureDeviceName;
 	HWND windowHandle;
 	BOOL fSelected;
 	bool isPlaying;
@@ -82,7 +69,6 @@ private:
 	HRESULT CreateAndInitializeVideoSink();
 	HRESULT SetupVideoDisplayControl();
 	HRESULT GetStreamSinkAndMediaTypeHandler();
-	HRESULT SetupEventHandlers();
 
 	// Playback setup (called on each play)
 	HRESULT CreateVideoSourceAndReader();
@@ -96,7 +82,6 @@ public:
 	~VideoPlayer();
 
 	void setVideoPath(LPCWSTR path);
-	void setCaptureDeviceName(LPCWSTR name);
 	void setWindowHandle(HWND hwnd);
 	int initialize();
 	int play();
