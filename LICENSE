@@ -1,6 +1,12 @@
 MIT License
 
-Copyright (c) 2026 Andrea Greco
+This project (RTVirtualCamera / RealTimeWebCam) is a rewrite that started from
+VCamSample by Simon Mourier (https://github.com/smourier/VCamSample) and is
+distributed under the same MIT terms. Credit for the original Media Foundation
+virtual-camera groundwork goes to Simon Mourier.
+
+Copyright (c) 2024-2025 Simon Mourier (original VCamSample)
+Copyright (c) 2026 Andrea Greco (RTVirtualCamera rewrite)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

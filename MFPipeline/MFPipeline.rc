@@ -1,6 +1,5 @@
-// Version resource for MFPipeline.dll.
-// FILE/PRODUCT version come from build/Version.g.h, generated from git by
-// build/Set-GitVersion.ps1 (regenerated before each build). Do not hardcode.
+// Version resource. FILE/PRODUCT version come from build/Version.g.h, generated
+// from git by build/Set-GitVersion.ps1 (regenerated before each build).
 #include <winres.h>
 #include "..\build\Version.g.h"
 
@@ -25,7 +24,7 @@ BEGIN
             VALUE "FileDescription",  "RTVirtualCamera Media Foundation bridge"
             VALUE "FileVersion",      VER_FILEVERSION_STR
             VALUE "InternalName",     "MFPipeline.dll"
-            VALUE "LegalCopyright",   "Copyright (C) 2026 Andrea Greco. MIT License."
+            VALUE "LegalCopyright",   "(C) 2024-2025 Simon Mourier, (C) 2026 Andrea Greco. MIT License."
             VALUE "OriginalFilename", "MFPipeline.dll"
             VALUE "ProductName",      "RTVirtualCamera"
             VALUE "ProductVersion",   VER_PRODUCTVERSION_STR
