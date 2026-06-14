@@ -341,7 +341,6 @@ namespace RTVirtualCamera
         private bool StartPreviewFromPath()
         {
             videoPlayer.Stop();
-            videoPlayer.ClearCaptureDeviceName();
             videoPlayer.SetVideoPath(pathTextBox.Text);
             previewStatusLabel.Visible = false;
 
@@ -372,7 +371,6 @@ namespace RTVirtualCamera
         private void StopPreview()
         {
             videoPlayer.Stop();
-            videoPlayer.ClearCaptureDeviceName();
         }
 
         private void SetPreviewStatus(string message)
@@ -433,7 +431,6 @@ namespace RTVirtualCamera
             using (VideoPlayerWrapper probePlayer = new VideoPlayerWrapper())
             {
                 probePlayer.SetWindowHandle(previewHandle);
-                probePlayer.ClearCaptureDeviceName();
                 probePlayer.SetVideoPath(path);
 
                 if (!probePlayer.Initialize())

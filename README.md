@@ -1,54 +1,51 @@
-# RealTimeWebCam — da RTSP a webcam virtuale (Windows 11)
+# RealTimeWebCam — turn an RTSP stream into a virtual webcam (Windows 11)
 
-Zoom, Teams, Meet, Skype & co. **non** accettano sorgenti RTSP. Questo progetto colma il vuoto: registra in Windows una **webcam virtuale** che fa da proxy verso una telecamera IP. Apre il flusso RTSP e lo presenta al sistema come se fosse una normale webcam USB, utilizzabile da qualsiasi applicazione.
+Some setups hand you an IP camera that you'd like to use in the usual meeting apps — Zoom, Teams, Meet, Skype and friends. For a technical limitation those apps **don't** accept RTSP sources directly. This project registers a **virtual webcam** that shows the frames coming from your RTSP IP camera, so any app that can pick a webcam can use it.
 
-Funziona su **Windows 11** (21H2 o successivo) grazie all'API [`MFCreateVirtualCamera`](https://learn.microsoft.com/windows/win32/api/mfvirtualcamera/nf-mfvirtualcamera-mfcreatevirtualcamera).
+Works on **Windows 11** (21H2 or later) thanks to the [`MFCreateVirtualCamera`](https://learn.microsoft.com/windows/win32/api/mfvirtualcamera/nf-mfvirtualcamera-mfcreatevirtualcamera) API.
 
-> Riscrittura che **parte da** [VCamSample di Simon Mourier](https://github.com/smourier/VCamSample): il merito dell'impianto Media Foundation per la virtual camera è suo. Da lì il progetto è stato riscritto e orientato all'uso RTSP a bassa latenza, con installer e UI dedicati. MIT, come l'originale.
-
----
-
-## Indice
-
-1. [Cosa fa e cosa serve](#cosa-fa-e-cosa-serve)
-2. [Installazione (MSI)](#installazione-msi)
-3. [Configurare la sorgente RTSP](#configurare-la-sorgente-rtsp) ← la parte che conviene leggere
-4. [Usare l'applicazione](#usare-lapplicazione)
-5. [Build da sorgente](#build-da-sorgente)
-6. [Architettura](#architettura)
-7. [Versioning](#versioning)
-8. [Troubleshooting](#troubleshooting)
-9. [Crediti e licenza](#crediti-e-licenza)
+> 🇮🇹 Versione italiana: **[README_it.md](README_it.md)** — 🛠️ Building from source or curious about the internals? See **[DEVELOPMENT.md](DEVELOPMENT.md)**.
 
 ---
 
-## Cosa fa e cosa serve
+## Contents
 
-- **Input:** un flusso **RTSP** (telecamera IP, oppure un server come [MediaMTX](https://github.com/bluenviron/mediamtx) che ri-pubblica una webcam/USB — vedi sotto).
-- **Output:** una webcam virtuale chiamata *"RTSP Virtual Camera"* visibile in tutte le app.
-- **Requisiti:** Windows 11 21H2+. Per buildare da sorgente: Visual Studio 2022 (workload C++ e .NET desktop) + WiX Toolset (per l'MSI).
-
----
-
-## Installazione (MSI)
-
-Per il solo utilizzo, usa l'installer: **`RT-VirtualCam-Setup.msi`** (file unico, ~8 MB).
-
-1. Esegui l'MSI e accetta la licenza MIT.
-2. (Opzionale) spunta il collegamento sul desktop.
-3. L'installer registra automaticamente il componente COM (nessun `regsvr32` manuale).
-
-L'app si installa in `C:\Program Files\RTVirtualCamera`. Impostazioni e log finiscono in `%LOCALAPPDATA%\RTVirtualCamera` (l'install dir non è scrivibile da utente standard).
-
-Per disinstallare: *App e funzionalità* di Windows, oppure ri-esegui l'MSI.
+1. [What it does](#what-it-does)
+2. [Install (MSI)](#install-msi)
+3. [Configure the RTSP source](#configure-the-rtsp-source) ← the part worth reading
+4. [Use the app](#use-the-app)
+5. [Troubleshooting](#troubleshooting)
+6. [Credits and license](#credits-and-license)
 
 ---
 
-## Configurare la sorgente RTSP
+## What it does
 
-Se la tua telecamera IP espone già RTSP, ti basta il suo URL (es. `rtsp://192.168.1.10:554/stream`). Se invece vuoi trasformare una **webcam USB** (es. su un mini-PC Linux/Raspberry) in una sorgente RTSP, lo schema collaudato è **MediaMTX + FFmpeg** via Docker.
+- **Input:** an **RTSP** stream (IP camera, or a media server).
+- **Output:** a virtual webcam named *"RTSP Virtual Camera"*, visible in every app.
+- **Requirements:** Windows 11 21H2+.
 
-> ⚠️ **Il punto più importante di tutta la configurazione.** Il source RTSP di Media Foundation è schizzinoso su come l'H.264 è "impacchettato". Se l'encoder produce **più slice per frame** (è il default di `-tune zerolatency`/`ultrafast` con thread multipli), MF tratta ogni slice come un frame a sé: ricevi 4–8× i frame reali, i timestamp si congelano e la latenza esplode. `ffplay` invece riassembla tutto e sembra a posto — quindi *non* fidarti solo di ffplay. **Forza un solo slice per frame** con `-x264-params sliced-threads=0`.
+---
+
+## Install (MSI)
+
+Download and run the installer: **`RT-VirtualCam-Setup.msi`** (single file, ~8 MB).
+
+1. Run the MSI and accept the MIT license.
+2. (Optional) tick the desktop shortcut.
+3. The installer registers the COM component automatically (no manual `regsvr32`).
+
+The app installs to `C:\Program Files\RTVirtualCamera`. Settings and logs go to `%LOCALAPPDATA%\RTVirtualCamera` (the install folder isn't writable by a standard user).
+
+To uninstall: Windows *Apps & features*, or run the MSI again.
+
+---
+
+## Configure the RTSP source
+
+If your IP camera already exposes RTSP, all you need is its URL (e.g. `rtsp://192.168.1.10:554/stream`). If instead you want to turn a **USB webcam** (e.g. on a Linux mini-PC / Raspberry Pi) into an RTSP source, the proven recipe is **MediaMTX + FFmpeg** via Docker.
+
+> ⚠️ **The single most important thing in the whole setup.** Media Foundation's RTSP source is picky about how the H.264 is "packetized". If the encoder emits **multiple slices per frame** (the default for `-tune zerolatency`/`ultrafast` with multiple threads), MF treats every slice as a frame of its own: you receive 4–8× the real frames, timestamps freeze and latency explodes. `ffplay` re-assembles everything and looks fine — so *don't* trust ffplay alone. **Force a single slice per frame** with `-x264-params sliced-threads=0`.
 
 ### docker-compose
 
@@ -59,8 +56,8 @@ services:
     restart: unless-stopped
     ports:
       - "8554:8554"   # RTSP
-      - "1935:1935"   # RTMP (opzionale)
-      - "8888:8888"   # HLS (opzionale)
+      - "1935:1935"   # RTMP (optional)
+      - "8888:8888"   # HLS (optional)
     environment:
       - MTX_PROTOCOLS=tcp
 
@@ -85,136 +82,65 @@ services:
       rtsp://rtsp-server:8554/webcam
 ```
 
-L'URL da mettere nell'app sarà `rtsp://<IP-del-server>:8554/webcam`.
+The URL to enter in the app will be `rtsp://<server-IP>:8554/webcam`.
 
-### Regole d'oro per la bassa latenza
+### Golden rules for low latency
 
-- **`-x264-params sliced-threads=0`** — un solo slice per frame (vedi avviso sopra). Imprescindibile con MF.
-- **Un solo framerate, onesto.** Niente upsampling `-vf fps=N` da una cattura a framerate diverso: genera timestamp sintetici che MF interpreta male. Cattura e trasmetti allo stesso rate reale (se la webcam fa solo 15 fps, trasmetti 15).
-- **`-tune zerolatency` + `-profile:v baseline`** — niente B-frame né lookahead.
-- **`-g 30`** — keyframe ogni secondo (recupero rapido alla connessione).
-- **`MTX_PROTOCOLS=tcp`** su LAN è affidabile. Su reti con perdite valuta UDP.
+- **`-x264-params sliced-threads=0`** — one slice per frame (see the warning above). Non-negotiable with MF.
+- **One honest framerate.** No `-vf fps=N` upsampling from a capture running at a different rate: it generates synthetic timestamps that MF misreads. Capture and stream at the same real rate (if the webcam only does 15 fps, stream 15).
+- **`-tune zerolatency` + `-profile:v baseline`** — no B-frames, no lookahead.
+- **`-g 30`** — a keyframe every second (fast recovery on connect).
+- **`MTX_PROTOCOLS=tcp`** is reliable on a LAN. On lossy networks consider UDP.
 
-### Verifica
+### Verify
 
-Sul server, prima di passare a Windows:
+On the server, before moving to Windows:
 
 ```bash
 ffplay -fflags nobuffer -flags low_delay -framedrop -rtsp_transport tcp \
        rtsp://localhost:8554/webcam
 ```
 
-Deve essere praticamente in tempo reale e riportare il framerate atteso (es. `30 fps`).
+It should be practically real-time and report the expected framerate (e.g. `30 fps`).
 
 ---
 
-## Usare l'applicazione
+## Use the app
 
-1. Avvia **RTVirtualCamera.exe**.
-2. Inserisci l'URL RTSP e premi **Start Preview** per vederlo nel pannello.
-3. Premi **Start VCam**: comparirà *"RTSP Virtual Camera"* in Zoom/Teams/ecc.
+1. Launch **RTVirtualCamera.exe**.
+2. Enter the RTSP URL and press **Start Preview** to see it in the panel.
+3. Press **Start VCam**: *"RTSP Virtual Camera"* will appear in Zoom/Teams/etc.
 
-### La barra di diagnostica (in alto)
+### The diagnostics bar (at the top)
 
-Durante il preview, una barra mostra le metriche **del solo preview** (la camera per Zoom gira nel Frame Server, processo separato non leggibile da qui):
+While previewing, a bar shows metrics for the **preview only** (the camera that Zoom sees runs inside the Frame Server, a separate process that can't be read from here):
 
-| Campo | Significato |
+| Field | Meaning |
 |---|---|
-| **RX** | frame/s realmente ricevuti dalla sorgente (il valore *vero*, non quello nominale) |
-| **render** | frame/s effettivamente disegnati |
-| **drop** | frame/s scartati dal controllo adattivo (per restare in tempo reale) |
-| **drift** | scostamento wall‑clock vs timeline media: ~stabile = latenza fissa, in crescita = accumulo |
-| **copy** | costo dell'ultima copia frame (ms) |
+| **RX** | frames/s actually received from the source (the *real* value, not the nominal one) |
+| **render** | frames/s actually drawn |
+| **drop** | frames/s discarded by the adaptive control (to stay real-time) |
+| **drift** | wall-clock vs media timeline offset: ~stable = fixed latency, rising = build-up |
+| **copy** | cost of the last frame copy (ms) |
 
-Indicazione rapida: se **RX ≫ framerate reale** (es. 150 con sorgente a 30), quasi sicuramente stai trasmettendo H.264 multi‑slice → applica `sliced-threads=0` (vedi sopra).
-
----
-
-## Build da sorgente
-
-### Prerequisiti
-- Visual Studio 2022 (C++ desktop + .NET desktop)
-- WiX Toolset (per il progetto `Setup`)
-- Windows 11 21H2+
-
-### Compilare
-Apri `RTVirtualCamera.sln` e compila in **x64**. I tre binari finiscono nella stessa cartella:
-
-| Binario | Progetto |
-|---|---|
-| `VirtualCamera.dll` | `VirtualCamera/` (COM source, gira nel Frame Server) |
-| `MFPipeline.dll` | `MFPipeline/` (bridge C++↔C#, preview) |
-| `RTVirtualCamera.exe` | `RTVirtualCamera/` (UI WinForms) |
-
-`Setup/` produce `RT-VirtualCam-Setup.msi`.
-
-### Registrare la COM DLL (solo per sviluppo)
-
-Dopo ogni rebuild, registra `VirtualCamera.dll`. Lo script si auto-eleva, ferma il Frame Server, ri-registra e riavvia:
-
-```powershell
-.\VirtualCamera\deploy_vcam.ps1 -DllPath ".\bin\x64\Debug\VirtualCamera.dll"
-```
-
-Per ripulire tra un test e l'altro: `.\VirtualCamera\unregister_vcam.ps1`.
-
-> **La DLL deve stare in una cartella accessibile a tutti** (non sotto `C:\Users\...`), perché il Frame Server gira come *Local Service*. Una cartella sotto `C:\Projects\` va bene; il profilo utente causa `E_ACCESSDENIED` su `IMFVirtualCamera::Start`. L'MSI, installando in `Program Files`, risolve questo da sé.
-
----
-
-## Architettura
-
-```
-RTVirtualCamera.exe (C# WinForms)
-  └─ P/Invoke → MFPipeline.dll (C++)
-       ├─ VideoPlayer  → PREVIEW nell'UI (EVR). Decodifica software, nel processo dell'app.
-       └─ VirtualCamera → MFCreateVirtualCamera() + attributi RTSP, poi Start()
-
-Windows Frame Server (svchost.exe)  ← processo separato, Local Service
-  └─ carica VirtualCamera.dll (COM, registrata in HKLM)
-       └─ apre l'RTSP con IMFSourceReader (decodifica GPU/DXVA, copia zero-copy)
-       └─ consegna i frame a Zoom/Teams/…
-```
-
-Due percorsi **indipendenti** che aprono entrambi l'RTSP per conto proprio (nessuna memoria condivisa tra processi):
-
-- **Preview** (nell'app): decodifica software + EVR. Comodo ma più pesante; a framerate alti scarta frame per restare reattivo. È quello che misura la barra di diagnostica.
-- **Frame Server** (per Zoom): decodifica hardware DXVA con copia GPU→GPU, tiene sempre solo l'ultimo frame. È quello che conta per le videochiamate.
-
-Dettagli per chi mette mano al codice: vedi [`CLAUDE.md`](CLAUDE.md).
-
----
-
-## Versioning
-
-Le versioni di **tutti** i componenti e dell'MSI sono derivate da **git**, rigenerate ad ogni build da [`build/Set-GitVersion.ps1`](build/Set-GitVersion.ps1):
-
-- con un tag `vX.Y.Z` (+N commit dopo) → `X.Y.Z` (MSI) / `X.Y.Z.N` (file);
-- senza tag → `0.1.<numero-commit>`;
-- la stringa informativa porta lo SHA breve e `-dirty`.
-
-Per una release pulita basta taggare: `git tag v1.0.0` → il build successivo propaga `1.0.0` ovunque (exe, DLL, MSI). I file generati (`Version.g.*`) non sono versionati.
+Quick tell: if **RX ≫ the real framerate** (e.g. 150 with a 30 fps source), you're almost certainly streaming multi-slice H.264 → apply `sliced-threads=0` (see above).
 
 ---
 
 ## Troubleshooting
 
-**Video in ritardo / latenza che cresce.** Quasi sempre è la sorgente: H.264 multi‑slice (`sliced-threads=0` lo risolve) o upsampling di framerate. Controlla la barra: `RX` deve essere ≈ al framerate reale, il `drift` stabile. Verifica con `ffplay` lato server.
+**Video lagging / latency that keeps growing.** Almost always the source: multi-slice H.264 (`sliced-threads=0` fixes it) or framerate upsampling. Check the bar: `RX` should be ≈ the real framerate and `drift` stable. Verify with `ffplay` on the server side.
 
-**La virtual camera non appare o mostra frame neri.** La DLL non è registrata, oppure l'URL RTSP non è raggiungibile dalla macchina Windows, oppure manca la sorgente (frame di fallback).
+**The virtual camera doesn't appear, or shows black frames.** Either the RTSP URL isn't reachable from the Windows machine, or there's no source yet (you'll see the fallback frame). With a reachable URL the picture appears within a second or two.
 
-**`E_ACCESSDENIED` / "Access Denied" su Start.** La `VirtualCamera.dll` è sotto `C:\Users\...`: spostala in una cartella pubblica e ri-registra. Con l'MSI non succede.
+**`E_ACCESSDENIED` / "Access Denied" when starting.** This does not happen with the MSI install — it only affects hand-built/relocated DLLs. See [DEVELOPMENT.md](DEVELOPMENT.md).
 
-**`LNK1104: cannot open VirtualCamera.dll` ricompilando.** Il Frame Server tiene la DLL aperta. Chiudi le app che usano la camera, oppure esegui `unregister_vcam.ps1` prima del rebuild.
-
-**Log e impostazioni.** In `%LOCALAPPDATA%\RTVirtualCamera\` (`debug.log`, `settings.json`).
-
-**Debug del Frame Server.** È `svchost.exe`: in Visual Studio *Attach to Process* → l'istanza che ospita *Windows Camera Frame Server*. Le trace usano `WINTRACE` (provider ETW, visibile con TraceSpy).
+**Logs and settings.** Under `%LOCALAPPDATA%\RTVirtualCamera\` (`debug.log`, `settings.json`).
 
 ---
 
-## Crediti e licenza
+## Credits and license
 
-Parte da [**VCamSample** di Simon Mourier](https://github.com/smourier/VCamSample) per l'impianto Media Foundation — grazie a lui per il lavoro originale.
+Builds on [**VCamSample** by Simon Mourier](https://github.com/smourier/VCamSample) for the Media Foundation scaffolding — thanks to him for the original work.
 
-Licenza **MIT** (vedi [`LICENSE`](LICENSE)), con copyright a Simon Mourier (originale) e Andrea Greco (riscrittura).
+**MIT** license (see [`LICENSE`](LICENSE)), with copyright to Simon Mourier (original) and Andrea Greco (rewrite).

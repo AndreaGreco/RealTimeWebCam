@@ -9,7 +9,7 @@ Open `RTVirtualCamera.sln` in **Visual Studio 2022** and build in **x64**. All t
 | Binary | Project |
 |---|---|
 | `VCamSampleSource.dll` | `VirtualCamera/` |
-| `MFPipeline.dll` | `MFPipeline/` |
+| `RTCamNative.dll` | `RTCamNative/` |
 | `RTVirtualCamera.exe` | `RTVirtualCamera/` |
 
 There is no CLI build command; this is a Visual Studio solution only. Target: `.NET Framework 4.8` (C#), C++17 (C++), all x64.
@@ -41,7 +41,7 @@ This project makes an RTSP network camera appear as a standard Windows webcam fo
 
 ```
 RTVirtualCamera.exe (C# WinForms, .NET 4.8)
-  └─ P/Invoke → MFPipeline.dll (C++ bridge)
+  └─ P/Invoke → RTCamNative.dll (C++ bridge)
        └─ MFCreateVirtualCamera(CLSID_VCam)
        └─ IMFVirtualCamera::SetString/SetUINT32(...)   ← config attrs, BEFORE Start()
        └─ IMFVirtualCamera::Start()
@@ -84,31 +84,31 @@ Windows Frame Server (svchost.exe)  ← separate OS process, Local Service
 | `RtspReaderCallback` | `RtspReaderCallback.cpp` | `IMFSourceReaderCallback` — async read chain. Stores only the latest frame (`_latestSample`); older frames are overwritten. |
 | `FrameGenerator` | `FrameGenerator.cpp` | **Dead code** (leftover from VCamSample). Produces synthetic frames via Direct2D; fallback path only, never called in the main stream. |
 
-### `MFPipeline/` (C++ bridge DLL — runs in app process)
+### `RTCamNative/` (C++ bridge DLL — runs in app process)
 
 | Class | File | Role |
 |---|---|---|
 | `VirtualCamera` | `VirtualCamera.cpp/.h` | Wraps `IMFVirtualCamera`. Calls `SetString`/`SetUINT32` on the attrs bag before `Start()`. Exports C-style functions for P/Invoke. |
-| `VideoPlayer` | `VideoPlayer.cpp` | Preview only (EVR sink into WinForms panel). **Not involved in the Frame Server / Zoom path.** |
+| `VideoPlayer` | `VideoPlayer.cpp` | Preview only (EVR sink into WinForms panel). **Not involved in the Frame Server / Zoom path.** Plays from an RTSP/file URL only — the capture-device source path was removed. |
 
 ### `RTVirtualCamera/` (C# WinForms, namespace `RTVirtualCamera`)
 
 | Class | File | Role |
 |---|---|---|
-| `VirtualCameraWrapper` | `VirtualCameraWrapper.cs` | P/Invoke façade over `MFPipeline.dll`. Also declares the C# mirror of `VCamConfig`. |
+| `VirtualCameraWrapper` | `VirtualCameraWrapper.cs` | P/Invoke façade over `RTCamNative.dll`. Also declares the C# mirror of `VCamConfig`. |
 | `VideoPlayerWrapper` | `VideoPlayerWrapper.cs` | P/Invoke façade for the preview player. |
 | `MainForm` | `MainForm.cs` | Main UI. Probes source, builds `VCamConfig`, calls `SetConfig → Register → Start`. |
 | `Settings` | `Settings.cs` | Persists `RtspURL` and `AutoStart` across sessions. |
 
 ### `Shared/VCamConfig.h`
 
-Single source of truth for the GUIDs and the `VCamConfig` struct shared between `MFPipeline/` and `VirtualCamera/`. Included by both C++ projects. **The C# mirror `VCamCameraWrapper.cs::VCamConfig` must match byte-for-byte.**
+Single source of truth for the GUIDs and the `VCamConfig` struct shared between `RTCamNative/` and `VirtualCamera/`. Included by both C++ projects. **The C# mirror `VCamCameraWrapper.cs::VCamConfig` must match byte-for-byte.**
 
 ---
 
 ## Critical invariants
 
-- **CLSID** `{3CAD447D-F283-4AF4-A3B2-6F5363309F52}` must match in `VirtualCamera/`, `MFPipeline/`, and the registry. Never change it in only one place.
+- **CLSID** `{3CAD447D-F283-4AF4-A3B2-6F5363309F52}` must match in `VirtualCamera/`, `RTCamNative/`, and the registry. Never change it in only one place.
 - **Attribute GUIDs** (`MF_VCAM_RTSP_URL`, `MF_VCAM_WIDTH`, `MF_VCAM_HEIGHT`, `MF_VCAM_FPS_NUM`, `MF_VCAM_FPS_DEN`) are defined in `Shared/VCamConfig.h` and included by both C++ projects — single definition, no duplication risk.
 - **Config attrs must be set BEFORE `IMFVirtualCamera::Start()`**. The Frame Server reads them in `Activator::ActivateObject()` → `SetupCameraSettings()`. Attributes set after `Start()` are not re-read.
 - **`SetBlob` is NOT reliably forwarded** by the Frame Server to `Initialize()`. Only `SetString` and `SetUINT32` are safe for passing config. Hence five individual attribute calls instead of one struct blob.
@@ -121,8 +121,8 @@ Single source of truth for the GUIDs and the `VCamConfig` struct shared between 
 ## Config flow (frame by frame)
 
 ```
-C# MainForm                MFPipeline::VirtualCamera       Frame Server
-──────────                 ─────────────────────────       ────────────
+C# MainForm                RTCamNative::VirtualCamera      Frame Server
+──────────                 ──────────────────────────      ────────────
 SetConfig(config)    →     stores _config
 Register()           →     MFCreateVirtualCamera()
                            SetString(MF_VCAM_RTSP_URL)
@@ -165,7 +165,7 @@ When the stream drops (network blip, camera reboot), `RtspReaderCallback::OnRead
 | E | Medium | `RtspSessionManager.cpp::Start()` L76-82 | Strict check: if decoder cannot produce exactly the requested NV12 resolution, session fails with `MF_E_INVALIDMEDIATYPE`. Fragile with H.265 sources or cameras that report slightly different sizes. |
 | F | Low | `VCamMediaSource.cpp::KsProperty()` | Handler parses the runtime RTSP URL update but does nothing with it (`#if 0` block). Silent no-op. The `#if 0` block also references `SetRTSPUrl` which no longer exists. |
 | G | Low | `PerformanceTests1/MediaStreamCopyPerfTests.cpp` | Calls `CopyRtspBufferToTargetSample(...)` which no longer exists. Function was refactored into `MediaStream::CopyRtspFrame`. Test project does not compile. |
-| H | Low | `MFPipeline/VirtualCamera.cpp::StartVirtualCamera()` L120 | `CoCreateInstance(CLSID_VCam, CLSCTX_INPROC_SERVER)` loads the DLL into the app process as a diagnostic. Unnecessary and loads the DLL in the wrong process context. Remove it. |
+| H | Low | `RTCamNative/VirtualCamera.cpp::StartVirtualCamera()` L120 | `CoCreateInstance(CLSID_VCam, CLSCTX_INPROC_SERVER)` loads the DLL into the app process as a diagnostic. Unnecessary and loads the DLL in the wrong process context. Remove it. |
 
 ---
 
