@@ -617,5 +617,11 @@ namespace RTVirtualCamera
             SettingsForm settingsForm = new SettingsForm();
             settingsForm.ShowDialog(this);
         }
+
+        private void aboutToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            About formAbout = new About();
+            formAbout.ShowDialog(this);
+        }
     }
 }
