@@ -7,7 +7,7 @@
     <PackageReference Include="WixToolset.UI.wixext" Version="7.0.0" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\MFPipeline\MFPipeline.vcxproj" />
+    <ProjectReference Include="..\RTCamNative\RTCamNative.vcxproj" />
     <ProjectReference Include="..\RTVirtualCamera\RTVirtualCamera.csproj" />
     <ProjectReference Include="..\VirtualCamera\VCamSampleSource.vcxproj" />
   </ItemGroup>

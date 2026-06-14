@@ -26,7 +26,7 @@ namespace RTVirtualCamera
         }
     }
 
-    // Mirror of MFPipeline/VideoReaderCbk.h::PreviewStats (byte-for-byte).
+    // Mirror of RTCamNative/VideoReaderCbk.h::PreviewStats (byte-for-byte).
     [StructLayout(LayoutKind.Sequential)]
     public struct PreviewStats
     {
@@ -58,52 +58,52 @@ namespace RTVirtualCamera
         private bool hasPrevStats = false;
 
         // Import delle funzioni dalla DLL C++
-        [DllImport("MFPipeline.dll")]
+        [DllImport("RTCamNative.dll")]
         private static extern IntPtr CreateVideoPlayer();
 
-        [DllImport("MFPipeline.dll")]
+        [DllImport("RTCamNative.dll")]
         private static extern void DestroyVideoPlayer(IntPtr player);
 
         [DllImport("kernel32.dll")]
         private static extern uint GetLastError();
 
-        [DllImport("MFPipeline.dll", CharSet = CharSet.Unicode)]
+        [DllImport("RTCamNative.dll", CharSet = CharSet.Unicode)]
         private static extern void SetVideoPath(IntPtr player, string path);
 
-        [DllImport("MFPipeline.dll", CharSet = CharSet.Unicode)]
+        [DllImport("RTCamNative.dll", CharSet = CharSet.Unicode)]
         private static extern void SetVideoCaptureDeviceName(IntPtr player, string name);
 
-        [DllImport("MFPipeline.dll")]
+        [DllImport("RTCamNative.dll")]
         private static extern void ClearVideoCaptureDeviceName(IntPtr player);
 
-        [DllImport("MFPipeline.dll")]
+        [DllImport("RTCamNative.dll")]
         private static extern int GetVideoStreamInfo(IntPtr player,
             [Out] StreamInfo[] infos,
             uint maxCount,
             out uint writtenCount);
 
-        [DllImport("MFPipeline.dll")]
+        [DllImport("RTCamNative.dll")]
         private static extern int GetPreviewStats(IntPtr player, out PreviewStats stats);
 
-        [DllImport("MFPipeline.dll")]
+        [DllImport("RTCamNative.dll")]
         private static extern void SetWindowHandle(IntPtr player, IntPtr hwnd);
 
-        [DllImport("MFPipeline.dll")]
+        [DllImport("RTCamNative.dll")]
         private static extern int InitializePlayer(IntPtr player);
 
-        [DllImport("MFPipeline.dll")]
+        [DllImport("RTCamNative.dll")]
         private static extern int PlayVideo(IntPtr player);
 
-        [DllImport("MFPipeline.dll")]
+        [DllImport("RTCamNative.dll")]
         private static extern int PauseVideo(IntPtr player);
 
-        [DllImport("MFPipeline.dll")]
+        [DllImport("RTCamNative.dll")]
         private static extern int StopVideo(IntPtr player);
 
-        [DllImport("MFPipeline.dll")]
+        [DllImport("RTCamNative.dll")]
         private static extern bool IsPlaying(IntPtr player);
 
-        [DllImport("MFPipeline.dll")]
+        [DllImport("RTCamNative.dll")]
         private static extern bool IsPaused(IntPtr player);
 
         public uint LastWin32Error { get; private set; }

@@ -8,7 +8,7 @@
  *  1. MFCreateVirtualCamera()
  *       Registra la camera nel sistema. La DLL NON viene ancora caricata.
  *
-  *  2. IMFVirtualCamera::SetString/SetUINT32()   [in MFPipeline/VirtualCamera.cpp]
+  *  2. IMFVirtualCamera::SetString/SetUINT32()   [in RTCamNative/VirtualCamera.cpp]
  *       Salva URL RTSP + width/height/fps come MF attributes sull'oggetto
  *       IMFVirtualCamera. Devono essere chiamati PRIMA di Start().
  *
@@ -468,7 +468,7 @@ STDMETHODIMP VCamMediaSource::GetAllocatorUsage(DWORD dwOutputStreamID, DWORD* p
 
 // IKsControl
 // Custom KsProperty set GUID for VCam runtime configuration.
-// Property ID 1 = RTSP URL (wide string). Must match MFPipeline/VirtualCamera.cpp.
+// Property ID 1 = RTSP URL (wide string). Must match RTCamNative/VirtualCamera.cpp.
 static const GUID KSPROPSETID_VCam_Config = { 0xc1d2e3f4, 0xa5b6, 0x47c8, { 0xd9, 0xea, 0x1b, 0x2c, 0x3d, 0x4e, 0x5f, 0x60 } };
 static const ULONG KSPROPID_VCam_RtspUrl = 1;
 

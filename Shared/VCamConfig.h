@@ -5,7 +5,7 @@
 // MF attribute GUIDs used to pass VCamConfig fields from the app to the Frame Server.
 // Set via IMFVirtualCamera::SetString / SetUINT32 BEFORE Start(); read in
 // MediaSource::Initialize() inside VCamSampleSource.dll.
-// Must be identical in MFPipeline/ and VirtualCamera/.
+// Must be identical in RTCamNative/ and VirtualCamera/.
 //
 // SetString/SetUINT32 on IMFVirtualCamera are forwarded to Initialize() by the
 // Frame Server; SetBlob is NOT reliably forwarded — hence individual attributes.

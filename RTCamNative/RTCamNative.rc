@@ -23,9 +23,9 @@ BEGIN
             VALUE "CompanyName",      "Andrea Greco"
             VALUE "FileDescription",  "RTVirtualCamera Media Foundation bridge"
             VALUE "FileVersion",      VER_FILEVERSION_STR
-            VALUE "InternalName",     "MFPipeline.dll"
+            VALUE "InternalName",     "RTCamNative.dll"
             VALUE "LegalCopyright",   "(C) 2024-2025 Simon Mourier, (C) 2026 Andrea Greco. MIT License."
-            VALUE "OriginalFilename", "MFPipeline.dll"
+            VALUE "OriginalFilename", "RTCamNative.dll"
             VALUE "ProductName",      "RTVirtualCamera"
             VALUE "ProductVersion",   VER_PRODUCTVERSION_STR
         END

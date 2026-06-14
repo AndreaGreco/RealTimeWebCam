@@ -23,37 +23,37 @@ namespace RTVirtualCamera
 
     public class VirtualCameraWrapper : IDisposable
     {
-        [DllImport("MFPipeline.dll", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
         private static extern IntPtr CreateVirtualCamera();
 
-        [DllImport("MFPipeline.dll", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
         private static extern void DestroyVirtualCamera(IntPtr vcam);
 
         [DllImport("kernel32.dll")]
         private static extern uint GetLastError();
 
-        [DllImport("MFPipeline.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
         private static extern void SetVirtualCameraName(IntPtr vcam, string name);
 
-        [DllImport("MFPipeline.dll", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
         private static extern void SetVirtualCameraConfig(IntPtr vcam, ref VCamConfig config);
 
-        [DllImport("MFPipeline.dll", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
         private static extern int RegisterVCam(IntPtr vcam);
 
-        [DllImport("MFPipeline.dll", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
         private static extern int StartVCam(IntPtr vcam);
 
-        [DllImport("MFPipeline.dll", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
         private static extern int StopVCam(IntPtr vcam);
 
-        [DllImport("MFPipeline.dll", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
         private static extern int UnregisterVCam(IntPtr vcam);
 
-        [DllImport("MFPipeline.dll", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
         private static extern bool IsVCamRegistered(IntPtr vcam);
 
-        [DllImport("MFPipeline.dll", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
         private static extern bool IsVCamStarted(IntPtr vcam);
 
         private IntPtr vcamHandle;
