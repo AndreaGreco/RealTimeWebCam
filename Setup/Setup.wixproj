@@ -2,6 +2,7 @@
   <PropertyGroup>
     <!-- MSI filename: RT-VirtualCam-Setup.msi (default would be the project name, Setup). -->
     <OutputName>RT-VirtualCam-Setup</OutputName>
+	<AcceptEula>wix7</AcceptEula>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="WixToolset.UI.wixext" Version="7.0.0" />

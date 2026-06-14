@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - '*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # git describe ha bisogno della storia completa per il versioning
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v1.0.2
+
+      - name: Restore NuGet packages
+        run: nuget restore RTVirtualCamera.sln
+
+      - name: Build
+        run: msbuild /m /p:Configuration=Release RTVirtualCamera.sln
+
+      - name: Find MSI
+        id: msi
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem -Recurse -Filter 'RT-VirtualCam-Setup.msi' | Select-Object -First 1
+          if (-not $msi) { throw 'MSI non trovato dopo la build' }
+          "path=$($msi.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.msi.outputs.path }}
+          generate_release_notes: true
