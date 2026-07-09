@@ -29,43 +29,46 @@
         private void InitializeComponent()
         {
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(About));
-            this.label1 = new System.Windows.Forms.Label();
-            this.version_lbl = new System.Windows.Forms.Label();
-            this.SuspendLayout();
+            label1 = new System.Windows.Forms.Label();
+            version_lbl = new System.Windows.Forms.Label();
+            SuspendLayout();
             // 
             // label1
             // 
-            this.label1.AutoSize = true;
-            this.label1.Location = new System.Drawing.Point(13, 13);
-            this.label1.Name = "label1";
-            this.label1.Size = new System.Drawing.Size(45, 13);
-            this.label1.TabIndex = 0;
-            this.label1.Text = "Version:";
+            label1.AutoSize = true;
+            label1.Location = new System.Drawing.Point(15, 15);
+            label1.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
+            label1.Name = "label1";
+            label1.Size = new System.Drawing.Size(48, 15);
+            label1.TabIndex = 0;
+            label1.Text = "Version:";
             // 
             // version_lbl
             // 
-            this.version_lbl.AutoSize = true;
-            this.version_lbl.Location = new System.Drawing.Point(64, 13);
-            this.version_lbl.Name = "version_lbl";
-            this.version_lbl.Size = new System.Drawing.Size(35, 13);
-            this.version_lbl.TabIndex = 1;
-            this.version_lbl.Text = "label2";
+            version_lbl.AutoSize = true;
+            version_lbl.Location = new System.Drawing.Point(75, 15);
+            version_lbl.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
+            version_lbl.Name = "version_lbl";
+            version_lbl.Size = new System.Drawing.Size(38, 15);
+            version_lbl.TabIndex = 1;
+            version_lbl.Text = "label2";
             // 
             // About
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(356, 234);
-            this.Controls.Add(this.version_lbl);
-            this.Controls.Add(this.label1);
-            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
-            this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
-            this.Name = "About";
-            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
-            this.Text = "About";
-            this.Load += new System.EventHandler(this.About_Load);
-            this.ResumeLayout(false);
-            this.PerformLayout();
+            AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
+            AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            ClientSize = new System.Drawing.Size(415, 270);
+            Controls.Add(version_lbl);
+            Controls.Add(label1);
+            FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
+            Icon = (System.Drawing.Icon)resources.GetObject("$this.Icon");
+            Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
+            Name = "About";
+            StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
+            Text = "About";
+            Load += About_Load;
+            ResumeLayout(false);
+            PerformLayout();
 
         }
 

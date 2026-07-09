@@ -15,6 +15,18 @@
 		<!-- Embed the cab inside the MSI so the installer is a single file -->
 		<MediaTemplate EmbedCab="yes" />
 
+		<!-- Clean upgrade behavior: without this, UpgradeCode alone does nothing and
+		     installing a newer MSI over an older one just errors out instead of
+		     replacing it. DowngradeError is declared in Package.en-us.wxl. -->
+		<MajorUpgrade DowngradeErrorMessage="!(loc.DowngradeError)" />
+
+		<!-- Icon shown in Settings > Apps / Programs and Features. Shortcuts below
+		     don't need this: a Shortcut whose Target is the .exe directly picks up
+		     the icon embedded in RTVirtualCamera.exe (see ApplicationIcon in the
+		     csproj) automatically. -->
+		<Icon Id="AppIcon.ico" SourceFile="..\RTVirtualCamera\Resources\Icon.ico" />
+		<Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
+
 		<StandardDirectory Id="ProgramFiles64Folder">
 			<Directory Id="INSTALLFOLDER" Name="RTVirtualCamera">
 				<!-- COM DLL: esplicita perche' serve la registrazione <Class>.
@@ -47,43 +59,20 @@
 			</Files>
 		</ComponentGroup>
 
-		<!-- Optional desktop shortcut (own component so it can be a selectable feature) -->
-		<StandardDirectory Id="DesktopFolder">
-			<Component Id="DesktopShortcut" Guid="*">
-				<Shortcut Id="AppDesktopShortcut"
+		<!-- Start Menu shortcut: the primary, non-optional way to launch the app. -->
+		<StandardDirectory Id="ProgramMenuFolder">
+			<Component Id="StartMenuShortcut" Guid="*">
+				<Shortcut Id="AppStartMenuShortcut"
 						  Name="RTVirtualCamera"
 						  Description="RTSP Virtual Camera"
 						  Target="[INSTALLFOLDER]RTVirtualCamera.exe"
 						  WorkingDirectory="INSTALLFOLDER" />
+				<RemoveFolder Id="RemoveStartMenuShortcut" On="uninstall" />
 				<RegistryValue Root="HKCU"
 							   Key="Software\RTVirtualCamera"
-							   Name="DesktopShortcut"
+							   Name="StartMenuShortcut"
 							   Type="integer"
 							   Value="1"
 							   KeyPath="yes" />
 			</Component>
-		</StandardDirectory>
-
-		<!-- MIT license shown + accepted before install -->
-		<WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
-		<ui:WixUI Id="WixUI_FeatureTree" />
-
-		<!-- Main app: required. Desktop shortcut: optional, user-selectable. -->
-		<Feature Id="MainApplication"
-				 Title="RTVirtualCamera"
-				 Description="Applicazione, pipeline e camera virtuale COM."
-				 Level="1"
-				 AllowAbsent="no"
-				 Display="expand">
-			<ComponentGroupRef Id="AppFiles" />
-			<ComponentRef Id="CameraCOM" />
-
-			<Feature Id="DesktopShortcut"
-					 Title="Collegamento sul desktop"
-					 Description="Crea un'icona sul desktop per avviare RTVirtualCamera."
-					 Level="1">
-				<ComponentRef Id="DesktopShortcut" />
-			</Feature>
-		</Feature>
-	</Package>
-</Wix>
+		</StandardD

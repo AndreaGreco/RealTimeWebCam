@@ -1,8 +1,8 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.17763.0</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <RootNamespace>RTVirtualCamera</RootNamespace>
     <AssemblyName>RTVirtualCamera</AssemblyName>
@@ -10,7 +10,21 @@
     <PlatformTarget>x64</PlatformTarget>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>disable</Nullable>
-    <ApplicationIcon>icon.ico</ApplicationIcon>
+    <ApplicationIcon>Resources\Icon.ico</ApplicationIcon>
+
+    <!-- Self-contained: bundles the .NET 10 runtime into the app's own output
+         folder, so the MSI keeps working on a machine that never had .NET 10
+         installed (was silently relying on the shared runtime being present).
+         AppendRuntimeIdentifierToOutputPath=false is the important part: without
+         it, the SDK would nest output under an extra "win-x64" folder and break
+         every path that assumes ..\bin\x64\<Config>\ directly (RTCamNative.dll
+         colocation, deploy_vcam.ps1, the WiX harvest in Setup\Package.wxs). With
+         it off, a normal Debug/Release build already produces the full
+         self-contained closure in the existing folder — no publish step, no
+         other file needs to change. -->
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
 
     <!-- AssemblyVersion/AssemblyFileVersion/AssemblyInformationalVersion come from
          build/Version.g.cs (git-derived, see build/Set-GitVersion.ps1). The rest of
@@ -44,6 +58,11 @@
   <ItemGroup>
     <!-- Git-derived version attributes, regenerated pre-build by ..\build\GitVersion.targets. -->
     <Compile Include="..\build\Version.g.cs" Link="Properties\Version.g.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Resources\Icon.ico" />
+    <Content Include="Resources\Icon.svg" />
   </ItemGroup>
 
   <ItemGroup>

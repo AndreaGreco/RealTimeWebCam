@@ -1,5 +1,13 @@
 ﻿using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
+
+// Il target net10.0-windows... rende l'assembly Windows-only, ma con
+// GenerateAssemblyInfo=false (sopra, per via di Version.g.cs) l'SDK non genera
+// più da solo [assembly: SupportedOSPlatform]. Senza, l'analyzer CA1416 non sa
+// che l'intero assembly gira solo su Windows e segnala ogni chiamata WinForms
+// come "raggiungibile da tutte le piattaforme". Va dichiarato qui a mano.
+[assembly: SupportedOSPlatform("windows")]
 
 // Le informazioni generali relative a un assembly sono controllate dal seguente 
 // set di attributi. Modificare i valori di questi attributi per modificare le informazioni
