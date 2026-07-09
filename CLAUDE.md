@@ -156,16 +156,26 @@ When the stream drops (network blip, camera reboot), `RtspReaderCallback::OnRead
 
 ## Known bugs
 
+Bugs A/B/C/D/F/G/H below were fixed in `0.1.0` (see `CHANGELOG.md`); verified against current source on 2026-07-09. Only **E** is still open.
+
 | # | Severity | File / Location | Description |
 |---|---|---|---|
-| A | High | `MediaStream.cpp::SetStreamState` / `Start()` | `SetStreamState(RUNNING)` calls `Start(nullptr)` which immediately returns `E_POINTER` due to `RETURN_HR_IF_NULL(E_POINTER, type)`. The PAUSED→RUNNING transition is broken. |
-| B | Medium | `Activator.cpp::Initialize()` L20 | Orphaned `RETURN_IF_FAILED(hr)` after commented-out `vcam_media_source->Initialize(this)`. Uses stale hr from the `SetGUID` call above. Not dangerous in practice but should be removed. |
-| C | Medium | `RtspSessionManager.cpp::TryGetLatestFrame()` | `_lock` is held while allocating a `shared_ptr<vector<BYTE>>` and `CopyMemory`-ing up to 3 MB (1080p NV12). Blocks `Start()`/`Stop()` for the full duration of a frame copy ~30x/sec. |
-| D | Medium | `MediaStream.cpp::RequestSample()` L395 | Sample duration hardcoded to `333333` (30fps). Wrong if `_hintFpsNum/_hintFpsDen` differs. Should be `(10000000LL * _hintFpsDen) / _hintFpsNum`. |
-| E | Medium | `RtspSessionManager.cpp::Start()` L76-82 | Strict check: if decoder cannot produce exactly the requested NV12 resolution, session fails with `MF_E_INVALIDMEDIATYPE`. Fragile with H.265 sources or cameras that report slightly different sizes. |
-| F | Low | `VCamMediaSource.cpp::KsProperty()` | Handler parses the runtime RTSP URL update but does nothing with it (`#if 0` block). Silent no-op. The `#if 0` block also references `SetRTSPUrl` which no longer exists. |
-| G | Low | `PerformanceTests1/MediaStreamCopyPerfTests.cpp` | Calls `CopyRtspBufferToTargetSample(...)` which no longer exists. Function was refactored into `MediaStream::CopyRtspFrame`. Test project does not compile. |
-| H | Low | `RTCamNative/VirtualCamera.cpp::StartVirtualCamera()` L120 | `CoCreateInstance(CLSID_VCam, CLSCTX_INPROC_SERVER)` loads the DLL into the app process as a diagnostic. Unnecessary and loads the DLL in the wrong process context. Remove it. |
+| E | Medium | `RtspSessionManager.cpp::OpenReaderLocked()` (~L153-157) | Strict check: if decoder cannot produce exactly the requested NV12 resolution, session fails with `MF_E_INVALIDMEDIATYPE`. Fragile with H.265 sources or cameras that report slightly different sizes. |
+
+<details>
+<summary>Fixed (kept for history)</summary>
+
+| # | File / Location | Was |
+|---|---|---|
+| A | `MediaStream.cpp::SetStreamState()` | `RUNNING` now calls `Start(_currentType.get())` instead of `Start(nullptr)`; PAUSED→RUNNING works. |
+| B | `Activator.cpp::Initialize()` | `Initialize()` is called properly and its `HRESULT` checked/logged; no more orphaned stale-`hr` check. |
+| C | `RtspSessionManager.cpp::TryGetLatestFrame()` | Only grabs an `AddRef`'d `IMFSample` under `_lock`; the actual pixel copy happens in `MediaStream::CopyRtspFrame` outside any session lock. |
+| D | `MediaStream.cpp::RequestSample()` | Sample duration is now `(10000000LL * _hintFpsDen) / max(1u, _hintFpsNum)`, not hardcoded to 30fps. |
+| F | `VCamMediaSource.cpp::KsProperty()` | Handler now parses and logs the runtime RTSP URL property properly (no `#if 0`, no reference to a nonexistent `SetRTSPUrl`). Runtime hot-swap of the URL is still not implemented — config remains set at `Start()` time only — but the handler is no longer dead/broken code. |
+| G | `PerformanceTests1/MediaStreamCopyPerfTests.cpp` | Rewritten as MF-infrastructure placeholder tests; no longer calls the removed `CopyRtspBufferToTargetSample`. The whole `PerformanceTests1` project was removed on 2026-07-09 (it was never wired into `RTVirtualCamera.sln` and only held placeholder tests) — see Testing section below. |
+| H | `RTCamNative/VirtualCamera.cpp::StartVirtualCamera()` | The diagnostic `CoCreateInstance(CLSID_VCam, CLSCTX_INPROC_SERVER)` call is gone. |
+
+</details>
 
 ---
 
@@ -173,8 +183,7 @@ When the stream drops (network blip, camera reboot), `RtspReaderCallback::OnRead
 
 | Component | Notes |
 |---|---|
-| `FrameGenerator` (`VirtualCamera/`) | Never called in `RequestSample` main path. Synthetic frame fallback only. |
-| `#if 0` block in `VCamMediaSource::KsProperty` | Runtime URL update via KsProperty — inert. |
+| `FrameGenerator` (`VirtualCamera/`) | Never called in `RequestSample` main path. Synthetic frame fallback only (also shown during RTSP `Reconnecting`). |
 | `VideoPlayer` / `VideoReaderCbk` / `CSourceOpenMonitor` | App-process preview only, not in Frame Server path. |
 | `SetOutputMediaType()` in `RtspReaderCallback.cpp` | Public method, not called anywhere. |
 
@@ -182,6 +191,6 @@ When the stream drops (network blip, camera reboot), `RtspReaderCallback::OnRead
 
 ## Testing
 
-`PerformanceTests1/` is a Visual Studio Unit Test project for `MediaStream::CopyRtspFrame`. Currently broken because the test references `CopyRtspBufferToTargetSample` (old name). Run from VS Test Explorer after fixing.
+No automated tests currently in the repo. `PerformanceTests1/` (a placeholder MF-infrastructure unit test project, never wired into `RTVirtualCamera.sln`) was removed on 2026-07-09 as part of a repo cleanup. If `MediaStream::CopyRtspFrame` needs test coverage again, its NV12 copy logic will need extracting into a free function or a friend-test pattern first, since it's a private member.
 
 No automated test for the Frame Server path — debug by attaching VS to `svchost.exe`.
