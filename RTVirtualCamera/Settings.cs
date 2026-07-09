@@ -1,9 +1,9 @@
-﻿using System;
+﻿using RTVirtualCamera.Properties;
+using System;
 using System.Globalization;
 using System.IO;
 using System.Resources;
 using System.Text.Json;
-using RTVirtualCamera.Properties;
 
 namespace RTVirtualCamera
 {
