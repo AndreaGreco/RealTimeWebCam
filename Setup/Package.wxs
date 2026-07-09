@@ -75,4 +75,46 @@
 							   Value="1"
 							   KeyPath="yes" />
 			</Component>
-		</StandardD
+		</StandardDirectory>
+
+		<!-- Optional desktop shortcut (own component so it can be a selectable feature) -->
+		<StandardDirectory Id="DesktopFolder">
+			<Component Id="DesktopShortcut" Guid="*">
+				<Shortcut Id="AppDesktopShortcut"
+						  Name="RTVirtualCamera"
+						  Description="RTSP Virtual Camera"
+						  Target="[INSTALLFOLDER]RTVirtualCamera.exe"
+						  WorkingDirectory="INSTALLFOLDER" />
+				<RegistryValue Root="HKCU"
+							   Key="Software\RTVirtualCamera"
+							   Name="DesktopShortcut"
+							   Type="integer"
+							   Value="1"
+							   KeyPath="yes" />
+			</Component>
+		</StandardDirectory>
+
+		<!-- MIT license shown + accepted before install -->
+		<WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
+		<ui:WixUI Id="WixUI_FeatureTree" />
+
+		<!-- Main app: required. Desktop shortcut: optional, user-selectable. -->
+		<Feature Id="MainApplication"
+				 Title="RTVirtualCamera"
+				 Description="Applicazione, pipeline e camera virtuale COM."
+				 Level="1"
+				 AllowAbsent="no"
+				 Display="expand">
+			<ComponentGroupRef Id="AppFiles" />
+			<ComponentRef Id="CameraCOM" />
+			<ComponentRef Id="StartMenuShortcut" />
+
+			<Feature Id="DesktopShortcut"
+					 Title="Collegamento sul desktop"
+					 Description="Crea un'icona sul desktop per avviare RTVirtualCamera."
+					 Level="1">
+				<ComponentRef Id="DesktopShortcut" />
+			</Feature>
+		</Feature>
+	</Package>
+</Wix>
