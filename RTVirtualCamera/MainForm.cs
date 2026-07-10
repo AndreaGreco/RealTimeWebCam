@@ -92,9 +92,6 @@ namespace RTVirtualCamera
         {
             Text = AppStrings.Get("App_Title");
 
-            if (playButton != null)
-                playButton.Text = AppStrings.Get("Button_StartPreview");
-
             if (startVCamButton != null)
                 startVCamButton.Text = isVCamRunning ? AppStrings.Get("Button_StopVCam") : AppStrings.Get("Button_StartVCam");
 
