@@ -1,0 +1,280 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!--
+    Microsoft ResX Schema
+
+    Version 2.0
+
+    The primary goals of this format is to allow a simple XML format
+    that is mostly human readable. The generation and parsing of the
+    various data types are done through the TypeConverter classes
+    associated with the data types.
+
+    Example:
+
+    ... ado.net/XML headers & schema ...
+    <resheader name="resmimetype">text/microsoft-resx</resheader>
+    <resheader name="version">2.0</resheader>
+    <resheader name="reader">System.Resources.ResXResourceReader, System.Windows.Forms, ...</resheader>
+    <resheader name="writer">System.Resources.ResXResourceWriter, System.Windows.Forms, ...</resheader>
+    <data name="Name1"><value>this is my long string</value><comment>this is a comment</comment></data>
+    <data name="Color1" type="System.Drawing.Color, System.Drawing">Blue</data>
+    <data name="Bitmap1" mimetype="application/x-microsoft.net.object.binary.base64">
+        <value>[base64 mime encoded serialized .NET Framework object]</value>
+    </data>
+    <data name="Icon1" type="System.Drawing.Icon, System.Drawing" mimetype="application/x-microsoft.net.object.bytearray.base64">
+        <value>[base64 mime encoded string representing a byte array form of the .NET Framework object]</value>
+        <comment>This is a comment</comment>
+    </data>
+
+    There are any number of "resheader" rows that contain simple
+    name/value pairs.
+
+    Each data row contains a name, and value. The row also contains a
+    type or mimetype. Type corresponds to a .NET class that support
+    text/value conversion through the TypeConverter architecture.
+    Classes that don't support this are serialized and stored with the
+    mimetype set.
+
+    The mimetype is used for serialized objects, and tells the
+    ResXResourceReader how to depersist the object. This is currently not
+    extensible. For a given mimetype the value must be set accordingly:
+
+    Note - application/x-microsoft.net.object.binary.base64 is the format
+    that the ResXResourceWriter will generate, however the reader can
+    read any of the formats listed below.
+
+    mimetype: application/x-microsoft.net.object.binary.base64
+    value   : The object must be serialized with
+            : System.Runtime.Serialization.Formatters.Binary.BinaryFormatter
+            : and then encoded with base64 encoding.
+
+    mimetype: application/x-microsoft.net.object.soap.base64
+    value   : The object must be serialized with
+            : System.Runtime.Serialization.Formatters.Soap.SoapFormatter
+            : and then encoded with base64 encoding.
+
+    mimetype: application/x-microsoft.net.object.bytearray.base64
+    value   : The object must be serialized into a byte array
+            : using a System.ComponentModel.TypeConverter
+            : and then encoded with base64 encoding.
+    -->
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="App_Title" xml:space="preserve">
+    <value>RT Virtual Camera</value>
+  </data>
+  <data name="Button_StartPreview" xml:space="preserve">
+    <value>Iniciar vista previa</value>
+  </data>
+  <data name="Button_Browse" xml:space="preserve">
+    <value>Examinar</value>
+  </data>
+  <data name="Button_StartVCam" xml:space="preserve">
+    <value>Iniciar VCam</value>
+  </data>
+  <data name="Button_StopVCam" xml:space="preserve">
+    <value>Detener VCam</value>
+  </data>
+  <data name="Preview_Inactive" xml:space="preserve">
+    <value>Vista previa no activa</value>
+  </data>
+  <data name="Language_System" xml:space="preserve">
+    <value>Sistema</value>
+  </data>
+  <data name="Language_Updated_Title" xml:space="preserve">
+    <value>Idioma actualizado</value>
+  </data>
+  <data name="Language_Updated_Message" xml:space="preserve">
+    <value>Reinicie la aplicación para aplicar el nuevo idioma.</value>
+  </data>
+  <data name="Settings_Title" xml:space="preserve">
+    <value>Configuración</value>
+  </data>
+  <data name="Settings_GeneralSection" xml:space="preserve">
+    <value>General</value>
+  </data>
+  <data name="Settings_AutoStart" xml:space="preserve">
+    <value>Iniciar automáticamente el flujo al arrancar</value>
+  </data>
+  <data name="Source_Missing_Title" xml:space="preserve">
+    <value>Falta la fuente</value>
+  </data>
+  <data name="Source_Unavailable_Title" xml:space="preserve">
+    <value>Fuente no disponible</value>
+  </data>
+  <data name="Source_SelectPrompt" xml:space="preserve">
+    <value>Seleccione un archivo de vídeo o introduzca una URL RTSP válida.</value>
+  </data>
+  <data name="Preview_Error_Title" xml:space="preserve">
+    <value>Error de vista previa</value>
+  </data>
+  <data name="Preview_Error_Start" xml:space="preserve">
+    <value>No se pudo iniciar la vista previa.</value>
+  </data>
+  <data name="Preview_OpenFail_Title" xml:space="preserve">
+    <value>Error al abrir la vista previa</value>
+  </data>
+  <data name="Preview_OpenFail_Message" xml:space="preserve">
+    <value>El reproductor no pudo abrir la fuente de vídeo.</value>
+  </data>
+  <data name="Preview_OpenFail_Details" xml:space="preserve">
+    <value>La fuente puede ser inaccesible, lenta para responder o no compatible.</value>
+  </data>
+  <data name="Preview_PlayFail_Title" xml:space="preserve">
+    <value>Error al iniciar la vista previa</value>
+  </data>
+  <data name="Preview_PlayFail_Message" xml:space="preserve">
+    <value>La fuente se abrió pero la reproducción no se inició.</value>
+  </data>
+  <data name="Preview_PlayFail_Details" xml:space="preserve">
+    <value>Posible error de red, de decodificación o de formato de vídeo incompatible.</value>
+  </data>
+  <data name="Probe_Timeout_Message" xml:space="preserve">
+    <value>La fuente no respondió a tiempo. Compruebe la red, las credenciales y la disponibilidad del flujo.</value>
+  </data>
+  <data name="Probe_Timeout_Details" xml:space="preserve">
+    <value>Tiempo de espera del sondeo agotado tras {0} ms.</value>
+  </data>
+  <data name="Probe_Validation_Details" xml:space="preserve">
+    <value>La validación de la fuente falló antes del sondeo.</value>
+  </data>
+  <data name="Probe_InitFail_Message" xml:space="preserve">
+    <value>No se pudo abrir la fuente de vídeo.</value>
+  </data>
+  <data name="Probe_InitFail_Details" xml:space="preserve">
+    <value>InitializePlayer devolvió un error.</value>
+  </data>
+  <data name="Probe_NoStreams_Message" xml:space="preserve">
+    <value>La fuente se abrió pero no expone ningún flujo de vídeo utilizable.</value>
+  </data>
+  <data name="Probe_NoStreams_Details" xml:space="preserve">
+    <value>GetVideoStreamInfo no devolvió ningún flujo de vídeo.</value>
+  </data>
+  <data name="Probe_COM_Message" xml:space="preserve">
+    <value>Media Foundation rechazó abrir la fuente.</value>
+  </data>
+  <data name="Probe_SEH_Message" xml:space="preserve">
+    <value>El componente nativo generó un error interno durante el sondeo.</value>
+  </data>
+  <data name="Probe_Unexpected_Message" xml:space="preserve">
+    <value>Error inesperado al comprobar la fuente.</value>
+  </data>
+  <data name="Path_Invalid" xml:space="preserve">
+    <value>La ruta especificada no es válida. Use un archivo local existente o una URL RTSP/HTTP válida.</value>
+  </data>
+  <data name="Path_FileMissing" xml:space="preserve">
+    <value>El archivo seleccionado no existe.</value>
+  </data>
+  <data name="VirtualCamera_Error_Title" xml:space="preserve">
+    <value>Error de cámara virtual</value>
+  </data>
+  <data name="VirtualCamera_Error_Message" xml:space="preserve">
+    <value>No se pudo completar la operación de la cámara virtual.</value>
+  </data>
+  <data name="VirtualCamera_RegisterFail_Title" xml:space="preserve">
+    <value>Error de registro de la cámara virtual</value>
+  </data>
+  <data name="VirtualCamera_RegisterFail_Message" xml:space="preserve">
+    <value>Windows no aceptó el registro de la cámara virtual.</value>
+  </data>
+  <data name="VirtualCamera_RegisterFail_Details" xml:space="preserve">
+    <value>Compruebe que VCamSampleSource.dll esté registrada, que el sistema admita cámaras virtuales y que Media Foundation esté disponible.</value>
+  </data>
+  <data name="VirtualCamera_StartFail_Title" xml:space="preserve">
+    <value>Error al iniciar la cámara virtual</value>
+  </data>
+  <data name="VirtualCamera_StartFail_Message" xml:space="preserve">
+    <value>La cámara virtual se registró pero no pudo iniciarse.</value>
+  </data>
+  <data name="VirtualCamera_StartFail_Details" xml:space="preserve">
+    <value>Posibles causas: flujo RTSP no disponible, formato negociado no compatible o error interno de Media Foundation.</value>
+  </data>
+  <data name="Info_Title" xml:space="preserve">
+    <value>Información</value>
+  </data>
+  <data name="About_Tagline" xml:space="preserve">
+    <value>Convierte una cámara de red RTSP en una webcam virtual de Windows.</value>
+  </data>
+  <data name="About_VersionFormat" xml:space="preserve">
+    <value>Versión {0}</value>
+  </data>
+  <data name="About_Credits" xml:space="preserve">
+    <value>Basado en VCamSample de Simon Mourier.
+Licencia MIT — © Simon Mourier, Andrea Greco.</value>
+  </data>
+  <data name="Button_Close" xml:space="preserve">
+    <value>Cerrar</value>
+  </data>
+  <data name="VirtualCamera_Stopped" xml:space="preserve">
+    <value>Cámara virtual detenida</value>
+  </data>
+  <data name="Tech_Details" xml:space="preserve">
+    <value>Detalles técnicos:</value>
+  </data>
+  <data name="Preview_VCamStarted" xml:space="preserve">
+    <value>Cámara virtual iniciada</value>
+  </data>
+  <data name="Resolution_Format" xml:space="preserve">
+    <value>Resolución:{0}x{1}@{2}</value>
+  </data>
+  <data name="Menu_Language" xml:space="preserve">
+    <value>Idioma</value>
+  </data>
+</root>

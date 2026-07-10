@@ -65,6 +65,8 @@ namespace RTVirtualCamera
             languageComboBox.Items.Add(new LanguageOption(AppStrings.Get("Language_System"), string.Empty));
             languageComboBox.Items.Add(new LanguageOption("Italiano", "it-IT"));
             languageComboBox.Items.Add(new LanguageOption("English", "en"));
+            languageComboBox.Items.Add(new LanguageOption("Español", "es"));
+            languageComboBox.Items.Add(new LanguageOption("Deutsch", "de"));
 
             string currentLanguage = Settings.Current.Language ?? string.Empty;
             int selectedIndex = 0;
