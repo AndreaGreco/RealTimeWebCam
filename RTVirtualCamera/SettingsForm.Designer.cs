@@ -1,4 +1,4 @@
-﻿namespace RTVirtualCamera
+namespace RTVirtualCamera
 {
     partial class SettingsForm
     {
@@ -28,98 +28,95 @@
         /// </summary>
         private void InitializeComponent()
         {
-            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(SettingsForm));
-            this.radioLanguage_IT = new System.Windows.Forms.RadioButton();
-            this.radioLanguageEn = new System.Windows.Forms.RadioButton();
-            this.groupBox1 = new System.Windows.Forms.GroupBox();
-            this.radioLanguageSystem = new System.Windows.Forms.RadioButton();
-            this.groupBox2 = new System.Windows.Forms.GroupBox();
-            this.AutoStartCheckBox = new System.Windows.Forms.CheckBox();
-            this.tableLayoutPanel1 = new System.Windows.Forms.TableLayoutPanel();
-            this.groupBox1.SuspendLayout();
-            this.groupBox2.SuspendLayout();
-            this.tableLayoutPanel1.SuspendLayout();
-            this.SuspendLayout();
-            // 
-            // radioLanguage_IT
-            // 
-            resources.ApplyResources(this.radioLanguage_IT, "radioLanguage_IT");
-            this.radioLanguage_IT.Name = "radioLanguage_IT";
-            this.radioLanguage_IT.TabStop = true;
-            this.radioLanguage_IT.UseVisualStyleBackColor = true;
-            this.radioLanguage_IT.CheckedChanged += new System.EventHandler(this.radioLanguage_IT_CheckedChanged);
-            // 
-            // radioLanguageEn
-            // 
-            resources.ApplyResources(this.radioLanguageEn, "radioLanguageEn");
-            this.radioLanguageEn.Name = "radioLanguageEn";
-            this.radioLanguageEn.TabStop = true;
-            this.radioLanguageEn.UseVisualStyleBackColor = true;
-            this.radioLanguageEn.CheckedChanged += new System.EventHandler(this.radioLanguageEn_CheckedChanged);
-            // 
-            // groupBox1
-            // 
-            resources.ApplyResources(this.groupBox1, "groupBox1");
-            this.groupBox1.Controls.Add(this.radioLanguageSystem);
-            this.groupBox1.Controls.Add(this.radioLanguage_IT);
-            this.groupBox1.Controls.Add(this.radioLanguageEn);
-            this.groupBox1.Name = "groupBox1";
-            this.groupBox1.TabStop = false;
-            this.groupBox1.Enter += new System.EventHandler(this.groupBox1_Enter);
-            // 
-            // radioLanguageSystem
-            // 
-            resources.ApplyResources(this.radioLanguageSystem, "radioLanguageSystem");
-            this.radioLanguageSystem.Name = "radioLanguageSystem";
-            this.radioLanguageSystem.TabStop = true;
-            this.radioLanguageSystem.UseVisualStyleBackColor = true;
-            this.radioLanguageSystem.CheckedChanged += new System.EventHandler(this.radioLanguageSystem_CheckedChanged);
-            // 
-            // groupBox2
-            // 
-            resources.ApplyResources(this.groupBox2, "groupBox2");
-            this.groupBox2.Controls.Add(this.AutoStartCheckBox);
-            this.groupBox2.Name = "groupBox2";
-            this.groupBox2.TabStop = false;
-            // 
+            languageSectionLabel = new System.Windows.Forms.Label();
+            languageComboBox = new System.Windows.Forms.ComboBox();
+            generalSectionLabel = new System.Windows.Forms.Label();
+            AutoStartCheckBox = new System.Windows.Forms.CheckBox();
+            closeButton = new System.Windows.Forms.Button();
+            SuspendLayout();
+            //
+            // languageSectionLabel
+            //
+            languageSectionLabel.AutoSize = true;
+            languageSectionLabel.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+            languageSectionLabel.Location = new System.Drawing.Point(20, 16);
+            languageSectionLabel.Name = "languageSectionLabel";
+            languageSectionLabel.Size = new System.Drawing.Size(60, 15);
+            languageSectionLabel.TabIndex = 0;
+            languageSectionLabel.Text = "Language";
+            //
+            // languageComboBox
+            //
+            languageComboBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            languageComboBox.FormattingEnabled = true;
+            languageComboBox.Location = new System.Drawing.Point(20, 38);
+            languageComboBox.Name = "languageComboBox";
+            languageComboBox.Size = new System.Drawing.Size(300, 23);
+            languageComboBox.TabIndex = 1;
+            //
+            // generalSectionLabel
+            //
+            generalSectionLabel.AutoSize = true;
+            generalSectionLabel.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+            generalSectionLabel.Location = new System.Drawing.Point(20, 78);
+            generalSectionLabel.Name = "generalSectionLabel";
+            generalSectionLabel.Size = new System.Drawing.Size(50, 15);
+            generalSectionLabel.TabIndex = 2;
+            generalSectionLabel.Text = "General";
+            //
             // AutoStartCheckBox
-            // 
-            resources.ApplyResources(this.AutoStartCheckBox, "AutoStartCheckBox");
-            this.AutoStartCheckBox.Name = "AutoStartCheckBox";
-            this.AutoStartCheckBox.UseVisualStyleBackColor = true;
-            this.AutoStartCheckBox.CheckedChanged += new System.EventHandler(this.AutoStartCheckBox_CheckedChanged);
-            // 
-            // tableLayoutPanel1
-            // 
-            resources.ApplyResources(this.tableLayoutPanel1, "tableLayoutPanel1");
-            this.tableLayoutPanel1.Controls.Add(this.groupBox1, 0, 0);
-            this.tableLayoutPanel1.Controls.Add(this.groupBox2, 0, 1);
-            this.tableLayoutPanel1.Name = "tableLayoutPanel1";
-            // 
+            //
+            AutoStartCheckBox.AutoSize = true;
+            AutoStartCheckBox.Location = new System.Drawing.Point(20, 102);
+            AutoStartCheckBox.Name = "AutoStartCheckBox";
+            AutoStartCheckBox.Size = new System.Drawing.Size(80, 19);
+            AutoStartCheckBox.TabIndex = 3;
+            AutoStartCheckBox.Text = "Auto start";
+            AutoStartCheckBox.UseVisualStyleBackColor = true;
+            AutoStartCheckBox.CheckedChanged += AutoStartCheckBox_CheckedChanged;
+            //
+            // closeButton
+            //
+            closeButton.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
+            closeButton.DialogResult = System.Windows.Forms.DialogResult.OK;
+            closeButton.Location = new System.Drawing.Point(244, 150);
+            closeButton.Name = "closeButton";
+            closeButton.Size = new System.Drawing.Size(76, 26);
+            closeButton.TabIndex = 4;
+            closeButton.Text = "Close";
+            closeButton.UseVisualStyleBackColor = true;
+            //
             // SettingsForm
-            // 
-            resources.ApplyResources(this, "$this");
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.Controls.Add(this.tableLayoutPanel1);
-            this.Name = "SettingsForm";
-            this.Load += new System.EventHandler(this.SettingsForm_Load);
-            this.groupBox1.ResumeLayout(false);
-            this.groupBox1.PerformLayout();
-            this.groupBox2.ResumeLayout(false);
-            this.groupBox2.PerformLayout();
-            this.tableLayoutPanel1.ResumeLayout(false);
-            this.ResumeLayout(false);
-
+            //
+            AcceptButton = closeButton;
+            AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
+            AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            CancelButton = closeButton;
+            ClientSize = new System.Drawing.Size(340, 196);
+            Controls.Add(closeButton);
+            Controls.Add(AutoStartCheckBox);
+            Controls.Add(generalSectionLabel);
+            Controls.Add(languageComboBox);
+            Controls.Add(languageSectionLabel);
+            FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
+            MaximizeBox = false;
+            MinimizeBox = false;
+            Name = "SettingsForm";
+            ShowIcon = false;
+            ShowInTaskbar = false;
+            StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
+            Text = "Settings";
+            Load += SettingsForm_Load;
+            ResumeLayout(false);
+            PerformLayout();
         }
 
         #endregion
 
-        private System.Windows.Forms.RadioButton radioLanguage_IT;
-        private System.Windows.Forms.RadioButton radioLanguageEn;
-        private System.Windows.Forms.GroupBox groupBox1;
-        private System.Windows.Forms.GroupBox groupBox2;
+        private System.Windows.Forms.Label languageSectionLabel;
+        private System.Windows.Forms.ComboBox languageComboBox;
+        private System.Windows.Forms.Label generalSectionLabel;
         private System.Windows.Forms.CheckBox AutoStartCheckBox;
-        private System.Windows.Forms.RadioButton radioLanguageSystem;
-        private System.Windows.Forms.TableLayoutPanel tableLayoutPanel1;
+        private System.Windows.Forms.Button closeButton;
     }
 }

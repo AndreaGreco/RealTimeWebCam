@@ -144,6 +144,15 @@
   <data name="Language_Updated_Message" xml:space="preserve">
     <value>Riavviare l'applicazione per applicare la nuova lingua.</value>
   </data>
+  <data name="Settings_Title" xml:space="preserve">
+    <value>Impostazioni</value>
+  </data>
+  <data name="Settings_GeneralSection" xml:space="preserve">
+    <value>Generali</value>
+  </data>
+  <data name="Settings_AutoStart" xml:space="preserve">
+    <value>Avvia automaticamente lo stream all'avvio</value>
+  </data>
   <data name="Source_Missing_Title" xml:space="preserve">
     <value>Sorgente mancante</value>
   </data>

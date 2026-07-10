@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Windows.Forms;
 
 namespace RTVirtualCamera
@@ -45,43 +45,45 @@ namespace RTVirtualCamera
                 MessageBoxIcon.Information);
         }
 
-        private void radioLanguage_IT_CheckedChanged(object sender, EventArgs e)
+        private void LanguageComboBox_SelectedIndexChanged(object sender, EventArgs e)
         {
-            LanguageChanged(new LanguageOption("Italiano", "it-IT"));
-        }
-
-        private void radioLanguageEn_CheckedChanged(object sender, EventArgs e)
-        {
-            LanguageChanged(new LanguageOption("English", "en"));
-        }
-
-        private void radioLanguageSystem_CheckedChanged(object sender, EventArgs e)
-        {
-            LanguageChanged(new LanguageOption(AppStrings.Get("Language_System"), string.Empty));
-        }
-
-        private void groupBox1_Enter(object sender, EventArgs e)
-        {
-
+            if (languageComboBox.SelectedItem is LanguageOption option)
+            {
+                LanguageChanged(option);
+            }
         }
 
         private void SettingsForm_Load(object sender, EventArgs e)
         {
-            string currentLanguage = Settings.Current.Language;
-            switch (Settings.Current.Language)
+            Text = AppStrings.Get("Settings_Title");
+            languageSectionLabel.Text = AppStrings.Get("Menu_Language");
+            generalSectionLabel.Text = AppStrings.Get("Settings_GeneralSection");
+            AutoStartCheckBox.Text = AppStrings.Get("Settings_AutoStart");
+            closeButton.Text = AppStrings.Get("Button_Close");
+
+            languageComboBox.Items.Clear();
+            languageComboBox.Items.Add(new LanguageOption(AppStrings.Get("Language_System"), string.Empty));
+            languageComboBox.Items.Add(new LanguageOption("Italiano", "it-IT"));
+            languageComboBox.Items.Add(new LanguageOption("English", "en"));
+
+            string currentLanguage = Settings.Current.Language ?? string.Empty;
+            int selectedIndex = 0;
+            for (int i = 0; i < languageComboBox.Items.Count; i++)
             {
-                case "it-IT":
-                    this.radioLanguage_IT.Checked = true;
+                var option = (LanguageOption)languageComboBox.Items[i];
+                if (string.Equals(option.Code, currentLanguage, StringComparison.OrdinalIgnoreCase))
+                {
+                    selectedIndex = i;
                     break;
-
-                case "en":
-                    this.radioLanguageEn.Checked = true;
-                    break;
-
-                default:
-                    this.radioLanguageSystem.Checked = true;
-                    break;
+                }
             }
+
+            // Set before wiring the event so opening the dialog doesn't itself
+            // trigger a "language updated" prompt.
+            languageComboBox.SelectedIndex = selectedIndex;
+            languageComboBox.SelectedIndexChanged += LanguageComboBox_SelectedIndexChanged;
+
+            AutoStartCheckBox.Checked = Settings.Current.AutoStart;
         }
 
         private void AutoStartCheckBox_CheckedChanged(object sender, EventArgs e)
