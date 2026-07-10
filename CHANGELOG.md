@@ -7,7 +7,21 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [Unreleased]
+## [0.2.0]
+
+### Added
+- Spanish and German added to the language selector (alongside Italian and English).
+- New application icon (webcam glyph on navy rounded-square background), used by the app and by the installer's Add/Remove Programs entry.
+- Installer: `MajorUpgrade` support for clean in-place upgrades, and a Start Menu shortcut.
+
+### Changed
+- Migrated `RTVirtualCamera` to .NET 10 (LTS), SDK-style project, self-contained deployment — the MSI no longer requires a pre-installed .NET runtime on the target machine.
+- Minimum supported Windows version set to Build 22000 (Windows 11 21H2), matching the `MFCreateVirtualCamera` API requirement.
+- About dialog redesigned.
+- Settings dialog redesigned; language selector changed from radio buttons to a dropdown.
+
+### Removed
+- `PerformanceTests1` project (placeholder MF-infrastructure tests, never wired into the solution).
 
 ---
 
@@ -36,5 +50,5 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - `PAUSED→RUNNING` transition (`SetStreamState`) returning `E_POINTER`.
 - Memory leak on Stop/Start cycle.
 
-[Unreleased]: https://github.com/andrea-greco/RealTimeWebCam/compare/1.0.0...HEAD
-[1.0.0]: https://github.com/andrea-greco/RealTimeWebCam/releases/tag/1.0.0
+[Unreleased]: https://github.com/andrea-greco/RealTimeWebCam/compare/0.1.0...HEAD
+[0.1.0]: https://github.com/andrea-greco/RealTimeWebCam/releases/tag/0.1.0

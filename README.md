@@ -29,10 +29,10 @@ Works on **Windows 11** (21H2 or later) thanks to the [`MFCreateVirtualCamera`](
 
 ## Install (MSI)
 
-Download and run the installer: **`RT-VirtualCam-Setup.msi`** (single file, ~8 MB).
+Download and run the installer: **`RT-VirtualCam-Setup.msi`** (single file, self-contained — it bundles the .NET 10 runtime, so there's nothing else to install first).
 
 1. Run the MSI and accept the MIT license.
-2. (Optional) tick the desktop shortcut.
+2. (Optional) tick the desktop shortcut; a Start Menu shortcut is added automatically.
 3. The installer registers the COM component automatically (no manual `regsvr32`).
 
 The app installs to `C:\Program Files\RTVirtualCamera`. Settings and logs go to `%LOCALAPPDATA%\RTVirtualCamera` (the install folder isn't writable by a standard user).
@@ -110,6 +110,10 @@ It should be practically real-time and report the expected framerate (e.g. `30 f
 1. Launch **RTVirtualCamera.exe**.
 2. Enter the RTSP URL and press **Start Preview** to see it in the panel.
 3. Press **Start VCam**: *"RTSP Virtual Camera"* will appear in Zoom/Teams/etc.
+
+### Settings
+
+Open **Settings** from the app to pick the interface language (System / Italiano / English / Español / Deutsch) and to turn on auto-start (opens the stream automatically on launch, no click needed). A language change takes effect after restarting the app.
 
 ### The diagnostics bar (at the top)
 
