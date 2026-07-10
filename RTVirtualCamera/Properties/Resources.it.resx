@@ -240,6 +240,19 @@
   <data name="Info_Title" xml:space="preserve">
     <value>Informazione</value>
   </data>
+  <data name="About_Tagline" xml:space="preserve">
+    <value>Trasforma una telecamera di rete RTSP in una webcam virtuale di Windows.</value>
+  </data>
+  <data name="About_VersionFormat" xml:space="preserve">
+    <value>Versione {0}</value>
+  </data>
+  <data name="About_Credits" xml:space="preserve">
+    <value>Basato su VCamSample di Simon Mourier.
+Licenza MIT — © Simon Mourier, Andrea Greco.</value>
+  </data>
+  <data name="Button_Close" xml:space="preserve">
+    <value>Chiudi</value>
+  </data>
   <data name="VirtualCamera_Stopped" xml:space="preserve">
     <value>Virtual Camera fermata</value>
   </data>
