@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows10.0.17763.0</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.22000.0</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <RootNamespace>RTVirtualCamera</RootNamespace>
     <AssemblyName>RTVirtualCamera</AssemblyName>
@@ -26,6 +26,14 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
 
+    <!-- The SDK also appends a TargetFramework folder segment by default
+         (bin\x64\Debug\net10.0-windows10.0.22000.0\), independently of the
+         RuntimeIdentifier one above. Missing this is almost certainly why
+         RTVirtualCamera.exe stopped finding RTCamNative.dll: the exe was
+         landing one folder deeper than the native project's plain
+         bin\x64\<Config>\ output, so P/Invoke's app-directory search missed it. -->
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+
     <!-- AssemblyVersion/AssemblyFileVersion/AssemblyInformationalVersion come from
          build/Version.g.cs (git-derived, see build/Set-GitVersion.ps1). The rest of
          the assembly attributes (title, product, GUID, ComVisible...) come from
@@ -38,6 +46,7 @@
          next to the exe at runtime without any assembly reference. -->
     <BaseOutputPath>..\bin\</BaseOutputPath>
     <BaseIntermediateOutputPath>obj\</BaseIntermediateOutputPath>
+    <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)'=='Debug'">
