@@ -326,6 +326,7 @@ HRESULT MediaStream::SetAllocator(IUnknown* allocator)
 
 HRESULT MediaStream::SetD3DManager(IUnknown* manager)
 {
+	WINTRACE(L"MediaStream::SetD3DManager manager:%p", manager);
 	RETURN_HR_IF_NULL(E_POINTER, manager);
 
 	_allocator->SetDirectXManager(manager);

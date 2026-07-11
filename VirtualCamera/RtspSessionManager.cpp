@@ -398,6 +398,8 @@ HRESULT RtspSessionManager::TryGetLatestFrame(RtspFrameSnapshot& frame)
 void RtspSessionManager::SetD3DManager(IUnknown* manager)
 {
 	winrt::slim_lock_guard lock(_lock);
+	WINTRACE(L"RtspSessionManager::SetD3DManager manager:%p (state=%d, reader already open=%d)",
+		manager, static_cast<int>(_state), _reader != nullptr);
 	_dxgiManager.reset();
 	if (manager)
 		manager->QueryInterface(IID_PPV_ARGS(&_dxgiManager));
