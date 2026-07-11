@@ -26,6 +26,10 @@ struct RtspFrameSnapshot
 	LONGLONG sampleTime = 0;
 	LONGLONG sampleDuration = 0;
 	UINT64 generation = 0;
+	// Identity of the underlying decoded frame (RtspReaderCallback::_latestFrameSeq).
+	// Unchanged across calls that re-serve the same cached frame; MediaStream uses
+	// this to tell a fresh RTSP frame from a duplicate re-serve for its stats.
+	UINT64 frameSeq = 0;
 	// Holds the decoded RTSP sample directly (GPU texture or system-memory buffer).
 	// No pixel copy happens here — MediaStream::CopyRtspFrame copies straight from
 	// this sample's buffer into the consumer's sample (GPU->GPU when possible).
@@ -54,6 +58,10 @@ struct IRtspSessionManager
 	// RTSP decoder produces GPU textures (DXVA). Must be set before Start() to take
 	// effect; if unset, the reader falls back to system-memory output.
 	virtual void SetD3DManager(IUnknown* manager) = 0;
+	// Live diagnostics for StatsPublisher (see Shared/VCamStats.h): cumulative
+	// frames received from RTSP and frames dropped (replaced before a consumer
+	// ever picked them up). Both 0 if there is no active reader.
+	virtual void GetFrameCounters(UINT64& rxFrames, UINT64& droppedFrames) const = 0;
 };
 
 struct StreamRuntimeContext
@@ -74,6 +82,7 @@ public:
 	RtspSessionState GetState() const override;
 	HRESULT TryGetLatestFrame(RtspFrameSnapshot& frame) override;
 	void SetD3DManager(IUnknown* manager) override;
+	void GetFrameCounters(UINT64& rxFrames, UINT64& droppedFrames) const override;
 
 	// Reconnection policy: on a stream break we retry kMaxReconnectAttempts times,
 	// kReconnectIntervalMs apart (60 attempts, one per second).

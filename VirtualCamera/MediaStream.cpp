@@ -6,6 +6,7 @@
 #include "MediaStream.h"
 #include "VCamMediaSource.h"
 #include "RtspReaderCallback.h"
+#include "StatsPublisher.h"
 #include <mfreadwrite.h>
 #include <mfapi.h>
 
@@ -155,10 +156,14 @@ HRESULT MediaStream::CopyRtspFrame(const RtspFrameSnapshot& frame, IMFSample* ta
 	{
 		HRESULT hrGpu = CopyRtspFrameGpu(srcDxgi.get(), dstDxgi.get());
 		if (SUCCEEDED(hrGpu))
+		{
+			_lastCopyWasGpu = true;
 			return S_OK;
+		}
 		WINTRACE(L"MediaStream::CopyRtspFrame - GPU copy failed 0x%08X, falling back to CPU", hrGpu);
 	}
 
+	_lastCopyWasGpu = false;
 	return CopyRtspFrameCpu(srcBuffer.get(), dstBuffer.get());
 }
 
@@ -480,14 +485,69 @@ STDMETHODIMP MediaStream::RequestSample(IUnknown* pToken)
 		HRESULT hrFrame = _rtspManager->TryGetLatestFrame(frame);
 		if (hrFrame == S_OK && frame.valid)
 		{
+			LARGE_INTEGER freq{}, t0{}, t1{};
+			QueryPerformanceFrequency(&freq);
+			QueryPerformanceCounter(&t0);
 			HRESULT hrCopy = CopyRtspFrame(frame, sample.get());
+			QueryPerformanceCounter(&t1);
 			if (SUCCEEDED(hrCopy))
+			{
 				outSample = sample;
+				_renderedFrameCount++;
+
+				// TakeLatestSample (RtspReaderCallback) intentionally does NOT clear the
+				// cached frame after handing it out — it keeps re-serving the last decoded
+				// frame so the consumer always gets something even when RTSP runs slower
+				// than the consumer asks. We tried declining instead of re-serving
+				// (returning MF_E_SAMPLEALLOCATOR_EMPTY when frame.frameSeq matched the
+				// last delivery) and it made the whole pipeline unstable in practice —
+				// that HRESULT is tied to the allocator's own release-notification
+				// mechanism, not a generic "ask me again" signal, so overloading it here
+				// broke the Frame Server's retry timing. Back to always delivering
+				// something; frame.frameSeq (bumped in OnReadSample only for a genuinely
+				// new sample) is kept purely for stats, to tell a fresh frame from a
+				// re-serve of the previous one.
+				if (_hasDeliveredFrame && frame.frameSeq == _lastDeliveredFrameSeq)
+					_declinedFrameCount++; // "declined" in the stats sense: not a new frame
+				_lastDeliveredFrameSeq = frame.frameSeq;
+				_hasDeliveredFrame = true;
+
+				_lastCopyMs = freq.QuadPart > 0
+					? (double)(t1.QuadPart - t0.QuadPart) * 1000.0 / (double)freq.QuadPart
+					: 0.0;
+
+				// Drift: wall-clock elapsed vs media-timeline elapsed since the first
+				// frame of this session (same formula as the preview path in
+				// RTCamNative/VideoReaderCbk.cpp, so the two numbers mean the same
+				// thing). Reset the baseline whenever the generation changes (new
+				// Start()/reconnect) so a stale baseline from a previous session
+				// doesn't leak into the new one.
+				if (!_driftBaseSet || frame.generation != _driftGeneration)
+				{
+					_driftBaseSet = true;
+					_driftGeneration = frame.generation;
+					_driftBaseTickMs = GetTickCount64();
+					_driftBasePtsMs = frame.sampleTime / 10000; // 100ns -> ms
+					_driftMs = 0.0;
+				}
+				else
+				{
+					ULONGLONG nowTick = GetTickCount64();
+					LONGLONG ptsMs = frame.sampleTime / 10000;
+					double wallElapsed = (double)(nowTick - _driftBaseTickMs);
+					double mediaElapsed = (double)(ptsMs - _driftBasePtsMs);
+					_driftMs = wallElapsed - mediaElapsed;
+				}
+			}
 		}
 	}
 
 	if (!outSample)
 	{
+		// Only reachable before the very first RTSP frame has ever arrived, or if
+		// CopyRtspFrame itself failed. Same synthetic-frame fallback as
+		// Reconnecting/Failed: don't block, just show something so a disconnected
+		// camera doesn't look like a silent stall.
 		if (rtspState == RtspSessionState::Failed)
 			WINTRACE(L"MediaStream::RequestSample - RTSP manager failed, using synthetic frame");
 
@@ -498,12 +558,46 @@ STDMETHODIMP MediaStream::RequestSample(IUnknown* pToken)
 			outSample = sample;
 	}
 
+	PublishStats();
+
 	if (pToken)
 	{
 		RETURN_IF_FAILED(outSample->SetUnknown(MFSampleExtension_Token, pToken));
 	}
 	RETURN_IF_FAILED(_queue->QueueEventParamUnk(MEMediaSample, GUID_NULL, S_OK, outSample.get()));
 	return S_OK;
+}
+
+// Assembles the current snapshot (whatever RequestSample just did) and hands it
+// to StatsPublisher. Runs every RequestSample tick (~30x/sec, the Frame
+// Server's natural cadence) so the app-side UI always has fresh numbers without
+// needing a dedicated timer thread here.
+void MediaStream::PublishStats()
+{
+	VCamFrameServerStats snapshot{};
+	snapshot.sessionState = static_cast<uint32_t>(
+		_rtspManager ? _rtspManager->GetState() : RtspSessionState::Stopped);
+
+	UINT64 rx = 0, dropped = 0;
+	if (_rtspManager)
+		_rtspManager->GetFrameCounters(rx, dropped);
+	snapshot.rxFrames = rx;
+	snapshot.droppedFrames = dropped;
+	snapshot.renderedFrames = _renderedFrameCount;
+	snapshot.declinedFrames = _declinedFrameCount;
+	snapshot.driftMs = _driftMs;
+	snapshot.lastCopyMs = _lastCopyMs;
+	snapshot.width = _videoWidth;
+	snapshot.height = _videoHeight;
+	snapshot.fpsNum = _hintFpsNum;
+	snapshot.fpsDen = _hintFpsDen;
+	// "Capable" = the Frame Server handed this stream a D3D11 device manager
+	// (SetD3DManager), the precondition for the zero-copy path to ever engage.
+	// "Active" = the last copy actually took that path (see CopyRtspFrame).
+	snapshot.hwAccelCapable = (_deviceManager && _deviceHandle) ? 1u : 0u;
+	snapshot.hwAccelActive = _lastCopyWasGpu ? 1u : 0u;
+
+	StatsPublisher::Instance().Publish(snapshot);
 }
 
 // IMFMediaStream2

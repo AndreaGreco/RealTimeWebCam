@@ -364,6 +364,7 @@ HRESULT RtspSessionManager::TryGetLatestFrame(RtspFrameSnapshot& frame)
 	wil::com_ptr_nothrow<IMFSample> sample;
 	UINT32 stride = 0;
 	UINT64 generation = 0;
+	UINT64 frameSeq = 0;
 
 	// Grab a reference (AddRef) to the latest decoded sample under the lock, then
 	// release the lock immediately. No pixel copy or allocation happens here — the
@@ -376,7 +377,7 @@ HRESULT RtspSessionManager::TryGetLatestFrame(RtspFrameSnapshot& frame)
 		// synthetic frames (FrameGenerator) instead of a stale last image.
 		RETURN_HR_IF(MF_E_SHUTDOWN, _state != RtspSessionState::Running || !_callback);
 
-		HRESULT hr = _callback->TakeLatestSample(&sample);
+		HRESULT hr = _callback->TakeLatestSample(&sample, &frameSeq);
 		if (FAILED(hr) || !sample)
 			return hr;
 
@@ -387,6 +388,7 @@ HRESULT RtspSessionManager::TryGetLatestFrame(RtspFrameSnapshot& frame)
 	frame.valid = true;
 	frame.stride = stride;
 	frame.generation = generation;
+	frame.frameSeq = frameSeq;
 	sample->GetSampleTime(&frame.sampleTime);
 	sample->GetSampleDuration(&frame.sampleDuration);
 	frame.sample = std::move(sample);
@@ -399,4 +401,13 @@ void RtspSessionManager::SetD3DManager(IUnknown* manager)
 	_dxgiManager.reset();
 	if (manager)
 		manager->QueryInterface(IID_PPV_ARGS(&_dxgiManager));
+}
+
+void RtspSessionManager::GetFrameCounters(UINT64& rxFrames, UINT64& droppedFrames) const
+{
+	winrt::slim_lock_guard lock(_lock);
+	if (_callback)
+		_callback->GetCounters(rxFrames, droppedFrames);
+	else
+		rxFrames = droppedFrames = 0;
 }

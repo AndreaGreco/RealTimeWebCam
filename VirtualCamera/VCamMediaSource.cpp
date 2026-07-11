@@ -73,6 +73,25 @@ HRESULT VCamMediaSource::SetupCameraSettings(IMFAttributes* attributes)
 	if (_camera_config.height == 0) _camera_config.height = 1080;
 	if (_camera_config.fpsNum == 0) _camera_config.fpsNum = 30;
 	if (_camera_config.fpsDen == 0) _camera_config.fpsDen = 1;
+
+	// Sanity-clamp the advertised frame rate. It comes straight from the RTSP
+	// source's own declared MF_MT_FRAME_RATE (probed app-side in VideoPlayer.cpp),
+	// and some cameras report a nominal/encoder rate that has nothing to do with
+	// what they actually deliver. This value paces MediaStream::RequestSample —
+	// an inflated value makes the Frame Server request far more samples/sec than
+	// the RTSP source can supply, and RtspSessionManager just re-serves the same
+	// cached frame for the excess requests. That's what a "render fps" wildly
+	// higher than "rx fps" in the live stats means: not dropped/duplicated RTSP
+	// frames, but the pacing itself being wrong. Fall back to 30fps if implausible.
+	constexpr UINT32 kMaxSaneFps = 60;
+	if (_camera_config.fpsNum / _camera_config.fpsDen > kMaxSaneFps)
+	{
+		WINTRACE(L"VCamMediaSource::SetupCameraSettings - implausible fps %u/%u from source, clamping to 30/1",
+			_camera_config.fpsNum, _camera_config.fpsDen);
+		_camera_config.fpsNum = 30;
+		_camera_config.fpsDen = 1;
+	}
+
 	_camera_config.format = MFVideoFormat_NV12;
 	_camera_config.valid = true;
 

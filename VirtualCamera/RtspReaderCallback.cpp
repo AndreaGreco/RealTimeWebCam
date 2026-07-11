@@ -61,8 +61,14 @@ STDMETHODIMP RtspReaderCallback::OnReadSample(HRESULT hrStatus, DWORD dwStreamIn
 
 		if (SUCCEEDED(hrStatus) && pSample && !(dwStreamFlags & MF_SOURCE_READERF_ENDOFSTREAM))
 		{
+			_rxFrames.fetch_add(1, std::memory_order_relaxed);
+			if (_latestSample && !_consumedSinceLastWrite)
+				_droppedFrames.fetch_add(1, std::memory_order_relaxed); // previous frame never picked up
+
 			// Replace previous frame (we only keep the latest).
 			_latestSample = pSample;
+			_latestFrameSeq++;
+			_consumedSinceLastWrite = false;
 			//WINTRACE(L"RtspReaderCallback::OnReadSample - frame stored ts:%lld", llTimestamp);
 		}
 		else if (FAILED(hrStatus))
@@ -115,7 +121,7 @@ HRESULT RtspReaderCallback::SetOutputMediaType(const GUID& subtype, UINT32 width
 	return hr;
 }
 
-HRESULT RtspReaderCallback::TakeLatestSample(IMFSample** ppSample)
+HRESULT RtspReaderCallback::TakeLatestSample(IMFSample** ppSample, UINT64* pFrameSeq)
 {
 	RETURN_HR_IF_NULL(E_POINTER, ppSample);
 
@@ -131,6 +137,9 @@ HRESULT RtspReaderCallback::TakeLatestSample(IMFSample** ppSample)
 	// source runs at a lower rate. _latestSample is replaced only when
 	// OnReadSample stores a newer frame.
 	_latestSample.copy_to(ppSample);
+	_consumedSinceLastWrite = true;
+	if (pFrameSeq)
+		*pFrameSeq = _latestFrameSeq;
 
 	return S_OK;
 }

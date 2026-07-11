@@ -60,6 +60,12 @@
     <ClInclude Include="RtspSessionManager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="StatsPublisher.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Shared\VCamStats.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
@@ -96,6 +102,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="RtspSessionManager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="StatsPublisher.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

@@ -32,7 +32,7 @@ After every rebuild, register `VirtualCamera.dll`. The script self-elevates, sto
 .\VirtualCamera\deploy_vcam.ps1 -DllPath ".\bin\x64\Debug\VirtualCamera.dll"
 ```
 
-To clean up between tests: `.\VirtualCamera\unregister_vcam.ps1`.
+The script copies the DLL to `C:\Projects\RTVirtualCamera` before registering (Local Service can't access `C:\Users\...`); `-DeployDir` overrides this. To clean up between tests: `.\VirtualCamera\unregister_vcam.ps1`.
 
 > **The DLL must live in a folder accessible to everyone** (not under `C:\Users\...`), because the Frame Server runs as *Local Service*. A folder under `C:\Projects\` works; the user profile causes `E_ACCESSDENIED` on `IMFVirtualCamera::Start`. The MSI, installing into `Program Files`, avoids this by design.
 

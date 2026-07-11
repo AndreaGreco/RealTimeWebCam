@@ -21,6 +21,68 @@ namespace RTVirtualCamera
         public Guid Format;      // preferred output subtype (Guid.Empty = NV12 auto)
     }
 
+    /// <summary>Mirror of RtspSessionManager's RtspSessionState (VirtualCamera/RtspSessionManager.h),
+    /// as carried over the wire by Shared/VCamStats.h::VCamSessionStateWire.</summary>
+    public enum FrameServerSessionState : uint
+    {
+        Stopped = 0,
+        Starting = 1,
+        Running = 2,
+        Reconnecting = 3,
+        Failed = 4,
+    }
+
+    /// <summary>
+    /// Mirror of Shared/VCamStats.h::VCamFrameServerStats (byte-for-byte, Pack=1 to match
+    /// the C++ #pragma pack(push,1)). Published ~30x/sec by the Frame Server process
+    /// (VirtualCamera.dll, running in svchost.exe) into cross-session shared memory and
+    /// read here via RTCamNative's VCam_GetFrameServerStats — see StatsReader.cpp / the
+    /// "Live stats (Frame Server -> app)" section in CLAUDE.md.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public struct FrameServerStats
+    {
+        public uint structVersion;
+        public int sequence;         // seqlock counter; not meaningful once read into managed memory
+        public ulong updatedTickMs;  // GetTickCount64() in the Frame Server process at last publish
+        public uint sessionState;    // FrameServerSessionState
+        public ulong rxFrames;       // cumulative frames decoded from RTSP
+        public ulong renderedFrames; // cumulative frames actually delivered to the consumer (every RequestSample
+                                      // once the first frame has arrived, including re-serves of the same frame)
+        public ulong droppedFrames;  // cumulative frames replaced before a consumer picked them up
+        public ulong declinedFrames; // of renderedFrames, how many re-served the same RTSP frame as last time
+                                      // (still delivered — this is a count only, not an actual decline; see
+                                      // CLAUDE.md "renderedFrames vs declinedFrames vs rxFrames")
+        public double driftMs;       // wall - media elapsed since first frame of the session
+        public double lastCopyMs;    // cost of the last frame copy (GPU or CPU path)
+        public uint width;
+        public uint height;
+        public uint fpsNum;
+        public uint fpsDen;
+        public uint hwAccelCapable;  // 1 = a D3D11 device manager was wired up (GPU path can engage)
+        public uint hwAccelActive;   // 1 = the last copy actually used the GPU zero-copy path
+    }
+
+    /// <summary>Live Frame-Server rates derived from two FrameServerStats snapshots over wall-clock.</summary>
+    public struct FrameServerRates
+    {
+        public bool Available;       // false if no Frame Server session has ever published stats
+        public bool Stale;           // true if updatedTickMs stopped advancing (writer likely gone)
+        public FrameServerSessionState SessionState;
+        public double RxFps;
+        public double RenderedFps;
+        public double DroppedFps;
+        public double DeclinedFps;   // of RenderedFps, how many were a re-serve of the same RTSP frame (count only)
+        public double DriftMs;
+        public double LastCopyMs;
+        public uint Width;
+        public uint Height;
+        public uint FpsNum;
+        public uint FpsDen;
+        public bool HwAccelCapable;
+        public bool HwAccelActive;
+    }
+
     public class VirtualCameraWrapper : IDisposable
     {
         [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
@@ -56,8 +118,21 @@ namespace RTVirtualCamera
         [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
         private static extern bool IsVCamStarted(IntPtr vcam);
 
+        // Not tied to a specific vcamHandle: this reads a single, global shared-memory
+        // channel published by whichever Frame Server session is currently running
+        // (see StatsReader.cpp). Returns 0 on success, -1 if nothing has been published
+        // yet (camera never started, or no consumer ever opened it).
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
+        private static extern int VCam_GetFrameServerStats(out FrameServerStats stats);
+
         private IntPtr vcamHandle;
         private bool disposed = false;
+
+        // Previous Frame-Server snapshot + timestamp, for deriving live fps from
+        // counter deltas — same approach as VideoPlayerWrapper.TryGetRates.
+        private FrameServerStats prevFrameServerStats;
+        private long prevFrameServerStatsTicks = 0;
+        private bool hasPrevFrameServerStats = false;
 
         public uint LastWin32Error { get; private set; }
 
@@ -132,6 +207,57 @@ namespace RTVirtualCamera
         public bool IsStarted
         {
             get { return !disposed && vcamHandle != IntPtr.Zero && IsVCamStarted(vcamHandle); }
+        }
+
+        // Live Frame-Server rates: call on a UI timer (see MainForm.StatsTimer_Tick).
+        // fps are derived from counter deltas since the previous call, so the cadence
+        // of your timer sets the averaging window. "Stale" is set once updatedTickMs
+        // stops advancing for longer than a couple of polling intervals, which
+        // distinguishes "camera stopped" from "app briefly missed a poll".
+        private const ulong StaleAfterMs = 3000;
+
+        public bool TryGetFrameServerRates(out FrameServerRates rates)
+        {
+            rates = default(FrameServerRates);
+
+            FrameServerStats now;
+            if (disposed || VCam_GetFrameServerStats(out now) != 0)
+            {
+                hasPrevFrameServerStats = false;
+                return false;
+            }
+
+            rates.Available = true;
+            rates.SessionState = (FrameServerSessionState)now.sessionState;
+            rates.DriftMs = now.driftMs;
+            rates.LastCopyMs = now.lastCopyMs;
+            rates.Width = now.width;
+            rates.Height = now.height;
+            rates.FpsNum = now.fpsNum;
+            rates.FpsDen = now.fpsDen;
+            rates.HwAccelCapable = now.hwAccelCapable != 0;
+            rates.HwAccelActive = now.hwAccelActive != 0;
+
+            ulong nowTickMs64 = (ulong)Environment.TickCount64;
+            rates.Stale = nowTickMs64 > now.updatedTickMs && (nowTickMs64 - now.updatedTickMs) > StaleAfterMs;
+
+            long nowTicks = DateTime.UtcNow.Ticks;
+            if (hasPrevFrameServerStats)
+            {
+                double secs = (nowTicks - prevFrameServerStatsTicks) / (double)TimeSpan.TicksPerSecond;
+                if (secs > 0.0)
+                {
+                    rates.RxFps = (now.rxFrames - prevFrameServerStats.rxFrames) / secs;
+                    rates.RenderedFps = (now.renderedFrames - prevFrameServerStats.renderedFrames) / secs;
+                    rates.DroppedFps = (now.droppedFrames - prevFrameServerStats.droppedFrames) / secs;
+                    rates.DeclinedFps = (now.declinedFrames - prevFrameServerStats.declinedFrames) / secs;
+                }
+            }
+
+            prevFrameServerStats = now;
+            prevFrameServerStatsTicks = nowTicks;
+            hasPrevFrameServerStats = true;
+            return true;
         }
 
         public void Dispose()

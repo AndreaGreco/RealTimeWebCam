@@ -36,9 +36,18 @@
     <ClInclude Include="VideoPlayer.h">
       <Filter>File di intestazione</Filter>
     </ClInclude>
+    <ClInclude Include="StatsReader.h">
+      <Filter>File di intestazione</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Shared\VCamStats.h">
+      <Filter>File di intestazione</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
+      <Filter>File di origine</Filter>
+    </ClCompile>
+    <ClCompile Include="StatsReader.cpp">
       <Filter>File di origine</Filter>
     </ClCompile>
     <ClCompile Include="VideoReaderCbk.cpp">

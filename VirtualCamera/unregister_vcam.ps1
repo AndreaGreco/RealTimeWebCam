@@ -6,7 +6,9 @@
 param(
     # Optional: DLL to unregister via regsvr32 /u. The CLSID key is removed regardless,
     # so this only matters if you want the "symmetric" DllUnregisterServer call too.
-    [string]$DllPath = "$PSScriptRoot\..\bin\x64\Debug\VirtualCamera.dll"
+    # Must match the deploy folder used by deploy_vcam.ps1 (not the repo build output —
+    # Local Service can't see under C:\Users\...).
+    [string]$DllPath = "C:\Projects\RTVirtualCamera\VCamSampleSource.dll"
 )
 
 # CLSID_VCam - must match Shared/VCamConfig.h and the registry.

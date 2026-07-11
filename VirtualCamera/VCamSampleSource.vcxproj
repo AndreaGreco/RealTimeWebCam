@@ -240,6 +240,7 @@
     <ClInclude Include="framework.h" />
     <ClInclude Include="IVCamConfiguration.h" />
     <ClInclude Include="RtspSessionManager.h" />
+    <ClInclude Include="StatsPublisher.h" />
     <ClInclude Include="VCamMediaSource.h" />
     <ClInclude Include="MediaStream.h" />
     <ClInclude Include="MFTools.h" />
@@ -248,6 +249,7 @@
     <ClInclude Include="Tools.h" />
     <ClInclude Include="Undocumented.h" />
     <ClInclude Include="WinTrace.h" />
+    <ClInclude Include="..\Shared\VCamStats.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Activator.cpp" />
@@ -255,6 +257,7 @@
     <ClCompile Include="EnumNames.cpp" />
     <ClCompile Include="FrameGenerator.cpp" />
     <ClCompile Include="RtspSessionManager.cpp" />
+    <ClCompile Include="StatsPublisher.cpp" />
     <ClCompile Include="VCamMediaSource.cpp" />
     <ClCompile Include="MediaStream.cpp" />
     <ClCompile Include="MFTools.cpp" />

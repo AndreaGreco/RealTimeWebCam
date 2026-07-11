@@ -12,7 +12,7 @@ Open `RTVirtualCamera.sln` in **Visual Studio 2022** and build in **x64**. All t
 | `RTCamNative.dll` | `RTCamNative/` |
 | `RTVirtualCamera.exe` | `RTVirtualCamera/` |
 
-There is no CLI build command; this is a Visual Studio solution only. Target: `.NET Framework 4.8` (C#), C++17 (C++), all x64.
+There is no CLI build command; this is a Visual Studio solution only. Target: `.NET 10` (C#, self-contained, `net10.0-windows10.0.22000.0`), C++17 (C++), all x64.
 
 ### Registering the COM DLL
 
@@ -22,7 +22,7 @@ After every rebuild of `VCamSampleSource.dll`, run the deploy script (self-eleva
 .\VirtualCamera\deploy_vcam.ps1 -DllPath ".\bin\x64\Debug\VCamSampleSource.dll"
 ```
 
-The DLL must be in a folder accessible to all users — **not under `C:\Users\...`** — because the Frame Server runs as *Local Service*. A path under `C:\Projects\` works; a path under your user profile causes `E_ACCESSDENIED` on `IMFVirtualCamera::Start`.
+The DLL must be registered from a folder accessible to all users — **not under `C:\Users\...`** — because the Frame Server runs as *Local Service*; a path under your user profile causes `E_ACCESSDENIED` on `IMFVirtualCamera::Start`. `deploy_vcam.ps1` handles this itself: it copies `$DllPath` (the normal repo build output, under `C:\Users\...`) to `$DeployDir` (default `C:\Projects\RTVirtualCamera`, override with `-DeployDir`) and registers that copy instead. `unregister_vcam.ps1` defaults to the same deployed path.
 
 To automate after build: add to `VirtualCamera` project → **Post-Build Event**:
 ```
@@ -56,9 +56,13 @@ Windows Frame Server (svchost.exe)  ← separate OS process, Local Service
        └─ MediaStream::RequestSample() ~30x/sec
             └─ RtspSessionManager::TryGetLatestFrame()
             └─ MediaStream::CopyRtspFrame() → sample to Zoom/Teams
+            └─ MediaStream::PublishStats() → StatsPublisher (Global\ shared memory)
+
+RTVirtualCamera.exe (UI timer, ~2x/sec)
+  └─ RTCamNative::StatsReader::TryGetStats() ← reads the same shared memory
 ```
 
-**No shared memory between processes.** The Frame Server opens the RTSP stream entirely inside its own process. The C# app only sets config attributes on `IMFVirtualCamera` before calling `Start()`.
+**No shared memory for the RTSP frame data itself.** The Frame Server opens the RTSP stream and decodes/copies every frame entirely inside its own process; the C# app never touches pixel data — it only sets config attributes on `IMFVirtualCamera` before calling `Start()`. There **is** a small shared-memory channel, but it carries live *stats* only (fps/drift/copy-cost/HW-accel), one-way from the Frame Server to the app — see "Live stats (Frame Server → app)" below.
 
 ### Virtual camera lifecycle (detailed)
 
@@ -79,10 +83,11 @@ Windows Frame Server (svchost.exe)  ← separate OS process, Local Service
 |---|---|---|
 | `Activator` | `Activator.cpp` | `IMFActivate` — entry point when Frame Server loads the DLL. Calls `SetupCameraSettings()` then `Initialize()`. |
 | `VCamMediaSource` | `VCamMediaSource.cpp/.h` | `IMFMediaSourceEx` — the camera source. Owns stream lifecycle and delegates frame delivery to `RtspSessionManager`. |
-| `MediaStream` | `MediaStream.cpp/.h` | `IMFMediaStream2` — one video stream. On `RequestSample()` pulls from `RtspSessionManager`, copies with `CopyRtspFrame()`, falls back to `FrameGenerator` if RTSP unavailable. |
+| `MediaStream` | `MediaStream.cpp/.h` | `IMFMediaStream2` — one video stream. On `RequestSample()` pulls from `RtspSessionManager`, copies with `CopyRtspFrame()`, and always delivers something once the first frame has arrived — even a re-serve of the same RTSP frame as last time (tracked as `declinedFrames`, count-only; an earlier attempt at literally declining these via `MF_E_SAMPLEALLOCATOR_EMPTY` destabilized the Frame Server's retry timing and was reverted). Falls back to `FrameGenerator` only before the first frame ever arrives, or in `Reconnecting`/`Failed`/`Starting`, so a disconnected camera still shows its placeholder immediately. |
 | `RtspSessionManager` | `RtspSessionManager.cpp/.h` | Singleton (`Instance()`). Opens RTSP with `IMFSourceReader`, keeps the latest decoded frame, decouples RTSP fps from consumer fps. |
-| `RtspReaderCallback` | `RtspReaderCallback.cpp` | `IMFSourceReaderCallback` — async read chain. Stores only the latest frame (`_latestSample`); older frames are overwritten. |
+| `RtspReaderCallback` | `RtspReaderCallback.cpp` | `IMFSourceReaderCallback` — async read chain. Stores only the latest frame (`_latestSample`); older frames are overwritten. Also keeps the `rxFrames`/`droppedFrames` counters read by `StatsPublisher`. |
 | `FrameGenerator` | `FrameGenerator.cpp` | **Dead code** (leftover from VCamSample). Produces synthetic frames via Direct2D; fallback path only, never called in the main stream. |
+| `StatsPublisher` | `StatsPublisher.cpp/.h` | Singleton (`Instance()`). Writes `VCamFrameServerStats` into the cross-session shared memory section on every `MediaStream::RequestSample()` tick. See "Live stats" below. |
 
 ### `RTCamNative/` (C++ bridge DLL — runs in app process)
 
@@ -90,19 +95,24 @@ Windows Frame Server (svchost.exe)  ← separate OS process, Local Service
 |---|---|---|
 | `VirtualCamera` | `VirtualCamera.cpp/.h` | Wraps `IMFVirtualCamera`. Calls `SetString`/`SetUINT32` on the attrs bag before `Start()`. Exports C-style functions for P/Invoke. |
 | `VideoPlayer` | `VideoPlayer.cpp` | Preview only (EVR sink into WinForms panel). **Not involved in the Frame Server / Zoom path.** Plays from an RTSP/file URL only — the capture-device source path was removed. |
+| `StatsReader` | `StatsReader.cpp/.h` | Singleton (`Instance()`). Opens the same shared memory as `StatsPublisher` (read-only) and exports `VCam_GetFrameServerStats()` for P/Invoke. |
 
 ### `RTVirtualCamera/` (C# WinForms, namespace `RTVirtualCamera`)
 
 | Class | File | Role |
 |---|---|---|
-| `VirtualCameraWrapper` | `VirtualCameraWrapper.cs` | P/Invoke façade over `RTCamNative.dll`. Also declares the C# mirror of `VCamConfig`. |
+| `VirtualCameraWrapper` | `VirtualCameraWrapper.cs` | P/Invoke façade over `RTCamNative.dll`. Declares the C# mirror of `VCamConfig`, and of `VCamFrameServerStats` as `FrameServerStats`. `TryGetFrameServerRates()` polls `VCam_GetFrameServerStats` and derives fps from counter deltas. |
 | `VideoPlayerWrapper` | `VideoPlayerWrapper.cs` | P/Invoke façade for the preview player. |
-| `MainForm` | `MainForm.cs` | Main UI. Probes source, builds `VCamConfig`, calls `SetConfig → Register → Start`. |
+| `MainForm` | `MainForm.cs` | Main UI. Probes source, builds `VCamConfig`, calls `SetConfig → Register → Start`. `StatsTimer_Tick` shows preview stats normally, or Frame-Server stats (via `VirtualCameraWrapper.TryGetFrameServerRates`) once the virtual camera is running. |
 | `Settings` | `Settings.cs` | Persists `RtspURL` and `AutoStart` across sessions. |
 
 ### `Shared/VCamConfig.h`
 
 Single source of truth for the GUIDs and the `VCamConfig` struct shared between `RTCamNative/` and `VirtualCamera/`. Included by both C++ projects. **The C# mirror `VCamCameraWrapper.cs::VCamConfig` must match byte-for-byte.**
+
+### `Shared/VCamStats.h`
+
+Single source of truth for the live-stats wire format: the `VCamFrameServerStats` struct, the `VCAM_STATS_MAPPING_NAME` shared-memory name, and the seqlock convention. Included by both `VirtualCamera/StatsPublisher.cpp` (writer) and `RTCamNative/StatsReader.cpp` (reader). **The C# mirror `VirtualCameraWrapper.cs::FrameServerStats` must match byte-for-byte** (`Pack = 1`, same field order) — this is now a three-way mirror (C++ struct, C++ struct, C# struct), one more place than `VCamConfig` to keep in sync when the layout changes.
 
 ---
 
@@ -115,6 +125,8 @@ Single source of truth for the GUIDs and the `VCamConfig` struct shared between 
 - **DLL path constraint**: `VCamSampleSource.dll` must be in a publicly accessible folder (not under `C:\Users\...`), because the Frame Server runs as Local Service.
 - **`Activator::ActivateObject()` call order**: `SetupCameraSettings()` must be called before `Initialize()` because `Initialize()` calls `ApplyRuntimeContext()` which reads `_camera_config` that was just filled by `SetupCameraSettings()`. This ordering is enforced only by `ActivateObject()` — it is not self-enforced by the classes.
 - **`VCamConfig` struct ABI**: When modifying `Shared/VCamConfig.h::VCamConfig`, always update `RTVirtualCamera/VirtualCameraWrapper.cs::VCamConfig` mirror too.
+- **`VCamFrameServerStats` struct ABI**: When modifying `Shared/VCamStats.h::VCamFrameServerStats`, bump `VCAM_STATS_STRUCT_VERSION` and update `RTVirtualCamera/VirtualCameraWrapper.cs::FrameServerStats` (same field order, `Pack = 1`) in the same change.
+- **Stats mapping must use the `Global\` namespace with an explicit DACL**. The Frame Server (Local Service, session 0) and the app (interactive user session) are in different Terminal Server sessions — a session-local name would be invisible to the app, and the default DACL for an object created by a service would deny the app's `OpenFileMappingW` even with the right name. Both are handled once, in `StatsPublisher::EnsureMapped()` / `BuildStatsSecurityDescriptor()`; do not create the mapping anywhere else.
 
 ---
 
@@ -147,6 +159,35 @@ The decoded RTSP frame reaches the consumer's sample through `MediaStream::CopyR
 - **CPU fallback** — `CopyRtspFrameCpu`. Used during pipeline warmup or when HW decode is unavailable (source buffer is system memory, not a DXGI texture). A **single** `MFCopyImage` (Y + UV planes) straight from the source MF buffer into the destination — no intermediate `std::vector`. Honors the decoder's real source pitch via `IMF2DBuffer::Lock2D`.
 
 `RtspFrameSnapshot` carries the decoded `IMFSample` by reference (AddRef), not a pixel copy — `RtspSessionManager::TryGetLatestFrame` holds the session lock only long enough to grab that reference. The D3D device manager flows from `VCamMediaSource::SetD3DManager` → `RtspSessionManager::SetD3DManager` (for the reader) and → each `MediaStream::SetD3DManager` (which opens a cached device handle for the copy). **`SetD3DManager` must arrive before `RtspSessionManager::Start()`** for the GPU path to engage; otherwise the reader runs in system memory and the CPU fallback is used. Check the `WINTRACE` in `RtspSessionManager::Start` to confirm which path is active.
+
+## Live stats (Frame Server → app)
+
+`MainForm`'s diagnostics bar shows two different things depending on whether the virtual camera is running: while only previewing, it reads the in-process `VideoPlayerWrapper` preview stats (unchanged, always worked); once the virtual camera is started, the *real* pipeline runs inside the Frame Server process and the app can't read it directly — that gap is what this channel closes.
+
+```
+MediaStream::RequestSample() (~30x/sec, Frame Server)
+  → assembles a VCamFrameServerStats snapshot:
+       rxFrames/droppedFrames   ← RtspSessionManager::GetFrameCounters() → RtspReaderCallback
+       renderedFrames/declinedFrames/driftMs/lastCopyMs/hwAccelActive ← tracked in MediaStream itself
+       hwAccelCapable           ← MediaStream::_deviceManager && _deviceHandle
+  → StatsPublisher::Publish(snapshot)
+       seqlock write into Global\RTVCam_Stats_<CLSID> shared memory
+
+MainForm.StatsTimer_Tick (~2x/sec, app UI thread)
+  → VirtualCameraWrapper.TryGetFrameServerRates()
+       → RTCamNative!VCam_GetFrameServerStats() → StatsReader::TryGetStats()
+            seqlock read from the same shared memory
+       → derives fps from counter deltas across two polls (same technique as
+         VideoPlayerWrapper.TryGetRates for the preview path)
+```
+
+Design points worth remembering:
+
+- **Seqlock, not a named `Mutex`.** The writer runs on `MediaStream::RequestSample`, the same latency-critical path as the GPU zero-copy frame copy (see above) — a kernel `Mutex`/`CRITICAL_SECTION` acquire per frame is avoidable overhead there. `VCamFrameServerStats::sequence` is bumped odd→even around the writes (`InterlockedIncrement`, no blocking); the reader retries (bounded, 8 attempts) if it observes an odd sequence or the sequence changed mid-read. There is exactly one writer, which is what makes this safe without a heavier primitive.
+- **`hwAccelCapable` vs `hwAccelActive`.** `Capable` means a D3D11 device manager was successfully handed to this `MediaStream` (`SetD3DManager` succeeded) — the *precondition* for the zero-copy path. `Active` means the *last* `CopyRtspFrame` call actually took that path; it can be `Capable=1, Active=0` right after `CopyRtspFrameGpu` fails and falls back to CPU for one frame (see `CopyRtspFrame`'s fallback branch) — that combination is the signal to look for if GPU decode looks unhealthy on a given machine.
+- **Staleness.** `VCamFrameServerStats::updatedTickMs` is `GetTickCount64()` at the last publish. `VirtualCameraWrapper.TryGetFrameServerRates` flags `Stale = true` once the app hasn't seen it advance for >3s, so the UI can distinguish "camera stopped" from "app briefly missed a poll" from "Frame Server process died without cleaning up."
+- **`renderedFrames` vs `declinedFrames` vs `rxFrames`.** `RtspReaderCallback::TakeLatestSample` does not clear the cached frame after handing it out — the same decoded frame keeps being available until `OnReadSample` stores a newer one, identified by `RtspFrameSnapshot::frameSeq` (bumped only when a genuinely new sample arrives). `MediaStream::RequestSample` compares the frame it just got against the last one it actually delivered (`_lastDeliveredFrameSeq`) and **always copies and delivers it either way** — this is deliberate: an earlier version declined the re-serve instead (`MF_E_SAMPLEALLOCATOR_EMPTY`, no `MEMediaSample` queued, same idiom as the allocator-exhausted case a few lines above), and on real hardware that destabilized the whole pipeline (occasional synthetic frames, general instability) because that HRESULT is tied to the allocator's own release-notification retry mechanism, not a generic "ask again later" signal — overloading it broke the Frame Server's retry timing. So `renderedFrames` counts every delivery (matches what the consumer actually receives, `frameSeq` match or not); `declinedFrames` is a same-`frameSeq` counter kept for diagnostics only, no behavior attached. `renderedFrames` can legitimately run well ahead of `rxFrames` — that's the consumer (Zoom/Teams) polling faster than the camera delivers, not a bug — `declinedFrames` tells you how much of `renderedFrames` that is.
+- **The mapping outlives any single camera session.** `StatsPublisher` is a process-wide singleton created once and never explicitly torn down; a finished session just stops advancing `updatedTickMs` (caught by the staleness check above) rather than the mapping disappearing.
 
 ## RTSP reconnection
 

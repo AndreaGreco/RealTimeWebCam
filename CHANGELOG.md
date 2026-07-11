@@ -7,6 +7,19 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [Unreleased]
+
+### Added
+- Live Frame-Server stats channel (cross-process shared memory, `Shared/VCamStats.h`): RX/render/declined/dropped fps, drift, copy cost, and GPU hardware-acceleration capable/active, surfaced in the app's diagnostics bar while the virtual camera is running.
+
+### Changed
+- `deploy_vcam.ps1` now copies the built DLL to `C:\Projects\RTVirtualCamera` (override with `-DeployDir`) before registering it, instead of registering directly from the repo build output under `C:\Users\...` — fixes `E_ACCESSDENIED` on `IMFVirtualCamera::Start` (Frame Server runs as Local Service, which cannot access the user profile).
+- `VCamMediaSource::SetupCameraSettings` clamps an implausible RTSP-declared frame rate (>60fps) to 30fps, instead of trusting it for `MediaStream` pacing.
+- `MediaStream::RequestSample` now tracks how many deliveries re-serve the same RTSP frame as the previous one (`declinedFrames`, count only) instead of leaving `renderedFrames` indistinguishable from genuinely new frames. (An attempt at actually declining these re-serves via `MF_E_SAMPLEALLOCATOR_EMPTY` was reverted — it destabilized the Frame Server's own retry timing on real hardware.)
+- MSI (`Setup`) no longer builds in Debug configurations (Release only).
+
+---
+
 ## [0.2.0]
 
 ### Added

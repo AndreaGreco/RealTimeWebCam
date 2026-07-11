@@ -93,4 +93,25 @@ private:
 
 	// Fallback frame generator (used when RTSP is unavailable)
 	FrameGenerator _frameGenerator;
+
+	// --- Live diagnostics (StatsPublisher, see Shared/VCamStats.h) ---------
+	// All of these are only ever touched from RequestSample(), which already
+	// runs under _lock, so no extra synchronization is needed here.
+	UINT64 _renderedFrameCount = 0;   // frames actually handed to the requesting app (real copy, includes re-serves)
+	UINT64 _declinedFrameCount = 0;   // of the above, how many were a re-serve of the same RTSP frame as last
+	                                   // time (name kept from an earlier, reverted attempt at actually declining
+	                                   // these — see RequestSample; it's a count only, delivery is unaffected)
+	UINT64 _lastDeliveredFrameSeq = 0; // RtspFrameSnapshot::frameSeq of the last frame delivered (dup detection)
+	bool   _hasDeliveredFrame = false; // false until the first frame is ever delivered
+	double _lastCopyMs = 0.0;         // cost of the last CopyRtspFrame call
+	bool   _lastCopyWasGpu = false;   // which path CopyRtspFrame took last time
+	bool   _driftBaseSet = false;
+	UINT64 _driftGeneration = 0;      // RtspFrameSnapshot::generation the current drift baseline belongs to
+	ULONGLONG _driftBaseTickMs = 0;
+	LONGLONG  _driftBasePtsMs = 0;
+	double _driftMs = 0.0;
+
+	// Publishes the current snapshot (whatever the outcome of this RequestSample
+	// call) to StatsPublisher. Called once at the end of RequestSample().
+	void PublishStats();
 };

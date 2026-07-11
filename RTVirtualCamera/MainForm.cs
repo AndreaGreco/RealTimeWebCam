@@ -64,20 +64,37 @@ namespace RTVirtualCamera
         {
             try
             {
-                PreviewRates r;
-                if (videoPlayer != null && !isVCamRunning && videoPlayer.TryGetRates(out r))
+                if (isVCamRunning)
                 {
-                    statsLabel.Text = string.Format(
-                        "RX {0:0.0} fps  |  render {1:0.0} fps  |  drop {2:0.0} fps  |  drift {3:+0;-0} ms  |  copy {4:0} ms",
-                        r.ReceivedFps, r.RenderedFps, r.DroppedFps, r.DriftMs, r.LastRenderMs);
-                }
-                else if (isVCamRunning)
-                {
-                    statsLabel.Text = "preview stats: n/d (camera virtuale attiva — gira nel Frame Server)";
+                    FrameServerRates fr;
+                    if (virtualCamera != null && virtualCamera.TryGetFrameServerRates(out fr) && fr.Available)
+                    {
+                        string hw = !fr.HwAccelCapable
+                            ? "CPU (no D3D device)"
+                            : fr.HwAccelActive ? "GPU" : "CPU (fallback)";
+                        string stale = fr.Stale ? "  [stale]" : string.Empty;
+                        statsLabel.Text = string.Format(
+                            "[Frame Server] RX {0:0.0} fps  |  render {1:0.0} fps ({7:0.0} dup)  |  drop {2:0.0} fps  |  drift {3:+0;-0} ms  |  copy {4:0.0} ms  |  HW: {5}{6}",
+                            fr.RxFps, fr.RenderedFps, fr.DroppedFps, fr.DriftMs, fr.LastCopyMs, hw, stale, fr.DeclinedFps);
+                    }
+                    else
+                    {
+                        statsLabel.Text = "[Frame Server] in attesa di statistiche...";
+                    }
                 }
                 else
                 {
-                    statsLabel.Text = "preview stats: anteprima non attiva";
+                    PreviewRates r;
+                    if (videoPlayer != null && videoPlayer.TryGetRates(out r))
+                    {
+                        statsLabel.Text = string.Format(
+                            "RX {0:0.0} fps  |  render {1:0.0} fps  |  drop {2:0.0} fps  |  drift {3:+0;-0} ms  |  copy {4:0} ms",
+                            r.ReceivedFps, r.RenderedFps, r.DroppedFps, r.DriftMs, r.LastRenderMs);
+                    }
+                    else
+                    {
+                        statsLabel.Text = "preview stats: anteprima non attiva";
+                    }
                 }
             }
             catch

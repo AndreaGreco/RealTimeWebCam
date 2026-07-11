@@ -158,9 +158,11 @@
     <ClInclude Include="framework.h" />
     <ClInclude Include="Logger.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="StatsReader.h" />
     <ClInclude Include="VideoPlayer.h" />
     <ClInclude Include="VideoReaderCbk.h" />
     <ClInclude Include="VirtualCamera.h" />
+    <ClInclude Include="..\Shared\VCamStats.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CSourceOpenMonitor.cpp" />
@@ -172,6 +174,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="StatsReader.cpp" />
     <ClCompile Include="VideoPlayer.cpp" />
     <ClCompile Include="VideoReaderCbk.cpp" />
     <ClCompile Include="VirtualCamera.cpp" />

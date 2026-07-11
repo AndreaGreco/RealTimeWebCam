@@ -1,10 +1,19 @@
 ﻿# deploy_vcam.ps1 - Post-build deploy script for VCamSampleSource.dll
 # Stops Frame Server, re-registers DLL, restarts Frame Server
 # Auto-elevates to Administrator if needed
+#
+# The DLL is always registered from $DeployDir (default C:\Projects\RTVirtualCamera),
+# NOT from $DllPath directly: the Frame Server runs as Local Service, which gets
+# E_ACCESSDENIED on IMFVirtualCamera::Start if the DLL lives under C:\Users\...
+# (the build output is under the repo, which is under the user profile). This
+# script copies the freshly built DLL out to the accessible folder before
+# registering, so $(TargetPath) can keep pointing at the normal build output.
 
 param(
     [Parameter(Mandatory=$true)]
-    [string]$DllPath
+    [string]$DllPath,
+
+    [string]$DeployDir = "C:\Projects\RTVirtualCamera"
 )
 
 # ── Auto-elevation ────────────────────────────────────────────────────────────
@@ -75,7 +84,25 @@ foreach ($svc in $services) {
 
 Start-Sleep -Milliseconds 500
 
-# ── Step 2: Unregister old DLL ────────────────────────────────────────────────
+# ── Step 2: Copy DLL to an accessible-to-all folder ───────────────────────────
+# Local Service (the Frame Server identity) gets E_ACCESSDENIED on
+# IMFVirtualCamera::Start if the DLL is registered from under C:\Users\...
+# $DeployDir must NOT be under a user profile.
+Write-Step "Copying DLL to deploy folder: $DeployDir"
+
+if (-not (Test-Path $DeployDir)) {
+    New-Item -ItemType Directory -Path $DeployDir -Force | Out-Null
+    Write-OK "Created $DeployDir"
+}
+
+$deployedDll = Join-Path $DeployDir (Split-Path $DllPath -Leaf)
+Copy-Item -Path $DllPath -Destination $deployedDll -Force
+Write-OK "Copied to $deployedDll"
+
+# From here on, register/unregister the DEPLOYED copy, not the build-output path.
+$DllPath = $deployedDll
+
+# ── Step 3: Unregister old DLL ────────────────────────────────────────────────
 Write-Step "Unregistering old DLL (ignore errors if not registered)..."
 
 $regsvr = "$env:SystemRoot\System32\regsvr32.exe"
@@ -84,7 +111,7 @@ Write-OK "Unregister attempted"
 
 Start-Sleep -Milliseconds 300
 
-# ── Step 3: Register new DLL ──────────────────────────────────────────────────
+# ── Step 4: Register new DLL ──────────────────────────────────────────────────
 Write-Step "Registering: $DllPath"
 
 $result = Start-Process $regsvr -ArgumentList "/s `"$DllPath`"" -Wait -PassThru
@@ -99,7 +126,7 @@ if ($result.ExitCode -eq 0) {
     exit 1
 }
 
-# ── Step 4: Restart Frame Server ─────────────────────────────────────────────
+# ── Step 5: Restart Frame Server ─────────────────────────────────────────────
 Write-Step "Restarting Camera Frame Server..."
 
 foreach ($svc in $services) {
