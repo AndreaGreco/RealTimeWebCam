@@ -7,6 +7,7 @@
 
 #pragma comment(lib, "mfuuid.lib")   // MFNETSOURCE_* property keys
 #pragma comment(lib, "propsys.lib")  // PSCreateMemoryPropertyStore
+#pragma comment(lib, "d3d11.lib")    // D3D11CreateDevice (EnsureOwnDeviceManagerLocked)
 
 RtspSessionManager& RtspSessionManager::Instance()
 {
@@ -70,6 +71,162 @@ static void ApplyDecoderLowLatency(IMFSourceReader* reader)
 	}
 }
 
+// Creates _ownDevice/_ownDxgiManager the first time they're needed and keeps them for
+// the process lifetime (device creation is expensive; safe to reuse across
+// reconnects/sessions, same as the Frame Server's own _dxgiManager would be).
+// Video-support is required for the decoder MFT to be able to use the device for DXVA.
+HRESULT RtspSessionManager::EnsureOwnDeviceManagerLocked()
+{
+	if (_ownDxgiManager)
+		return S_OK;
+
+	D3D_FEATURE_LEVEL featureLevel{};
+	HRESULT hr = D3D11CreateDevice(
+		nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
+		D3D11_CREATE_DEVICE_VIDEO_SUPPORT,
+		nullptr, 0, D3D11_SDK_VERSION,
+		&_ownDevice, &featureLevel, nullptr);
+	if (FAILED(hr))
+	{
+		WINTRACE(L"RtspSessionManager::EnsureOwnDeviceManagerLocked - D3D11CreateDevice failed 0x%08X", hr);
+		return hr;
+	}
+
+	UINT resetToken = 0;
+	RETURN_IF_FAILED(MFCreateDXGIDeviceManager(&resetToken, &_ownDxgiManager));
+	HRESULT hrReset = _ownDxgiManager->ResetDevice(_ownDevice.get(), resetToken);
+	if (FAILED(hrReset))
+	{
+		WINTRACE(L"RtspSessionManager::EnsureOwnDeviceManagerLocked - ResetDevice failed 0x%08X", hrReset);
+		_ownDxgiManager.reset();
+		_ownDevice.reset();
+		return hrReset;
+	}
+
+	RETURN_IF_FAILED(_ownDxgiManager->OpenDeviceHandle(&_ownDeviceHandle));
+
+	WINTRACE(L"RtspSessionManager::EnsureOwnDeviceManagerLocked - own D3D11 device created for RTSP decode (feature level 0x%X)",
+		featureLevel);
+	return S_OK;
+}
+
+// Downloads a DXGI-texture-backed NV12 sample (decoded on _ownDevice, because the Frame
+// Server never gave us its own manager - see OpenReaderLocked) into a plain
+// system-memory sample. This keeps MediaStream::CopyRtspFrame's contract unchanged: it
+// already handles a system-memory source when _deviceManager/_deviceHandle are unset
+// (which they are here, since MediaStream's D3D manager comes only from
+// VCamMediaSource::SetD3DManager, and that path is what's missing in the first place).
+// Caller caches the result per frameSeq; this does a synchronous GPU->CPU read, not
+// something to redo every RequestSample tick.
+HRESULT RtspSessionManager::DownloadGpuSampleLocked(IMFSample* gpuSample, wil::com_ptr_nothrow<IMFSample>& outSample)
+{
+	outSample.reset();
+	RETURN_HR_IF_NULL(E_POINTER, gpuSample);
+	RETURN_HR_IF(E_NOT_VALID_STATE, !_ownDxgiManager || !_ownDeviceHandle);
+
+	wil::com_ptr_nothrow<IMFMediaBuffer> srcBuffer;
+	RETURN_IF_FAILED(gpuSample->GetBufferByIndex(0, &srcBuffer));
+
+	wil::com_ptr_nothrow<IMFDXGIBuffer> srcDxgi;
+	RETURN_IF_FAILED(srcBuffer->QueryInterface(IID_PPV_ARGS(&srcDxgi)));
+
+	wil::com_ptr_nothrow<ID3D11Texture2D> srcTex;
+	UINT srcSub = 0;
+	RETURN_IF_FAILED(srcDxgi->GetResource(IID_PPV_ARGS(&srcTex)));
+	RETURN_IF_FAILED(srcDxgi->GetSubresourceIndex(&srcSub));
+
+	D3D11_TEXTURE2D_DESC srcDesc{};
+	srcTex->GetDesc(&srcDesc);
+
+	// LockDevice serializes access to the immediate context with the decoder MFT, same
+	// idiom as MediaStream::CopyRtspFrameGpu. No early returns between here and UnlockDevice.
+	wil::com_ptr_nothrow<ID3D11Device> device;
+	HRESULT hr = _ownDxgiManager->LockDevice(_ownDeviceHandle, IID_PPV_ARGS(&device), TRUE);
+	if (hr == MF_E_DXGI_NEW_VIDEO_DEVICE)
+	{
+		_ownDxgiManager->CloseDeviceHandle(_ownDeviceHandle);
+		_ownDeviceHandle = nullptr;
+		RETURN_IF_FAILED(_ownDxgiManager->OpenDeviceHandle(&_ownDeviceHandle));
+		hr = _ownDxgiManager->LockDevice(_ownDeviceHandle, IID_PPV_ARGS(&device), TRUE);
+	}
+	RETURN_IF_FAILED(hr);
+
+	if (!_stagingTex || _stagingWidth != srcDesc.Width || _stagingHeight != srcDesc.Height)
+	{
+		D3D11_TEXTURE2D_DESC stagingDesc = srcDesc;
+		stagingDesc.ArraySize = 1;
+		stagingDesc.MipLevels = 1;
+		stagingDesc.Usage = D3D11_USAGE_STAGING;
+		stagingDesc.BindFlags = 0;
+		stagingDesc.MiscFlags = 0;
+		stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+		_stagingTex.reset();
+		hr = device->CreateTexture2D(&stagingDesc, nullptr, &_stagingTex);
+		if (SUCCEEDED(hr))
+		{
+			_stagingWidth = srcDesc.Width;
+			_stagingHeight = srcDesc.Height;
+		}
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		wil::com_ptr_nothrow<ID3D11DeviceContext> ctx;
+		device->GetImmediateContext(&ctx);
+		ctx->CopySubresourceRegion(_stagingTex.get(), 0, 0, 0, 0, srcTex.get(), srcSub, nullptr);
+
+		D3D11_MAPPED_SUBRESOURCE mapped{};
+		hr = ctx->Map(_stagingTex.get(), 0, D3D11_MAP_READ, 0, &mapped);
+		if (SUCCEEDED(hr))
+		{
+			const UINT32 width = _actualWidth;
+			const UINT32 height = _actualHeight;
+			const DWORD cbNv12 = width * height * 3 / 2;
+
+			wil::com_ptr_nothrow<IMFMediaBuffer> memBuffer;
+			hr = MFCreateMemoryBuffer(cbNv12, &memBuffer);
+			if (SUCCEEDED(hr))
+			{
+				BYTE* pbDst = nullptr;
+				hr = memBuffer->Lock(&pbDst, nullptr, nullptr);
+				if (SUCCEEDED(hr))
+				{
+					const BYTE* pbSrc = static_cast<const BYTE*>(mapped.pData);
+					MFCopyImage(pbDst, (LONG)width, pbSrc, (LONG)mapped.RowPitch, width, height);
+					MFCopyImage(pbDst + (size_t)width * height, (LONG)width,
+						pbSrc + (size_t)mapped.RowPitch * height, (LONG)mapped.RowPitch,
+						width, height / 2);
+					memBuffer->Unlock();
+					memBuffer->SetCurrentLength(cbNv12);
+				}
+			}
+
+			if (SUCCEEDED(hr))
+			{
+				wil::com_ptr_nothrow<IMFSample> newSample;
+				hr = MFCreateSample(&newSample);
+				if (SUCCEEDED(hr))
+					hr = newSample->AddBuffer(memBuffer.get());
+				if (SUCCEEDED(hr))
+				{
+					LONGLONG t = 0, d = 0;
+					if (SUCCEEDED(gpuSample->GetSampleTime(&t)))
+						newSample->SetSampleTime(t);
+					if (SUCCEEDED(gpuSample->GetSampleDuration(&d)))
+						newSample->SetSampleDuration(d);
+					outSample = std::move(newSample);
+				}
+			}
+			ctx->Unmap(_stagingTex.get(), 0);
+		}
+	}
+
+	_ownDxgiManager->UnlockDevice(_ownDeviceHandle, FALSE);
+	RETURN_IF_FAILED(hr);
+	RETURN_HR_IF(E_FAIL, !outSample);
+	return S_OK;
+}
+
 // async read chain. Assumes _lock is held. On success sets _reader/_callback/_config
 // and _state = Running. Shared by Start() and the reconnect loop.
 HRESULT RtspSessionManager::OpenReaderLocked(const CameraSessionConfig& config)
@@ -91,17 +248,39 @@ HRESULT RtspSessionManager::OpenReaderLocked(const CameraSessionConfig& config)
 	RETURN_IF_FAILED(attrs->SetUINT32(MF_LOW_LATENCY, TRUE));
 	RETURN_IF_FAILED(attrs->SetUINT32(MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING, TRUE));
 
-	// Share the Frame Server's D3D11 device so the decoder runs on the GPU (DXVA)
-	// and emits DXGI textures we can copy GPU->GPU. Without it the reader produces
-	// system-memory frames and MediaStream falls back to a single CPU copy.
+	// Prefer the Frame Server's D3D11 device (SetD3DManager) when available: decode and
+	// the final copy into the consumer's sample then share the same device, true
+	// zero-copy end to end. In practice the Frame Server never calls SetD3DManager on
+	// this camera (confirmed by trace across a full Start->Stop session - single
+	// advertised media type means it never needs its own conversion stage, see
+	// CLAUDE.md), so fall back to a device we own ourselves: per Microsoft's own
+	// guidance (MF_SOURCE_READER_D3D_MANAGER docs), that's the documented way to get
+	// DXVA hardware decode out of IMFSourceReader at all, regardless of what the Frame
+	// Server does downstream. MediaStream::CopyRtspFrame still can't zero-copy into the
+	// Frame Server's own (non-D3D) buffers in that case, so TryGetLatestFrame downloads
+	// the decoded frame to system memory once per frame - decode moves to the GPU, only
+	// the final copy stays on the CPU.
+	_usingOwnDeviceForReader = false;
 	if (_dxgiManager)
 	{
 		RETURN_IF_FAILED(attrs->SetUnknown(MF_SOURCE_READER_D3D_MANAGER, _dxgiManager.get()));
-		WINTRACE(L"RtspSessionManager::OpenReaderLocked - D3D manager set on reader (GPU decode path)");
+		WINTRACE(L"RtspSessionManager::OpenReaderLocked - Frame-Server-provided D3D manager set on reader (GPU decode + zero-copy path)");
+	}
+	else if (_skipOwnDeviceThisGeneration)
+	{
+		WINTRACE(L"RtspSessionManager::OpenReaderLocked - own D3D manager disabled for this session "
+			L"(broke the stream last attempt, see NotifyStreamBroken), reader will use system memory");
+	}
+	else if (SUCCEEDED(EnsureOwnDeviceManagerLocked()))
+	{
+		RETURN_IF_FAILED(attrs->SetUnknown(MF_SOURCE_READER_D3D_MANAGER, _ownDxgiManager.get()));
+		_usingOwnDeviceForReader = true;
+		WINTRACE(L"RtspSessionManager::OpenReaderLocked - internally-owned D3D manager set on reader "
+			L"(Frame Server did not provide one; GPU decode enabled, final delivery uses one CPU download)");
 	}
 	else
 	{
-		WINTRACE(L"RtspSessionManager::OpenReaderLocked - no D3D manager, reader will use system memory");
+		WINTRACE(L"RtspSessionManager::OpenReaderLocked - no D3D manager available (own device creation failed), reader will use system memory");
 	}
 
 	// Minimize RTSP network buffering. Forwarded to the network source via a property
@@ -247,6 +426,11 @@ void RtspSessionManager::ReleaseReaderLocked()
 	_actualWidth = 0;
 	_actualHeight = 0;
 	_actualStride = 0;
+	_usingOwnDeviceForReader = false;
+	// Drop the cached download - its frameSeq numbering belongs to the callback we just
+	// tore down, and a new one (about to be created by OpenReaderLocked) starts over from 0.
+	_downloadedSample.reset();
+	_downloadedFrameSeq = 0;
 }
 
 void RtspSessionManager::StopNoLock()
@@ -284,6 +468,17 @@ void RtspSessionManager::NotifyStreamBroken(UINT64 generation)
 		return; // session was stopped or replaced — stale notification
 	if (_state == RtspSessionState::Reconnecting)
 		return; // already reconnecting
+
+	if (_usingOwnDeviceForReader)
+	{
+		// The own D3D11 device negotiated a media type fine but the stream broke right
+		// after (observed as MF_E_INVALIDMEDIATYPE from OnReadSample) - stop offering it
+		// for the rest of this generation so the reconnect below falls back to the
+		// system-memory path instead of retrying the same failure forever.
+		WINTRACE(L"RtspSessionManager::NotifyStreamBroken - stream broke while using the internally-owned "
+			L"D3D manager; disabling it for the rest of this session and falling back to system memory");
+		_skipOwnDeviceThisGeneration = true;
+	}
 
 	// A previous reconnect thread (if any) has finished by now since state != Reconnecting.
 	if (_reconnectThread.joinable())
@@ -380,6 +575,46 @@ HRESULT RtspSessionManager::TryGetLatestFrame(RtspFrameSnapshot& frame)
 		HRESULT hr = _callback->TakeLatestSample(&sample, &frameSeq);
 		if (FAILED(hr) || !sample)
 			return hr;
+
+		// Reader is decoding on our own device (no Frame-Server-provided manager). If the
+		// decoder/video-processor chain actually produced a DXGI-texture-backed sample,
+		// MediaStream can't consume it as-is (its own D3D manager only ever comes from
+		// VCamMediaSource::SetD3DManager, which is unset here too) - download it once per
+		// distinct frame and hand out the cached result on re-serves. If it produced a
+		// plain system-memory sample instead (can happen depending on driver/MFT even
+		// with a device manager attached), it's already exactly what
+		// MediaStream::CopyRtspFrameCpu expects - nothing to do.
+		if (_usingOwnDeviceForReader)
+		{
+			wil::com_ptr_nothrow<IMFMediaBuffer> buf;
+			wil::com_ptr_nothrow<IMFDXGIBuffer> dxgiBuf;
+			bool isGpuBacked = SUCCEEDED(sample->GetBufferByIndex(0, &buf)) &&
+				SUCCEEDED(buf->QueryInterface(IID_PPV_ARGS(&dxgiBuf)));
+
+			if (isGpuBacked)
+			{
+				if (!_downloadedSample || frameSeq != _downloadedFrameSeq)
+				{
+					wil::com_ptr_nothrow<IMFSample> downloaded;
+					HRESULT hrDownload = DownloadGpuSampleLocked(sample.get(), downloaded);
+					if (SUCCEEDED(hrDownload) && downloaded)
+					{
+						_downloadedSample = std::move(downloaded);
+						_downloadedFrameSeq = frameSeq;
+					}
+					else
+					{
+						WINTRACE(L"RtspSessionManager::TryGetLatestFrame - GPU->CPU download failed 0x%08X", hrDownload);
+						_downloadedSample.reset();
+					}
+				}
+				// Skip this tick on a download miss rather than handing MediaStream a raw
+				// DXGI buffer it doesn't know how to read; self-heals next frame/poll.
+				if (!_downloadedSample)
+					return E_FAIL;
+				sample = _downloadedSample;
+			}
+		}
 
 		stride = _actualStride;
 		generation = _config.generation;

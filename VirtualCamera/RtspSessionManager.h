@@ -100,6 +100,17 @@ private:
 	void NotifyStreamBroken(UINT64 generation);                  // called by the reader callback on disconnect
 	void ReconnectLoop(CameraSessionConfig config, UINT64 generation);
 
+	// Lazily creates _ownDevice/_ownDxgiManager the first time the reader needs a D3D
+	// manager and the Frame Server hasn't supplied one via SetD3DManager (which in
+	// practice never happens for a single-media-type software virtual camera - see
+	// CLAUDE.md). Kept alive for the process lifetime once created, like _dxgiManager's
+	// counterpart on the Frame Server side; _lock held.
+	HRESULT EnsureOwnDeviceManagerLocked();
+	// Downloads a DXGI-texture-backed NV12 sample (decoded on _ownDevice) into a plain
+	// system-memory sample, so MediaStream::CopyRtspFrame keeps seeing exactly the shape
+	// of sample it already handles on the no-D3D-manager path. _lock held.
+	HRESULT DownloadGpuSampleLocked(IMFSample* gpuSample, wil::com_ptr_nothrow<IMFSample>& outSample);
+
 	mutable winrt::slim_mutex _lock;
 	CameraSessionConfig _config{};
 	GUID _actualSubtype = MFVideoFormat_NV12;
@@ -110,7 +121,39 @@ private:
 	bool _running = false;
 	wil::com_ptr_nothrow<IMFSourceReader> _reader;
 	wil::com_ptr_nothrow<RtspReaderCallback> _callback;
-	wil::com_ptr_nothrow<IMFDXGIDeviceManager> _dxgiManager; // shared GPU device for DXVA decode
+	wil::com_ptr_nothrow<IMFDXGIDeviceManager> _dxgiManager; // shared GPU device for DXVA decode, when the Frame Server provides one via SetD3DManager
 	std::thread _reconnectThread;
 	std::atomic<bool> _stopReconnect{ false };
+
+	// Own D3D11 device + device manager, used for the reader whenever _dxgiManager above
+	// is unset, so H.264 DXVA hardware decode happens regardless of Frame Server
+	// cooperation. See EnsureOwnDeviceManagerLocked. Created once, kept for the process
+	// lifetime (device creation is expensive; safe to reuse across reconnects/sessions).
+	wil::com_ptr_nothrow<ID3D11Device> _ownDevice;
+	wil::com_ptr_nothrow<IMFDXGIDeviceManager> _ownDxgiManager;
+	HANDLE _ownDeviceHandle = nullptr;
+	bool _usingOwnDeviceForReader = false; // which manager OpenReaderLocked actually attached to the reader, this session
+	// Set by NotifyStreamBroken when the stream breaks while _usingOwnDeviceForReader was
+	// true: the own D3D11 device negotiated a media type fine but failed during actual
+	// decode (observed as MF_E_INVALIDMEDIATYPE from OnReadSample, not from
+	// SetCurrentMediaType) - a sign the device isn't actually usable for DXVA decode in
+	// this process (Frame Server / Local Service). Once set, OpenReaderLocked stops
+	// offering the own device for the rest of the process lifetime (deliberately NOT
+	// reset on Start()/Stop() - retrying on every camera (re)start would mean a repeated
+	// ~1s reconnect glitch on a setup where this is never going to work), falling back to
+	// the system-memory path that's known to work. A fresh DLL load (Frame Server
+	// restart, reboot) gets one new attempt.
+	bool _skipOwnDeviceThisGeneration = false;
+
+	// Reusable CPU-readable staging texture for DownloadGpuSampleLocked; recreated when
+	// the decoded frame size changes.
+	wil::com_ptr_nothrow<ID3D11Texture2D> _stagingTex;
+	UINT32 _stagingWidth = 0;
+	UINT32 _stagingHeight = 0;
+
+	// Caches the system-memory conversion of the latest GPU-decoded frame so repeated
+	// TryGetLatestFrame polls (~30x/sec) that re-serve the same frameSeq don't redo the
+	// GPU->CPU download every tick.
+	wil::com_ptr_nothrow<IMFSample> _downloadedSample;
+	UINT64 _downloadedFrameSeq = 0;
 };
