@@ -69,13 +69,20 @@ namespace RTVirtualCamera
                     FrameServerRates fr;
                     if (virtualCamera != null && virtualCamera.TryGetFrameServerRates(out fr) && fr.Available)
                     {
-                        string hw = !fr.HwAccelCapable
-                            ? "CPU (no D3D device)"
-                            : fr.HwAccelActive ? "GPU" : "CPU (fallback)";
+                        bool ffmpeg = Settings.Current.VideoEngine == VideoEngine.Ffmpeg;
+                        // In FFmpeg mode the decode happens in the app producer (GPU via
+                        // d3d11va, or software); the Frame Server's own copy is always CPU.
+                        bool ffmpegHw = ffmpeg && virtualCamera.IsFfmpegProducerHardware();
+                        string engine = ffmpeg ? (ffmpegHw ? "FFmpeg HW" : "FFmpeg SW") : "MF";
+                        string hw = ffmpeg
+                            ? (ffmpegHw ? "decode: GPU (d3d11va)" : "decode: CPU (software)")
+                            : !fr.HwAccelCapable
+                                ? "CPU (no D3D device)"
+                                : fr.HwAccelActive ? "GPU" : "CPU (fallback)";
                         string stale = fr.Stale ? "  [stale]" : string.Empty;
                         statsLabel.Text = string.Format(
-                            "[Frame Server] RX {0:0.0} fps  |  render {1:0.0} fps ({7:0.0} dup)  |  drop {2:0.0} fps  |  drift {3:+0;-0} ms  |  copy {4:0.0} ms  |  HW: {5}{6}",
-                            fr.RxFps, fr.RenderedFps, fr.DroppedFps, fr.DriftMs, fr.LastCopyMs, hw, stale, fr.DeclinedFps);
+                            "[Frame Server · {8}] RX {0:0.0} fps  |  render {1:0.0} fps ({7:0.0} dup)  |  drop {2:0.0} fps  |  drift {3:+0;-0} ms  |  copy {4:0.0} ms  |  {5}{6}",
+                            fr.RxFps, fr.RenderedFps, fr.DroppedFps, fr.DriftMs, fr.LastCopyMs, hw, stale, fr.DeclinedFps, engine);
                     }
                     else
                     {

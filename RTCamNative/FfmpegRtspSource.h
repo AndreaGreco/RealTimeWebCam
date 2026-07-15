@@ -38,6 +38,9 @@ public:
 	// Cumulative frames the decoder has published; for producer-side diagnostics.
 	uint64_t FramesDecoded() const { return _framesDecoded.load(); }
 
+	// True if the last decoded frame came off the GPU (d3d11va), false if software.
+	bool IsHardware() const { return _hwActive.load(); }
+
 private:
 	void DecodeLoop(std::string url, uint32_t targetW, uint32_t targetH);
 	// libav interrupt callback: returns non-zero to abort a blocking call when _stop is set.
@@ -47,5 +50,6 @@ private:
 	std::atomic<bool> _stop{ false };
 	std::atomic<bool> _running{ false };
 	std::atomic<uint64_t> _framesDecoded{ 0 };
+	std::atomic<bool> _hwActive{ false };
 	FrameChannelWriter _writer;
 };

@@ -46,4 +46,11 @@ extern "C" {
 		return 0;
 	}
 
+	// 1 if the producer's last frame was hardware-decoded (d3d11va), 0 if software
+	// or no producer.
+	__declspec(dllexport) int VCam_IsFfmpegProducerHardware()
+	{
+		return (g_producer && g_producer->IsHardware()) ? 1 : 0;
+	}
+
 } // extern "C"

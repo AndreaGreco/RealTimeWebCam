@@ -150,6 +150,9 @@ namespace RTVirtualCamera
         [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
         private static extern int VCam_GetFfmpegProducerFrames(out ulong frames);
 
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
+        private static extern int VCam_IsFfmpegProducerHardware();
+
         private IntPtr vcamHandle;
         private bool disposed = false;
 
@@ -240,6 +243,13 @@ namespace RTVirtualCamera
         {
             if (disposed) return;
             VCam_StopFfmpegProducer();
+        }
+
+        /// <summary>True if the FFmpeg producer's last frame was hardware-decoded (d3d11va).</summary>
+        public bool IsFfmpegProducerHardware()
+        {
+            if (disposed) return false;
+            return VCam_IsFfmpegProducerHardware() == 1;
         }
 
         public bool IsRegistered
