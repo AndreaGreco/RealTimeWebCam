@@ -223,6 +223,7 @@ namespace RTVirtualCamera
                     config.FpsNum = streamInfo.fpsNum;
                     config.FpsDen = streamInfo.fpsDen;
                     config.Format = streamInfo.subtype;
+                    config.Engine = (uint)Settings.Current.VideoEngine;
                     virtualCamera.SetConfig(config);
 
                     if (virtualCamera.Register())
@@ -231,6 +232,16 @@ namespace RTVirtualCamera
 
                         if (virtualCamera.Start())
                         {
+                            // FFmpeg engine: the Frame Server won't open the RTSP source
+                            // itself — the app must decode and stream frames to it. Start
+                            // the user-space producer now that the camera is running.
+                            if (Settings.Current.VideoEngine == VideoEngine.Ffmpeg)
+                            {
+                                if (!virtualCamera.StartFfmpegProducer(
+                                        config.RtspUrl, config.Width, config.Height, config.FpsNum, config.FpsDen))
+                                    System.Diagnostics.Debug.WriteLine("FFmpeg producer failed to start");
+                            }
+
                             StopPreview();
                             SetPreviewStatus(AppStrings.Get("Preview_VCamStarted"));
 
@@ -277,6 +288,7 @@ namespace RTVirtualCamera
                             System.Diagnostics.Debug.WriteLine("Error stopping preview: " + ex.Message);
                         }
 
+                        virtualCamera.StopFfmpegProducer(); // no-op unless the FFmpeg engine was running
                         virtualCamera.Stop();
                         virtualCamera.Unregister();
                         virtualCamera.Dispose();

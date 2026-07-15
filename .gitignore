@@ -403,3 +403,8 @@ FodyWeavers.xsd
 /build/Version.g.cs
 /build/Version.g.h
 /Setup/Version.g.wxi
+
+# FFmpeg is provided by vcpkg (manifest mode), not vendored. Ignore any manual
+# download and vcpkg's per-project install output.
+/third_party/
+vcpkg_installed/

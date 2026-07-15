@@ -10,6 +10,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Optional FFmpeg receive engine** (Settings → "Motore di ricezione"). Alongside the default Media Foundation engine (Frame Server opens the RTSP source in-process), the app can now decode the RTSP stream in user space with FFmpeg (`RTCamNative/FfmpegRtspSource`) and stream NV12 frames to the Frame Server through a new frame shared-memory channel (`Shared/VCamFrameChannel.h`, triple-buffered, seqlock, created by the Frame Server via `FrameChannelReader` and written by the app via `FrameChannelWriter`). The Frame Server reads those frames in `MediaStream::RequestSample` and shows the synthetic frame when the app producer's heartbeat goes stale. FFmpeg (LGPL, dynamic, decode-only) is provided by vcpkg manifest mode with vcpkg as a git submodule at `external/vcpkg` (version pinned via the baseline); its DLLs are app-locally deployed into the build output and bundled by the MSI — no manual setup for the end user. New engine selector (`Settings.VideoEngine`, `MF_VCAM_ENGINE` attribute).
 - Live Frame-Server stats channel (cross-process shared memory, `Shared/VCamStats.h`): RX/render/declined/dropped fps, drift, copy cost, and GPU hardware-acceleration capable/active, surfaced in the app's diagnostics bar while the virtual camera is running.
 
 ### Changed

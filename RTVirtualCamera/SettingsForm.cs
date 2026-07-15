@@ -53,12 +53,30 @@ namespace RTVirtualCamera
             }
         }
 
+        private sealed class EngineOption
+        {
+            public EngineOption(string text, VideoEngine engine)
+            {
+                Text = text;
+                Engine = engine;
+            }
+
+            public string Text { get; private set; }
+            public VideoEngine Engine { get; private set; }
+
+            public override string ToString()
+            {
+                return Text;
+            }
+        }
+
         private void SettingsForm_Load(object sender, EventArgs e)
         {
             Text = AppStrings.Get("Settings_Title");
             languageSectionLabel.Text = AppStrings.Get("Menu_Language");
             generalSectionLabel.Text = AppStrings.Get("Settings_GeneralSection");
             AutoStartCheckBox.Text = AppStrings.Get("Settings_AutoStart");
+            engineSectionLabel.Text = AppStrings.Get("Settings_EngineSection");
             closeButton.Text = AppStrings.Get("Button_Close");
 
             languageComboBox.Items.Clear();
@@ -86,6 +104,27 @@ namespace RTVirtualCamera
             languageComboBox.SelectedIndexChanged += LanguageComboBox_SelectedIndexChanged;
 
             AutoStartCheckBox.Checked = Settings.Current.AutoStart;
+
+            engineComboBox.Items.Clear();
+            engineComboBox.Items.Add(new EngineOption(
+                AppStrings.Get("Settings_Engine_MediaFoundation"), VideoEngine.MediaFoundation));
+            engineComboBox.Items.Add(new EngineOption(
+                AppStrings.Get("Settings_Engine_Ffmpeg"), VideoEngine.Ffmpeg));
+
+            // Set before wiring the event so opening the dialog doesn't itself
+            // trigger a save (same reasoning as the language combo above).
+            engineComboBox.SelectedIndex =
+                Settings.Current.VideoEngine == VideoEngine.Ffmpeg ? 1 : 0;
+            engineComboBox.SelectedIndexChanged += EngineComboBox_SelectedIndexChanged;
+        }
+
+        private void EngineComboBox_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (engineComboBox.SelectedItem is EngineOption option)
+            {
+                Settings.Current.VideoEngine = option.Engine;
+                Settings.Current.Save();
+            }
         }
 
         private void AutoStartCheckBox_CheckedChanged(object sender, EventArgs e)

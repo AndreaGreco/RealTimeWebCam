@@ -17,6 +17,7 @@ struct CameraSessionConfig
 	UINT32 fpsDen = 1;
 	GUID format = MFVideoFormat_NV12;
 	UINT64 generation = 0;
+	UINT32 engine = VCamEngine_MediaFoundation; // 0 = MF (Frame Server opens RTSP), 1 = FFmpeg (app pushes frames)
 };
 
 struct RtspFrameSnapshot

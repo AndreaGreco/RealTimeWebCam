@@ -8,6 +8,11 @@ on:
 permissions:
   contents: write
 
+env:
+  # RTCamNative pulls FFmpeg (LGPL) via vcpkg; cache built packages in the GitHub
+  # Actions cache (first run pays the ~30 min FFmpeg build, later runs restore it).
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+
 jobs:
   release:
     runs-on: windows-latest
@@ -15,10 +20,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # git describe ha bisogno della storia completa per il versioning
+          fetch-depth: 0        # git describe ha bisogno della storia completa per il versioning
+          submodules: recursive # external/vcpkg is a submodule; required for the FFmpeg engine
 
       - name: Add MSBuild to PATH
         uses: microsoft/setup-msbuild@v1.0.2
+
+      - name: Bootstrap vcpkg
+        shell: cmd
+        run: .\external\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+
+      - name: Export GitHub Actions cache env for vcpkg
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
       - name: Restore NuGet packages
         run: nuget restore RTVirtualCamera.sln

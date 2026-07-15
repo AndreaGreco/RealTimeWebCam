@@ -40,6 +40,12 @@
 						Server="VCamComDll"
 						   />
 				</Component>
+				<!-- LGPL notice for the FFmpeg libraries bundled by the FFmpeg engine.
+				     The FFmpeg DLLs themselves are copied into the build output by vcpkg
+				     (applocal) and picked up by the AppFiles glob below. -->
+				<Component Id="ThirdPartyNotices">
+					<File Id="ThirdPartyNoticesFile" Source="..\THIRD_PARTY_NOTICES.md" />
+				</Component>
 			</Directory>
 		</StandardDirectory>
 
@@ -107,6 +113,7 @@
 				 Display="expand">
 			<ComponentGroupRef Id="AppFiles" />
 			<ComponentRef Id="CameraCOM" />
+			<ComponentRef Id="ThirdPartyNotices" />
 			<ComponentRef Id="StartMenuShortcut" />
 
 			<Feature Id="DesktopShortcut"

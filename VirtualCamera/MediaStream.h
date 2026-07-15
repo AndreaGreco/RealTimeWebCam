@@ -67,6 +67,14 @@ private:
 	HRESULT CopyRtspFrameGpu(IMFDXGIBuffer* srcDxgi, IMFDXGIBuffer* dstDxgi);
 	// CPU fallback: a single MFCopyImage from the source MF buffer into the dest buffer.
 	HRESULT CopyRtspFrameCpu(IMFMediaBuffer* srcBuffer, IMFMediaBuffer* dstBuffer);
+	// Copies a contiguous NV12 source (Y then interleaved UV at src + srcPitch*height)
+	// into the destination sample buffer, honoring the dest's real pitch (2D or flat).
+	// Shared by the RTSP CPU fallback and the FFmpeg frame-channel path.
+	HRESULT CopyNv12ToSample(IMFMediaBuffer* dstBuffer, const BYTE* src, LONG srcPitch, UINT32 width, UINT32 height);
+	// FFmpeg engine: reads the latest NV12 frame from the frame shared memory
+	// (FrameChannelReader) and copies it into targetSample. Returns S_FALSE if no
+	// fresh frame is available (caller falls back to the synthetic frame).
+	HRESULT CopyFrameChannelFrame(IMFSample* targetSample);
 	HRESULT BuildFrameTypeNV12(wil::com_ptr_nothrow<IMFMediaType>& nv12Type);
 	HRESULT BuildDescriptor();
 
@@ -89,6 +97,7 @@ private:
 	UINT32 _hintFpsNum;   // fps numerator from app-side VCamConfig (default 30)
 	UINT32 _hintFpsDen;   // fps denominator from app-side VCamConfig (default 1)
 	UINT64 _generation = 0;
+	UINT32 _engine = 0;  // VCamEngine: 0 = Media Foundation (RtspSessionManager), 1 = FFmpeg (FrameChannelReader)
 	IRtspSessionManager* _rtspManager = nullptr;
 
 	// Fallback frame generator (used when RTSP is unavailable)
@@ -110,6 +119,10 @@ private:
 	ULONGLONG _driftBaseTickMs = 0;
 	LONGLONG  _driftBasePtsMs = 0;
 	double _driftMs = 0.0;
+
+	// --- FFmpeg engine live diagnostics (only meaningful when _engine == Ffmpeg) --
+	UINT64 _frameChannelRxFrames = 0; // header framesWritten of the last frame we saw (producer's rx counter)
+	bool   _ffmpegFresh = false;      // producer heartbeat was fresh on the last RequestSample
 
 	// Publishes the current snapshot (whatever the outcome of this RequestSample
 	// call) to StatsPublisher. Called once at the end of RequestSample().

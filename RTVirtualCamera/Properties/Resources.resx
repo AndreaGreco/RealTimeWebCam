@@ -153,6 +153,15 @@
   <data name="Settings_AutoStart" xml:space="preserve">
     <value>Automatically start the stream on launch</value>
   </data>
+  <data name="Settings_EngineSection" xml:space="preserve">
+    <value>Receive engine</value>
+  </data>
+  <data name="Settings_Engine_MediaFoundation" xml:space="preserve">
+    <value>Media Foundation (Frame Server — works with the app closed)</value>
+  </data>
+  <data name="Settings_Engine_Ffmpeg" xml:space="preserve">
+    <value>FFmpeg (user-space — live only while the app is open)</value>
+  </data>
   <data name="Source_Missing_Title" xml:space="preserve">
     <value>Source missing</value>
   </data>

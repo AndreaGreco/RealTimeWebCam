@@ -57,6 +57,21 @@
     <CLRSupport>true</CLRSupport>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <!-- vcpkg (manifest mode) provides FFmpeg (LGPL, dynamic) for the FFmpeg receive
+       engine. vcpkg lives as a git submodule under external/vcpkg; its MSBuild
+       integration adds the include/lib search paths and app-locally copies the
+       dependency DLLs into the output folder. Only x64 is built for this project. -->
+  <PropertyGroup Label="Vcpkg">
+    <VcpkgEnabled Condition="'$(Platform)'=='x64'">true</VcpkgEnabled>
+    <VcpkgEnableManifest>true</VcpkgEnableManifest>
+    <VcpkgManifestInstall>true</VcpkgManifestInstall>
+    <VcpkgManifestRoot>$(SolutionDir)</VcpkgManifestRoot>
+    <VcpkgInstalledDir>$(SolutionDir)vcpkg_installed\</VcpkgInstalledDir>
+    <VcpkgTriplet>x64-windows</VcpkgTriplet>
+    <VcpkgUseStatic>false</VcpkgUseStatic>
+  </PropertyGroup>
+  <Import Project="$(SolutionDir)external\vcpkg\scripts\buildsystems\msbuild\vcpkg.props"
+          Condition="Exists('$(SolutionDir)external\vcpkg\scripts\buildsystems\msbuild\vcpkg.props')" />
   <ImportGroup Label="ExtensionSettings">
   </ImportGroup>
   <ImportGroup Label="Shared">
@@ -128,7 +143,7 @@
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
-      <AdditionalDependencies>Shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>Shlwapi.lib;avcodec.lib;avformat.lib;avutil.lib;swscale.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>
@@ -150,7 +165,7 @@
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
-      <AdditionalDependencies>Shlwapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>Shlwapi.lib;avcodec.lib;avformat.lib;avutil.lib;swscale.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -162,7 +177,10 @@
     <ClInclude Include="VideoPlayer.h" />
     <ClInclude Include="VideoReaderCbk.h" />
     <ClInclude Include="VirtualCamera.h" />
+    <ClInclude Include="FfmpegRtspSource.h" />
+    <ClInclude Include="FrameChannelWriter.h" />
     <ClInclude Include="..\Shared\VCamStats.h" />
+    <ClInclude Include="..\Shared\VCamFrameChannel.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CSourceOpenMonitor.cpp" />
@@ -178,12 +196,28 @@
     <ClCompile Include="VideoPlayer.cpp" />
     <ClCompile Include="VideoReaderCbk.cpp" />
     <ClCompile Include="VirtualCamera.cpp" />
+    <!-- FFmpeg engine: native (non-/clr) translation units — the libav C headers
+         don't mix with C++/CLI, and they don't use the project PCH. -->
+    <ClCompile Include="FfmpegRtspSource.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="FrameChannelWriter.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="FfmpegExports.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="RTCamNative.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Import Project="..\build\GitVersion.targets" />
+  <Import Project="$(SolutionDir)external\vcpkg\scripts\buildsystems\msbuild\vcpkg.targets"
+          Condition="Exists('$(SolutionDir)external\vcpkg\scripts\buildsystems\msbuild\vcpkg.targets')" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>

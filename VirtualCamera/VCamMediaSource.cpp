@@ -44,6 +44,7 @@
 #include "MFTools.h"
 #include "MediaStream.h"
 #include "VCamMediaSource.h"
+#include "FrameChannelReader.h"
 #include "..\Shared\VCamConfig.h"
 
 HRESULT VCamMediaSource::SetupCameraSettings(IMFAttributes* attributes)
@@ -68,6 +69,7 @@ HRESULT VCamMediaSource::SetupCameraSettings(IMFAttributes* attributes)
 	if (FAILED(attributes->GetUINT32(MF_VCAM_HEIGHT, &_camera_config.height))) _camera_config.height = 1080;
 	if (FAILED(attributes->GetUINT32(MF_VCAM_FPS_NUM, &_camera_config.fpsNum))) _camera_config.fpsNum = 30;
 	if (FAILED(attributes->GetUINT32(MF_VCAM_FPS_DEN, &_camera_config.fpsDen))) _camera_config.fpsDen = 1;
+	if (FAILED(attributes->GetUINT32(MF_VCAM_ENGINE,  &_camera_config.engine))) _camera_config.engine = VCamEngine_MediaFoundation;
 
 	if (_camera_config.width == 0) _camera_config.width = 1920;
 	if (_camera_config.height == 0) _camera_config.height = 1080;
@@ -95,12 +97,25 @@ HRESULT VCamMediaSource::SetupCameraSettings(IMFAttributes* attributes)
 	_camera_config.format = MFVideoFormat_NV12;
 	_camera_config.valid = true;
 
-	WINTRACE(L"VCamMediaSource::SetupCameraSettings - config received: url=%s %ux%u @%u/%u gen=%llu",
+	// FFmpeg engine: the app (RTCamNative) decodes and pushes frames through the
+	// frame shared memory. Create the mapping now (during activation, before any
+	// consumer opens the camera) so the app's writer can open it — creating a
+	// Global\ object needs the service's privilege, so it must happen here, not
+	// app-side. The Frame Server will NOT open the RTSP source itself in this mode.
+	if (_camera_config.engine == VCamEngine_Ffmpeg)
+	{
+		FrameChannelReader::Instance().EnsureMapped(
+			_camera_config.width, _camera_config.height,
+			_camera_config.fpsNum, _camera_config.fpsDen);
+	}
+
+	WINTRACE(L"VCamMediaSource::SetupCameraSettings - config received: url=%s %ux%u @%u/%u engine=%u gen=%llu",
 		_camera_config.rtspUrl,
 		_camera_config.width,
 		_camera_config.height,
 		_camera_config.fpsNum,
 		_camera_config.fpsDen,
+		_camera_config.engine,
 		_camera_config.generation);
 
 	LOG_IF_FAILED(attributes->CopyAllItems(this));
@@ -314,7 +329,10 @@ STDMETHODIMP VCamMediaSource::Start(IMFPresentationDescriptor* pPresentationDesc
 	winrt::slim_lock_guard lock(_lock);
 	RETURN_HR_IF(MF_E_SHUTDOWN, !_queue || !_descriptor);
 
-	if (_camera_config.valid && _rtspManager)
+	// Only the Media Foundation engine opens the RTSP source in-process. In FFmpeg
+	// mode the app is the producer (frames arrive via FrameChannelReader), so the
+	// RtspSessionManager stays stopped.
+	if (_camera_config.valid && _rtspManager && _camera_config.engine == VCamEngine_MediaFoundation)
 	{
 		LOG_IF_FAILED(_rtspManager->Start(_camera_config));
 	}

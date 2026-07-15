@@ -7,6 +7,8 @@
 #include "VCamMediaSource.h"
 #include "RtspReaderCallback.h"
 #include "StatsPublisher.h"
+#include "FrameChannelReader.h"
+#include "..\Shared\VCamConfig.h"
 #include <mfreadwrite.h>
 #include <mfapi.h>
 
@@ -235,10 +237,22 @@ HRESULT MediaStream::CopyRtspFrameCpu(IMFMediaBuffer* srcBuffer, IMFMediaBuffer*
 		}
 	}
 
-	auto unlockSrc = [&]() {
-		if (srcLocked2D) src2D->Unlock2D();
-		else srcBuffer->Unlock();
-	};
+	HRESULT hrCopy = CopyNv12ToSample(dstBuffer, pbSrc, srcPitch, width, height);
+
+	if (srcLocked2D) src2D->Unlock2D();
+	else srcBuffer->Unlock();
+	return hrCopy;
+}
+
+// Copies a contiguous NV12 source (Y plane of `height` rows at `srcPitch`, then the
+// interleaved UV plane of `height/2` rows at `srcPitch`, starting at src + srcPitch*height)
+// into the destination buffer, honoring the dest's real pitch. Used by both the RTSP
+// CPU fallback (src = locked decoder buffer) and the FFmpeg path (src = shared-memory slot).
+HRESULT MediaStream::CopyNv12ToSample(IMFMediaBuffer* dstBuffer, const BYTE* src, LONG srcPitch, UINT32 width, UINT32 height)
+{
+	RETURN_HR_IF_NULL(E_POINTER, dstBuffer);
+	RETURN_HR_IF_NULL(E_POINTER, src);
+	const DWORD cbExpected = width * height * 3 / 2; // NV12
 
 	// Destination: D3D texture via IMF2DBuffer gives the real GPU pitch; else flat copy.
 	HRESULT hrCopy = S_OK;
@@ -251,10 +265,10 @@ HRESULT MediaStream::CopyRtspFrameCpu(IMFMediaBuffer* srcBuffer, IMFMediaBuffer*
 		if (SUCCEEDED(hrCopy))
 		{
 			// Y plane: height rows of width bytes.
-			MFCopyImage(pbScan0, dstPitch, pbSrc, srcPitch, width, height);
+			MFCopyImage(pbScan0, dstPitch, src, srcPitch, width, height);
 			// UV plane: half height. Src UV follows the Y plane at srcPitch * height.
 			MFCopyImage(pbScan0 + dstPitch * (LONG)height, dstPitch,
-				pbSrc + srcPitch * (LONG)height, srcPitch,
+				src + srcPitch * (LONG)height, srcPitch,
 				width, height / 2);
 			dst2D->Unlock2D();
 			dstBuffer->SetCurrentLength(cbExpected);
@@ -267,17 +281,51 @@ HRESULT MediaStream::CopyRtspFrameCpu(IMFMediaBuffer* srcBuffer, IMFMediaBuffer*
 		if (SUCCEEDED(hrCopy))
 		{
 			DWORD cb = min(cbExpected, cbDstMax);
-			MFCopyImage(pbDst, (LONG)width, pbSrc, srcPitch, width, height);
+			MFCopyImage(pbDst, (LONG)width, src, srcPitch, width, height);
 			MFCopyImage(pbDst + width * height, (LONG)width,
-				pbSrc + srcPitch * (LONG)height, srcPitch,
+				src + srcPitch * (LONG)height, srcPitch,
 				width, height / 2);
 			dstBuffer->Unlock();
 			dstBuffer->SetCurrentLength(cb);
 		}
 	}
-
-	unlockSrc();
 	return hrCopy;
+}
+
+// FFmpeg engine: pull the latest NV12 frame the app published into the frame shared
+// memory (FrameChannelReader) and copy it into targetSample. S_FALSE when there is no
+// fresh frame yet (producer not started, heartbeat stale, or geometry mismatch), so
+// RequestSample falls back to the synthetic frame just like the RTSP path does.
+HRESULT MediaStream::CopyFrameChannelFrame(IMFSample* targetSample)
+{
+	RETURN_HR_IF_NULL(E_POINTER, targetSample);
+
+	const uint8_t* slot = nullptr;
+	uint32_t w = 0, h = 0, st = 0;
+	uint64_t fseq = 0, fwritten = 0, hb = 0;
+	_ffmpegFresh = false;
+
+	if (!FrameChannelReader::Instance().AcquireLatest(&slot, &w, &h, &st, &fseq, &fwritten, &hb) || !slot)
+		return S_FALSE;
+
+	// Freshness: the producer stamps GetTickCount64() (system-wide, comparable across
+	// processes) on every write; treat >2s without an update as "producer gone".
+	const ULONGLONG now = GetTickCount64();
+	const bool fresh = (hb != 0) && (now >= hb) && (now - hb <= 2000);
+	_frameChannelRxFrames = fwritten;
+	if (!fresh || w != _videoWidth || h != _videoHeight)
+		return S_FALSE;
+
+	wil::com_ptr_nothrow<IMFMediaBuffer> dstBuffer;
+	RETURN_IF_FAILED(targetSample->GetBufferByIndex(0, &dstBuffer));
+	RETURN_IF_FAILED(CopyNv12ToSample(dstBuffer.get(), slot, (LONG)st, w, h));
+
+	_ffmpegFresh = true;
+	// Duplicate detection for stats: same frameSeq as last delivery == a re-serve.
+	if (_hasDeliveredFrame && fseq == _lastDeliveredFrameSeq)
+		_declinedFrameCount++;
+	_lastDeliveredFrameSeq = fseq;
+	return S_OK;
 }
 
 HRESULT MediaStream::Start(IMFMediaType* type)
@@ -366,6 +414,7 @@ HRESULT MediaStream::SetRuntimeContext(const StreamRuntimeContext& context)
 {
 	_rtspManager = context.rtspManager;
 	_generation = context.config.generation;
+	_engine = context.config.engine;
 	return SetVideoConfig(
 		context.config.width,
 		context.config.height,
@@ -480,7 +529,27 @@ STDMETHODIMP MediaStream::RequestSample(IUnknown* pToken)
 	wil::com_ptr_nothrow<IMFSample> outSample;
 	RtspSessionState rtspState = _rtspManager ? _rtspManager->GetState() : RtspSessionState::Stopped;
 
-	if (_rtspManager)
+	if (_engine == VCamEngine_Ffmpeg)
+	{
+		// FFmpeg engine: the frame comes from the app via shared memory, not the
+		// in-process RTSP reader. Copy is always CPU (system-memory NV12 slot).
+		LARGE_INTEGER freq{}, t0{}, t1{};
+		QueryPerformanceFrequency(&freq);
+		QueryPerformanceCounter(&t0);
+		HRESULT hrCopy = CopyFrameChannelFrame(sample.get());
+		QueryPerformanceCounter(&t1);
+		if (hrCopy == S_OK)
+		{
+			outSample = sample;
+			_renderedFrameCount++;
+			_hasDeliveredFrame = true;
+			_lastCopyWasGpu = false;
+			_lastCopyMs = freq.QuadPart > 0
+				? (double)(t1.QuadPart - t0.QuadPart) * 1000.0 / (double)freq.QuadPart
+				: 0.0;
+		}
+	}
+	else if (_rtspManager)
 	{
 		RtspFrameSnapshot frame;
 		HRESULT hrFrame = _rtspManager->TryGetLatestFrame(frame);
@@ -576,12 +645,23 @@ STDMETHODIMP MediaStream::RequestSample(IUnknown* pToken)
 void MediaStream::PublishStats()
 {
 	VCamFrameServerStats snapshot{};
-	snapshot.sessionState = static_cast<uint32_t>(
-		_rtspManager ? _rtspManager->GetState() : RtspSessionState::Stopped);
 
 	UINT64 rx = 0, dropped = 0;
-	if (_rtspManager)
-		_rtspManager->GetFrameCounters(rx, dropped);
+	if (_engine == VCamEngine_Ffmpeg)
+	{
+		// No in-process RTSP session in this mode: derive state from whether the app
+		// producer's heartbeat is fresh, and rx from the producer's own frame counter.
+		snapshot.sessionState = static_cast<uint32_t>(
+			_ffmpegFresh ? VCamSessionStateWire::Running : VCamSessionStateWire::Starting);
+		rx = _frameChannelRxFrames;
+	}
+	else
+	{
+		snapshot.sessionState = static_cast<uint32_t>(
+			_rtspManager ? _rtspManager->GetState() : RtspSessionState::Stopped);
+		if (_rtspManager)
+			_rtspManager->GetFrameCounters(rx, dropped);
+	}
 	snapshot.rxFrames = rx;
 	snapshot.droppedFrames = dropped;
 	snapshot.renderedFrames = _renderedFrameCount;

@@ -32,6 +32,8 @@ namespace RTVirtualCamera
             languageComboBox = new System.Windows.Forms.ComboBox();
             generalSectionLabel = new System.Windows.Forms.Label();
             AutoStartCheckBox = new System.Windows.Forms.CheckBox();
+            engineSectionLabel = new System.Windows.Forms.Label();
+            engineComboBox = new System.Windows.Forms.ComboBox();
             closeButton = new System.Windows.Forms.Button();
             SuspendLayout();
             //
@@ -75,14 +77,33 @@ namespace RTVirtualCamera
             AutoStartCheckBox.UseVisualStyleBackColor = true;
             AutoStartCheckBox.CheckedChanged += AutoStartCheckBox_CheckedChanged;
             //
+            // engineSectionLabel
+            //
+            engineSectionLabel.AutoSize = true;
+            engineSectionLabel.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+            engineSectionLabel.Location = new System.Drawing.Point(20, 138);
+            engineSectionLabel.Name = "engineSectionLabel";
+            engineSectionLabel.Size = new System.Drawing.Size(90, 15);
+            engineSectionLabel.TabIndex = 4;
+            engineSectionLabel.Text = "Receive engine";
+            //
+            // engineComboBox
+            //
+            engineComboBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            engineComboBox.FormattingEnabled = true;
+            engineComboBox.Location = new System.Drawing.Point(20, 160);
+            engineComboBox.Name = "engineComboBox";
+            engineComboBox.Size = new System.Drawing.Size(300, 23);
+            engineComboBox.TabIndex = 5;
+            //
             // closeButton
             //
             closeButton.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
             closeButton.DialogResult = System.Windows.Forms.DialogResult.OK;
-            closeButton.Location = new System.Drawing.Point(244, 150);
+            closeButton.Location = new System.Drawing.Point(244, 202);
             closeButton.Name = "closeButton";
             closeButton.Size = new System.Drawing.Size(76, 26);
-            closeButton.TabIndex = 4;
+            closeButton.TabIndex = 6;
             closeButton.Text = "Close";
             closeButton.UseVisualStyleBackColor = true;
             //
@@ -92,8 +113,10 @@ namespace RTVirtualCamera
             AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             CancelButton = closeButton;
-            ClientSize = new System.Drawing.Size(340, 196);
+            ClientSize = new System.Drawing.Size(340, 248);
             Controls.Add(closeButton);
+            Controls.Add(engineComboBox);
+            Controls.Add(engineSectionLabel);
             Controls.Add(AutoStartCheckBox);
             Controls.Add(generalSectionLabel);
             Controls.Add(languageComboBox);
@@ -117,6 +140,8 @@ namespace RTVirtualCamera
         private System.Windows.Forms.ComboBox languageComboBox;
         private System.Windows.Forms.Label generalSectionLabel;
         private System.Windows.Forms.CheckBox AutoStartCheckBox;
+        private System.Windows.Forms.Label engineSectionLabel;
+        private System.Windows.Forms.ComboBox engineComboBox;
         private System.Windows.Forms.Button closeButton;
     }
 }

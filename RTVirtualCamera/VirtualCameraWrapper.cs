@@ -19,6 +19,19 @@ namespace RTVirtualCamera
         public uint FpsNum;      // frame-rate numerator   (0 = default 30)
         public uint FpsDen;      // frame-rate denominator (0 = default 1)
         public Guid Format;      // preferred output subtype (Guid.Empty = NV12 auto)
+        public uint Engine;      // VideoEngine: 0 = Media Foundation (Frame Server), 1 = FFmpeg (user-space)
+    }
+
+    /// <summary>
+    /// Mirror of Shared/VCamConfig.h::VCamEngine. Which pipeline decodes the RTSP stream.
+    /// MediaFoundation: the Frame Server opens the source itself (works with app closed).
+    /// Ffmpeg: RTCamNative decodes in user-space and pushes frames through shared memory
+    /// (live only while the app is running).
+    /// </summary>
+    public enum VideoEngine : uint
+    {
+        MediaFoundation = 0,
+        Ffmpeg = 1,
     }
 
     /// <summary>Mirror of RtspSessionManager's RtspSessionState (VirtualCamera/RtspSessionManager.h),
@@ -125,6 +138,18 @@ namespace RTVirtualCamera
         [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
         private static extern int VCam_GetFrameServerStats(out FrameServerStats stats);
 
+        // FFmpeg engine (user-space producer). Only used when VideoEngine.Ffmpeg is
+        // selected: RTCamNative decodes the RTSP stream in-process and pushes NV12
+        // frames to the Frame Server via the frame shared memory. See FfmpegExports.cpp.
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
+        private static extern int VCam_StartFfmpegProducer(string url, uint width, uint height, uint fpsNum, uint fpsDen);
+
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
+        private static extern int VCam_StopFfmpegProducer();
+
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
+        private static extern int VCam_GetFfmpegProducerFrames(out ulong frames);
+
         private IntPtr vcamHandle;
         private bool disposed = false;
 
@@ -199,6 +224,24 @@ namespace RTVirtualCamera
             return result == 0;
         }
 
+        /// <summary>
+        /// Starts the user-space FFmpeg producer. Only for VideoEngine.Ffmpeg: the app
+        /// decodes the RTSP stream and streams NV12 frames to the Frame Server via shared
+        /// memory. Call after Start() succeeds. width/height must match the VCamConfig sent.
+        /// </summary>
+        public bool StartFfmpegProducer(string url, uint width, uint height, uint fpsNum, uint fpsDen)
+        {
+            if (disposed) throw new ObjectDisposedException(nameof(VirtualCameraWrapper));
+            return VCam_StartFfmpegProducer(url, width, height, fpsNum, fpsDen) == 0;
+        }
+
+        /// <summary>Stops the user-space FFmpeg producer (no-op if it was never started).</summary>
+        public void StopFfmpegProducer()
+        {
+            if (disposed) return;
+            VCam_StopFfmpegProducer();
+        }
+
         public bool IsRegistered
         {
             get { return !disposed && vcamHandle != IntPtr.Zero && IsVCamRegistered(vcamHandle); }
@@ -270,6 +313,10 @@ namespace RTVirtualCamera
         {
             if (!disposed)
             {
+                // Stop the user-space producer first (if the FFmpeg engine was running)
+                // so its decode thread and RTSP connection are torn down cleanly.
+                try { VCam_StopFfmpegProducer(); } catch { /* native may already be unloaded */ }
+
                 if (vcamHandle != IntPtr.Zero)
                 {
                     if (IsStarted) StopVCam(vcamHandle);

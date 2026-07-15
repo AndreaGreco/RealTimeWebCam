@@ -62,7 +62,9 @@ RTVirtualCamera.exe (UI timer, ~2x/sec)
   └─ RTCamNative::StatsReader::TryGetStats() ← reads the same shared memory
 ```
 
-**No shared memory for the RTSP frame data itself.** The Frame Server opens the RTSP stream and decodes/copies every frame entirely inside its own process; the C# app never touches pixel data — it only sets config attributes on `IMFVirtualCamera` before calling `Start()`. There **is** a small shared-memory channel, but it carries live *stats* only (fps/drift/copy-cost/HW-accel), one-way from the Frame Server to the app — see "Live stats (Frame Server → app)" below.
+**No shared memory for the RTSP frame data itself — in the default Media Foundation engine.** The Frame Server opens the RTSP stream and decodes/copies every frame entirely inside its own process; the C# app never touches pixel data — it only sets config attributes on `IMFVirtualCamera` before calling `Start()`. There **is** a small shared-memory channel, but it carries live *stats* only (fps/drift/copy-cost/HW-accel), one-way from the Frame Server to the app — see "Live stats (Frame Server → app)" below.
+
+**The optional FFmpeg engine reverses this** — there the app decodes the RTSP stream in user space and streams NV12 pixels to the Frame Server through a second, larger shared-memory channel. See "Two receive engines (MF vs FFmpeg)" below.
 
 ### Virtual camera lifecycle (detailed)
 
@@ -116,6 +118,64 @@ Single source of truth for the live-stats wire format: the `VCamFrameServerStats
 
 ---
 
+## Two receive engines (MF vs FFmpeg)
+
+The RTSP stream can be received two ways, chosen by the user (Settings → "Motore di
+ricezione", persisted as `Settings.VideoEngine`) and passed to the Frame Server as the
+`MF_VCAM_ENGINE` attribute (UINT32) alongside the other config attrs, read in
+`SetupCameraSettings`. `VCamConfig.engine` / `CameraSessionConfig.engine` carry it internally.
+
+- **`MediaFoundation` (default, engine=0)** — the path everything else in this document
+  describes: the Frame Server opens the RTSP source in-process (`RtspSessionManager` +
+  `IMFSourceReader`). Self-contained — the camera keeps working after the app closes.
+- **`FFmpeg` (engine=1)** — the app decodes in user space and pushes frames to the Frame Server:
+
+```
+RTVirtualCamera.exe (app process)
+  MainForm: engine=FFmpeg → after Start(), VirtualCameraWrapper.StartFfmpegProducer(url,w,h,…)
+    → RTCamNative!VCam_StartFfmpegProducer  (FfmpegExports.cpp)
+      → FfmpegRtspSource (thread): libavformat open RTSP → libavcodec decode (SW)
+        → libswscale → NV12 → FrameChannelWriter.WriteFrame()
+          → seqlock publish into Global\RTVCam_Frames_<CLSID>  (Shared/VCamFrameChannel.h)
+
+Frame Server (svchost.exe)
+  VCamMediaSource::SetupCameraSettings: engine=FFmpeg
+    → FrameChannelReader::EnsureMapped(w,h)   ← CREATES the mapping (service privilege)
+    → RtspSessionManager is NOT started (VCamMediaSource::Start skips it)
+  MediaStream::RequestSample (~30x/sec)
+    → CopyFrameChannelFrame() → FrameChannelReader::AcquireLatest() → CopyNv12ToSample()
+    → synthetic FrameGenerator frame if the producer heartbeat is stale (>2s) or no frame yet
+```
+
+Design points:
+
+- **Producer lives in the app process → app-lifetime.** In FFmpeg mode the camera only has
+  live frames while `RTVirtualCamera.exe` is running; on app close the Frame Server shows the
+  synthetic frame (heartbeat goes stale). This is inherent to decoding in user space and was
+  an accepted trade-off. The MF engine has no such dependency.
+- **The frame mapping is CREATED by the Frame Server, WRITTEN by the app** — the reverse data
+  direction of the stats channel, but the same "service creates, app opens" shape, because
+  creating a `Global\` object needs `SeCreateGlobalPrivilege` (the Local Service Frame Server
+  has it; a non-elevated user does not). DACL `D:(A;;GA;;;LS)(A;;GRGW;;;IU)` grants Interactive
+  Users read+write. Both handled in `FrameChannelReader::EnsureMapped` /
+  `BuildFramesSecurityDescriptor`.
+- **Fixed max-size mapping.** The section is created for `VCAM_FRAMES_MAX_*` (3840×2160) and
+  the real geometry lives in the header, so it survives resolution changes across sessions
+  without a resize (the section outlives a session, like the stats one).
+- **Triple-buffered, seqlock-published.** Ring of `VCAM_FRAMES_SLOT_COUNT` (3) NV12 slots; the
+  single writer fills the next slot then publishes `latestSlot`+`frameSeq` under the header
+  seqlock (same idiom as `Shared/VCamStats.h`). The pixels aren't locked — 3 slots give ~2
+  frames of headroom before the writer revisits a slot the reader might still be copying.
+- **FFmpeg = LGPL, dynamic, via vcpkg.** Provided by vcpkg manifest mode; vcpkg lives as a git
+  submodule at `external/vcpkg`, and `vcpkg.json` pins the version via `builtin-baseline`
+  (currently ffmpeg 8.1.2, LGPL, features `avcodec`/`avformat`/`swscale`). `RTCamNative.vcxproj`
+  imports vcpkg's MSBuild props/targets; vcpkg app-locally copies the DLLs into the shared `bin`
+  and the WiX `<Files>` glob harvests them into the MSI — no manual steps for the end user.
+  `THIRD_PARTY_NOTICES.md` covers the LGPL notice. The FFmpeg source files
+  (`FfmpegRtspSource.cpp`, `FrameChannelWriter.cpp`, `FfmpegExports.cpp`) are compiled **native**
+  (`CompileAsManaged=false`, no PCH) because RTCamNative is `/clr` on x64 and the libav C headers
+  don't mix with C++/CLI.
+
 ## Critical invariants
 
 - **CLSID** `{3CAD447D-F283-4AF4-A3B2-6F5363309F52}` must match in `VirtualCamera/`, `RTCamNative/`, and the registry. Never change it in only one place.
@@ -124,7 +184,9 @@ Single source of truth for the live-stats wire format: the `VCamFrameServerStats
 - **`SetBlob` is NOT reliably forwarded** by the Frame Server to `Initialize()`. Only `SetString` and `SetUINT32` are safe for passing config. Hence five individual attribute calls instead of one struct blob.
 - **DLL path constraint**: `VCamSampleSource.dll` must be in a publicly accessible folder (not under `C:\Users\...`), because the Frame Server runs as Local Service.
 - **`Activator::ActivateObject()` call order**: `SetupCameraSettings()` must be called before `Initialize()` because `Initialize()` calls `ApplyRuntimeContext()` which reads `_camera_config` that was just filled by `SetupCameraSettings()`. This ordering is enforced only by `ActivateObject()` — it is not self-enforced by the classes.
-- **`VCamConfig` struct ABI**: When modifying `Shared/VCamConfig.h::VCamConfig`, always update `RTVirtualCamera/VirtualCameraWrapper.cs::VCamConfig` mirror too.
+- **`VCamConfig` struct ABI**: When modifying `Shared/VCamConfig.h::VCamConfig`, always update `RTVirtualCamera/VirtualCameraWrapper.cs::VCamConfig` mirror too. (The `engine` field is the newest addition — it also has a matching `MF_VCAM_ENGINE` attribute GUID and a `VCamEngine` / C# `VideoEngine` enum to keep in sync.)
+- **`VCamFrameChannel` wire format**: `Shared/VCamFrameChannel.h` is the single source of truth for the FFmpeg frame channel; the writer (`RTCamNative/FrameChannelWriter.cpp`) and the reader (`VirtualCamera/FrameChannelReader.cpp`) both include it. Bump `VCAM_FRAMES_STRUCT_VERSION` if the header layout changes. Unlike the config/stats mirrors there is no C# mirror — the app touches this channel only through native code.
+- **The frame mapping is created ONLY by the Frame Server** (`FrameChannelReader`, `SeCreateGlobalPrivilege`); the app opens it for writing. Do not create it app-side.
 - **`VCamFrameServerStats` struct ABI**: When modifying `Shared/VCamStats.h::VCamFrameServerStats`, bump `VCAM_STATS_STRUCT_VERSION` and update `RTVirtualCamera/VirtualCameraWrapper.cs::FrameServerStats` (same field order, `Pack = 1`) in the same change.
 - **Stats mapping must use the `Global\` namespace with an explicit DACL**. The Frame Server (Local Service, session 0) and the app (interactive user session) are in different Terminal Server sessions — a session-local name would be invisible to the app, and the default DACL for an object created by a service would deny the app's `OpenFileMappingW` even with the right name. Both are handled once, in `StatsPublisher::EnsureMapped()` / `BuildStatsSecurityDescriptor()`; do not create the mapping anywhere else.
 
