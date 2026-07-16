@@ -33,6 +33,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$(ProjectDir)deploy_vcam.ps
 
 The Frame Server (`svchost.exe`) is a separate OS process. Attach to it in Visual Studio: **Attach to Process** → find `svchost.exe` hosting the *Windows Camera Frame Server* service. Use `WINTRACE` / `DebugLog` macros for trace output — do not rely on the Visual Studio Output window for Frame Server behavior. The FFmpeg producer runs in the **app** process (`RTVirtualCamera.exe` / `RTCamNative.dll`), so debug the receive/decode side there, not in `svchost.exe`.
 
+**Both trace paths are disabled by default** (production pays no formatting / file-I/O cost) and gated at runtime by an environment variable, read once and cached per process:
+
+- `WINTRACE` (Frame Server ETW): enabled by the **machine** env var `RTVCAM_TRACE=1` (Local Service doesn't inherit user variables; `setx /M`, then restart the Frame Server). Gated in `WinTrace.h` (`WinTraceEnabled()`), which also skips `EventRegister` when off.
+- `DebugLog` (app file log): enabled by `RTVCAM_LOG=1` for `RTVirtualCamera.exe`. Gated in `RTCamNative/Logger.cpp` (`DebugLogEnabled()`).
+
+Any value other than `0`/empty enables it.
+
 ---
 
 ## Architecture

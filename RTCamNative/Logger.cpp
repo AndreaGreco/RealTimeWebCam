@@ -43,7 +43,20 @@ static const std::wstring& LogFilePath() {
     return path;
 }
 
+// Runtime gate for file logging. Off by default (production; the open/write/
+// flush/close per call is expensive). Enable by setting the environment variable
+// RTVCAM_LOG=1 for the app process. Read once and cached.
+static bool DebugLogEnabled() {
+    static const bool enabled = []() -> bool {
+        char buf[8];
+        DWORD n = GetEnvironmentVariableA("RTVCAM_LOG", buf, sizeof(buf));
+        return n > 0 && n < sizeof(buf) && buf[0] != '0';
+    }();
+    return enabled;
+}
+
 void DebugLog(const char* msg) {
+    if (!DebugLogEnabled()) return;
     std::lock_guard<std::mutex> guard(log_mutex);
     std::ofstream logfile(LogFilePath().c_str(), std::ios::app);
     if (logfile.is_open()) {

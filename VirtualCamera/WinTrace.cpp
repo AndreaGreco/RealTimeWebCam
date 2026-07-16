@@ -7,6 +7,18 @@ static GUID GUID_WinTraceProvider = { 0x964d4572,0xadb9,0x4f3a,{0x81,0x70,0xfc,0
 
 REGHANDLE _traceHandle = 0;
 
+bool WinTraceEnabled()
+{
+	// Read the machine environment variable once and cache it. Any non-empty
+	// value other than "0" enables tracing; default (unset) is disabled.
+	static const bool enabled = []() -> bool {
+		wchar_t buf[8];
+		DWORD n = GetEnvironmentVariableW(L"RTVCAM_TRACE", buf, _countof(buf));
+		return n > 0 && n < _countof(buf) && buf[0] != L'0';
+	}();
+	return enabled;
+}
+
 HRESULT GetTraceId(GUID* pGuid)
 {
 	if (!pGuid)
@@ -18,6 +30,11 @@ HRESULT GetTraceId(GUID* pGuid)
 
 ULONG WinTraceRegister()
 {
+	// Don't even register the ETW provider when tracing is disabled: _traceHandle
+	// stays 0 so every WinTrace* call is a cheap early-return regardless of caller.
+	if (!WinTraceEnabled())
+		return ERROR_SUCCESS;
+
 	return EventRegister(&GUID_WinTraceProvider, nullptr, nullptr, &_traceHandle);
 }
 

@@ -86,6 +86,13 @@ For a clean release just tag: `git tag v1.0.0` → the next build propagates `1.
 
 **Debugging the Frame Server.** It's `svchost.exe`: in Visual Studio *Attach to Process* → the instance hosting *Windows Camera Frame Server*. Traces use `WINTRACE` (an ETW provider, visible with TraceSpy).
 
+**Diagnostics are off by default.** Both trace paths are gated at runtime and disabled in production (they cost formatting / file I/O per call). Enable them only when debugging:
+
+- `WINTRACE` (Frame Server ETW, `VirtualCamera`): set the **machine** environment variable `RTVCAM_TRACE=1` (`setx /M RTVCAM_TRACE 1`), then restart the Frame Server so `svchost.exe` re-reads the environment. Local Service does not inherit user-level variables, so it must be machine-level.
+- `DebugLog` (app file log at `%LOCALAPPDATA%\RTVirtualCamera\debug.log`, `RTCamNative`): set `RTVCAM_LOG=1` for the `RTVirtualCamera.exe` process (a user-level variable is fine).
+
+Each value is read once and cached; a restart of the relevant process picks up a change. Any value other than `0`/empty enables it.
+
 ---
 
 ## Credits and license
