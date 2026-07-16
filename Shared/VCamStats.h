@@ -33,7 +33,9 @@
 // can't collide with this name.
 #define VCAM_STATS_MAPPING_NAME L"Global\\RTVCam_Stats_3CAD447D-F283-4AF4-A3B2-6F5363309F52"
 
-// Mirrors RtspSessionManager's RtspSessionState (VirtualCamera/RtspSessionManager.h).
+// Session state on the wire. With the single FFmpeg receive path the Frame Server
+// reports Running/Starting from the app producer's heartbeat freshness; the
+// Reconnecting/Failed states are legacy (kept for wire stability, not emitted).
 // Kept as a separate, explicitly-sized enum here because this header is shared
 // with RTCamNative and the C# reader, neither of which needs the full C++ type.
 enum class VCamSessionStateWire : uint32_t

@@ -29,12 +29,6 @@ namespace RTVirtualCamera
         public bool AutoStart { get; set; } = false;
         public Uri RtspURL { get; set; }
 
-        // Which receive pipeline to use. MediaFoundation (default) = the Frame Server
-        // opens the RTSP source in-process (works with the app closed). Ffmpeg = the app
-        // decodes in user-space and streams frames to the Frame Server via shared memory
-        // (live only while the app is running). Mirrors VirtualCameraWrapper.VideoEngine.
-        public VideoEngine VideoEngine { get; set; } = VideoEngine.MediaFoundation;
-
         public static void Load()
         {
             try

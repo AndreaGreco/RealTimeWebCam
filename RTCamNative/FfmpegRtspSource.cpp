@@ -60,16 +60,71 @@ int FfmpegRtspSource::InterruptCb(void* opaque)
 	return (self && self->_stop.load()) ? 1 : 0;
 }
 
-bool FfmpegRtspSource::Start(const std::wstring& rtspUrl, uint32_t targetWidth, uint32_t targetHeight,
-                             uint32_t fpsNum, uint32_t fpsDen)
+FfmpegProbeInfo FfmpegRtspSource::Probe(const std::wstring& rtspUrl)
 {
-	(void)fpsNum; (void)fpsDen; // producer pushes ASAP; the Frame Server paces delivery
-	if (_running.load() || rtspUrl.empty() || targetWidth == 0 || targetHeight == 0)
+	FfmpegProbeInfo info;
+	if (rtspUrl.empty())
+		return info;
+
+	avformat_network_init();
+	std::string url = ToUtf8(rtspUrl);
+
+	AVFormatContext* fmt = avformat_alloc_context();
+	if (!fmt)
+	{
+		avformat_network_deinit();
+		return info;
+	}
+
+	AVDictionary* opts = nullptr;
+	av_dict_set(&opts, "rtsp_transport", "tcp", 0);
+	av_dict_set(&opts, "stimeout", "5000000", 0); // 5s socket timeout (microseconds)
+	av_dict_set(&opts, "probesize", "500000", 0);
+
+	int r = avformat_open_input(&fmt, url.c_str(), nullptr, &opts);
+	av_dict_free(&opts);
+	if (r < 0)
+	{
+		LogAv("Probe/avformat_open_input", r);
+		if (fmt) avformat_free_context(fmt);
+		avformat_network_deinit();
+		return info;
+	}
+
+	if (avformat_find_stream_info(fmt, nullptr) >= 0)
+	{
+		int vs = av_find_best_stream(fmt, AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
+		if (vs >= 0)
+		{
+			AVStream* s = fmt->streams[vs];
+			AVCodecParameters* par = s->codecpar;
+			info.width = (uint32_t)(par->width > 0 ? par->width : 0);
+			info.height = (uint32_t)(par->height > 0 ? par->height : 0);
+			AVRational fr = (s->avg_frame_rate.num > 0) ? s->avg_frame_rate : s->r_frame_rate;
+			info.fpsNum = (uint32_t)(fr.num > 0 ? fr.num : 30);
+			info.fpsDen = (uint32_t)(fr.den > 0 ? fr.den : 1);
+			info.codecId = (int)par->codec_id;
+			info.valid = (info.width > 0 && info.height > 0);
+		}
+	}
+
+	avformat_close_input(&fmt);
+	avformat_network_deinit();
+	return info;
+}
+
+bool FfmpegRtspSource::Start(const std::wstring& rtspUrl, uint32_t targetWidth, uint32_t targetHeight,
+                             uint32_t fpsNum, uint32_t fpsDen, FrameSink sink)
+{
+	(void)fpsNum; (void)fpsDen; // producer pushes ASAP; the consumer paces delivery
+	if (_running.load() || rtspUrl.empty() || targetWidth == 0 || targetHeight == 0 || !sink)
 		return false;
 
 	_stop.store(false);
 	_framesDecoded.store(0);
 	_hwActive.store(false);
+	_lastLagMs.store(0);
+	_sink = std::move(sink);
 	avformat_network_init();
 
 	std::string url = ToUtf8(rtspUrl);
@@ -84,7 +139,7 @@ void FfmpegRtspSource::Stop()
 	if (_thread.joinable())
 		_thread.join();
 	_running.store(false);
-	_writer.Close();
+	_sink = nullptr; // release anything the sink captured
 	avformat_network_deinit();
 }
 
@@ -103,9 +158,9 @@ void FfmpegRtspSource::DecodeLoop(std::string url, uint32_t targetW, uint32_t ta
 	// Hardware decode (d3d11va / DXVA): create the GPU device once for the whole
 	// session. When attached to the decoder, H.264/H.265 decode runs on the GPU and
 	// each frame comes back as a D3D11 surface; we download it to system-memory NV12
-	// (swFrame) for the shared-memory channel — far cheaper than software decoding a
-	// high-resolution stream, which is what let the latency grow unbounded. If the
-	// device can't be created, hwDeviceCtx stays null and we decode in software.
+	// (swFrame) for the sink — far cheaper than software decoding a high-resolution
+	// stream, which is what let the latency grow unbounded. If the device can't be
+	// created, hwDeviceCtx stays null and we decode in software.
 	AVBufferRef* hwDeviceCtx = nullptr;
 	if (av_hwdevice_ctx_create(&hwDeviceCtx, AV_HWDEVICE_TYPE_D3D11VA, nullptr, nullptr, 0) < 0)
 	{
@@ -257,7 +312,9 @@ void FfmpegRtspSource::DecodeLoop(std::string url, uint32_t targetW, uint32_t ta
 						const int64_t ptsMs = av_rescale_q(pts, streamTb, msTb);
 						if (!haveClockBase) { haveClockBase = true; ptsBaseMs = ptsMs; wallBaseMs = nowMs; }
 						const int64_t expectedMs = (int64_t)wallBaseMs + (ptsMs - ptsBaseMs);
-						behind = ((int64_t)nowMs - expectedMs) > kMaxLagMs;
+						const int64_t lagMs = (int64_t)nowMs - expectedMs;
+						_lastLagMs.store(lagMs);
+						behind = lagMs > kMaxLagMs;
 					}
 
 					if (behind)
@@ -269,8 +326,7 @@ void FfmpegRtspSource::DecodeLoop(std::string url, uint32_t targetW, uint32_t ta
 					}
 
 					// Hardware frames come back as a D3D11 GPU surface — download to
-					// system-memory NV12 (swFrame) for the shared-memory channel.
-					// Software frames are used as-is.
+					// system-memory NV12 (swFrame) for the sink. Software frames used as-is.
 					AVFrame* srcFrame = frame;
 					if (frame->format == AV_PIX_FMT_D3D11)
 					{
@@ -299,9 +355,9 @@ void FfmpegRtspSource::DecodeLoop(std::string url, uint32_t targetW, uint32_t ta
 					{
 						sws_scale(sws, srcFrame->data, srcFrame->linesize, 0, srcFrame->height,
 							nv12->data, nv12->linesize);
-						if (_writer.EnsureOpen())
-							_writer.WriteFrame(nv12->data[0], nv12->linesize[0],
-								nv12->data[1], nv12->linesize[1]);
+						if (_sink)
+							_sink(nv12->data[0], nv12->linesize[0],
+								nv12->data[1], nv12->linesize[1], targetW, targetH);
 						_framesDecoded.fetch_add(1);
 					}
 					if (srcFrame == swFrame)

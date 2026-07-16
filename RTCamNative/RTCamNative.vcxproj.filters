@@ -21,25 +21,28 @@
     <ClInclude Include="pch.h">
       <Filter>File di intestazione</Filter>
     </ClInclude>
-    <ClInclude Include="VideoReaderCbk.h">
-      <Filter>File di intestazione</Filter>
-    </ClInclude>
     <ClInclude Include="Logger.h">
-      <Filter>File di intestazione</Filter>
-    </ClInclude>
-    <ClInclude Include="CSourceOpenMonitor.h">
       <Filter>File di intestazione</Filter>
     </ClInclude>
     <ClInclude Include="VirtualCamera.h">
       <Filter>File di intestazione</Filter>
     </ClInclude>
-    <ClInclude Include="VideoPlayer.h">
+    <ClInclude Include="FfmpegRtspSource.h">
+      <Filter>File di intestazione</Filter>
+    </ClInclude>
+    <ClInclude Include="FfmpegPreviewPlayer.h">
+      <Filter>File di intestazione</Filter>
+    </ClInclude>
+    <ClInclude Include="FrameChannelWriter.h">
       <Filter>File di intestazione</Filter>
     </ClInclude>
     <ClInclude Include="StatsReader.h">
       <Filter>File di intestazione</Filter>
     </ClInclude>
     <ClInclude Include="..\Shared\VCamStats.h">
+      <Filter>File di intestazione</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Shared\VCamFrameChannel.h">
       <Filter>File di intestazione</Filter>
     </ClInclude>
   </ItemGroup>
@@ -50,19 +53,25 @@
     <ClCompile Include="StatsReader.cpp">
       <Filter>File di origine</Filter>
     </ClCompile>
-    <ClCompile Include="VideoReaderCbk.cpp">
-      <Filter>File di origine</Filter>
-    </ClCompile>
     <ClCompile Include="Logger.cpp">
-      <Filter>File di origine</Filter>
-    </ClCompile>
-    <ClCompile Include="CSourceOpenMonitor.cpp">
       <Filter>File di origine</Filter>
     </ClCompile>
     <ClCompile Include="VirtualCamera.cpp">
       <Filter>File di origine</Filter>
     </ClCompile>
-    <ClCompile Include="VideoPlayer.cpp">
+    <ClCompile Include="FfmpegRtspSource.cpp">
+      <Filter>File di origine</Filter>
+    </ClCompile>
+    <ClCompile Include="FfmpegPreviewPlayer.cpp">
+      <Filter>File di origine</Filter>
+    </ClCompile>
+    <ClCompile Include="FfmpegExports.cpp">
+      <Filter>File di origine</Filter>
+    </ClCompile>
+    <ClCompile Include="PreviewExports.cpp">
+      <Filter>File di origine</Filter>
+    </ClCompile>
+    <ClCompile Include="FrameChannelWriter.cpp">
       <Filter>File di origine</Filter>
     </ClCompile>
     <ClCompile Include="RTCamNative.cpp">

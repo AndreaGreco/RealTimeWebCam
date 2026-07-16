@@ -86,7 +86,6 @@ HRESULT VirtualCamera::RegisterVirtualCamera()
 	setAttr(_vcam->SetUINT32(MF_VCAM_HEIGHT,   _config.height),  "SetUINT32(HEIGHT)");
 	setAttr(_vcam->SetUINT32(MF_VCAM_FPS_NUM,  _config.fpsNum),  "SetUINT32(FPS_NUM)");
 	setAttr(_vcam->SetUINT32(MF_VCAM_FPS_DEN,  _config.fpsDen),  "SetUINT32(FPS_DEN)");
-	setAttr(_vcam->SetUINT32(MF_VCAM_ENGINE,   _config.engine),  "SetUINT32(ENGINE)");
 
 	DebugLog("VirtualCamera::RegisterVirtualCamera - config attributes stored on IMFVirtualCamera");
 

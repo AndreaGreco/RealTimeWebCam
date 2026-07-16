@@ -5,10 +5,8 @@
 #include "MFTools.h"
 #include "MediaStream.h"
 #include "VCamMediaSource.h"
-#include "RtspReaderCallback.h"
 #include "StatsPublisher.h"
 #include "FrameChannelReader.h"
-#include "..\Shared\VCamConfig.h"
 #include <mfreadwrite.h>
 #include <mfapi.h>
 
@@ -133,121 +131,10 @@ HRESULT MediaStream::Initialize(IMFMediaSource* source, int index)
 	return S_OK;
 }
 
-// Copies the latest decoded RTSP frame into the consumer's sample.
-// The source reader is configured to produce exactly the consumer-negotiated NV12
-// size, so no scaling or stride math is needed. Two paths:
-//   - GPU (fast): both buffers are DXGI textures on the shared device → CopySubresourceRegion.
-//   - CPU (fallback): source is system memory → a single MFCopyImage into the dest buffer.
-HRESULT MediaStream::CopyRtspFrame(const RtspFrameSnapshot& frame, IMFSample* targetSample)
-{
-	RETURN_HR_IF_NULL(E_POINTER, targetSample);
-	RETURN_HR_IF(E_INVALIDARG, !frame.valid || !frame.sample || _videoWidth == 0 || _videoHeight == 0);
-
-	wil::com_ptr_nothrow<IMFMediaBuffer> srcBuffer;
-	RETURN_IF_FAILED(frame.sample->GetBufferByIndex(0, &srcBuffer));
-
-	wil::com_ptr_nothrow<IMFMediaBuffer> dstBuffer;
-	RETURN_IF_FAILED_MSG(targetSample->GetBufferByIndex(0, &dstBuffer), "GetBufferByIndex");
-
-	// GPU zero-copy path: both sides are DXGI textures on the shared device.
-	wil::com_ptr_nothrow<IMFDXGIBuffer> srcDxgi;
-	wil::com_ptr_nothrow<IMFDXGIBuffer> dstDxgi;
-	if (_deviceManager && _deviceHandle &&
-		SUCCEEDED(srcBuffer->QueryInterface(IID_PPV_ARGS(&srcDxgi))) &&
-		SUCCEEDED(dstBuffer->QueryInterface(IID_PPV_ARGS(&dstDxgi))))
-	{
-		HRESULT hrGpu = CopyRtspFrameGpu(srcDxgi.get(), dstDxgi.get());
-		if (SUCCEEDED(hrGpu))
-		{
-			_lastCopyWasGpu = true;
-			return S_OK;
-		}
-		WINTRACE(L"MediaStream::CopyRtspFrame - GPU copy failed 0x%08X, falling back to CPU", hrGpu);
-	}
-
-	_lastCopyWasGpu = false;
-	return CopyRtspFrameCpu(srcBuffer.get(), dstBuffer.get());
-}
-
-// GPU->GPU copy of an NV12 texture. Both textures live on the device owned by the
-// Frame Server's device manager, so a same-device CopySubresourceRegion suffices.
-HRESULT MediaStream::CopyRtspFrameGpu(IMFDXGIBuffer* srcDxgi, IMFDXGIBuffer* dstDxgi)
-{
-	RETURN_HR_IF(E_NOT_VALID_STATE, !_deviceManager || !_deviceHandle);
-
-	wil::com_ptr_nothrow<ID3D11Texture2D> srcTex;
-	wil::com_ptr_nothrow<ID3D11Texture2D> dstTex;
-	UINT srcSub = 0, dstSub = 0;
-	RETURN_IF_FAILED(srcDxgi->GetResource(IID_PPV_ARGS(&srcTex)));
-	RETURN_IF_FAILED(srcDxgi->GetSubresourceIndex(&srcSub));
-	RETURN_IF_FAILED(dstDxgi->GetResource(IID_PPV_ARGS(&dstTex)));
-	RETURN_IF_FAILED(dstDxgi->GetSubresourceIndex(&dstSub));
-
-	// LockDevice serializes access to the immediate context shared with the decoder.
-	wil::com_ptr_nothrow<ID3D11Device> device;
-	HRESULT hr = _deviceManager->LockDevice(_deviceHandle, IID_PPV_ARGS(&device), TRUE);
-	if (hr == MF_E_DXGI_NEW_VIDEO_DEVICE)
-	{
-		// The video device was reset/recreated — reopen the handle and retry once.
-		_deviceManager->CloseDeviceHandle(_deviceHandle);
-		_deviceHandle = nullptr;
-		RETURN_IF_FAILED(_deviceManager->OpenDeviceHandle(&_deviceHandle));
-		hr = _deviceManager->LockDevice(_deviceHandle, IID_PPV_ARGS(&device), TRUE);
-	}
-	RETURN_IF_FAILED(hr);
-
-	// No early returns between LockDevice success and UnlockDevice.
-	wil::com_ptr_nothrow<ID3D11DeviceContext> ctx;
-	device->GetImmediateContext(&ctx);
-	ctx->CopySubresourceRegion(dstTex.get(), dstSub, 0, 0, 0, srcTex.get(), srcSub, nullptr);
-	ctx->Flush();
-
-	_deviceManager->UnlockDevice(_deviceHandle, FALSE);
-	return S_OK;
-}
-
-// Single-copy CPU fallback. Handles a padded source (IMF2DBuffer) without an
-// intermediate contiguous buffer, copying straight into the dest with MFCopyImage.
-HRESULT MediaStream::CopyRtspFrameCpu(IMFMediaBuffer* srcBuffer, IMFMediaBuffer* dstBuffer)
-{
-	const UINT32 width = _videoWidth;
-	const UINT32 height = _videoHeight;
-	const DWORD cbExpected = width * height * 3 / 2; // NV12
-
-	// Source: prefer the 2D view to honor the decoder's real pitch; fall back to a flat lock.
-	BYTE* pbSrc = nullptr;
-	LONG srcPitch = (LONG)width;
-	DWORD cbSrc = 0;
-	wil::com_ptr_nothrow<IMF2DBuffer> src2D;
-	bool srcLocked2D = false;
-	if (SUCCEEDED(srcBuffer->QueryInterface(IID_PPV_ARGS(&src2D))) &&
-		SUCCEEDED(src2D->Lock2D(&pbSrc, &srcPitch)))
-	{
-		srcLocked2D = true;
-	}
-	else
-	{
-		RETURN_IF_FAILED(srcBuffer->Lock(&pbSrc, nullptr, &cbSrc));
-		if (cbSrc < cbExpected)
-		{
-			srcBuffer->Unlock();
-			WINTRACE(L"MediaStream::CopyRtspFrameCpu - size mismatch cbSrc=%u expected=%u (%ux%u) - skipping",
-				cbSrc, cbExpected, width, height);
-			return S_FALSE; // caller falls through to synthetic frame
-		}
-	}
-
-	HRESULT hrCopy = CopyNv12ToSample(dstBuffer, pbSrc, srcPitch, width, height);
-
-	if (srcLocked2D) src2D->Unlock2D();
-	else srcBuffer->Unlock();
-	return hrCopy;
-}
-
 // Copies a contiguous NV12 source (Y plane of `height` rows at `srcPitch`, then the
 // interleaved UV plane of `height/2` rows at `srcPitch`, starting at src + srcPitch*height)
-// into the destination buffer, honoring the dest's real pitch. Used by both the RTSP
-// CPU fallback (src = locked decoder buffer) and the FFmpeg path (src = shared-memory slot).
+// into the destination buffer, honoring the dest's real pitch. The source is the
+// shared-memory slot the app producer filled (system memory), so the copy is CPU.
 HRESULT MediaStream::CopyNv12ToSample(IMFMediaBuffer* dstBuffer, const BYTE* src, LONG srcPitch, UINT32 width, UINT32 height)
 {
 	RETURN_HR_IF_NULL(E_POINTER, dstBuffer);
@@ -292,10 +179,10 @@ HRESULT MediaStream::CopyNv12ToSample(IMFMediaBuffer* dstBuffer, const BYTE* src
 	return hrCopy;
 }
 
-// FFmpeg engine: pull the latest NV12 frame the app published into the frame shared
-// memory (FrameChannelReader) and copy it into targetSample. S_FALSE when there is no
-// fresh frame yet (producer not started, heartbeat stale, or geometry mismatch), so
-// RequestSample falls back to the synthetic frame just like the RTSP path does.
+// Pull the latest NV12 frame the app (FFmpeg) published into the frame shared
+// memory (FrameChannelReader) and copy it into targetSample. S_FALSE when there is
+// no fresh frame yet (producer not started, heartbeat stale, or geometry mismatch),
+// so RequestSample falls back to the synthetic frame.
 HRESULT MediaStream::CopyFrameChannelFrame(IMFSample* targetSample)
 {
 	RETURN_HR_IF_NULL(E_POINTER, targetSample);
@@ -377,22 +264,11 @@ HRESULT MediaStream::SetD3DManager(IUnknown* manager)
 	WINTRACE(L"MediaStream::SetD3DManager manager:%p", manager);
 	RETURN_HR_IF_NULL(E_POINTER, manager);
 
+	// The Frame Server hands us its D3D11 device manager for the output sample
+	// allocator (it may allocate the consumer's samples as GPU textures). We no
+	// longer keep it for a source-side GPU copy — frames now arrive as system-memory
+	// NV12 from the app producer, so the copy is always CPU.
 	_allocator->SetDirectXManager(manager);
-	_dxgiManager = manager;  // Store for later use with color converter
-
-	// Cache the device manager + an open device handle so RequestSample can do a
-	// GPU->GPU CopySubresourceRegion without re-resolving the device every frame.
-	if (_deviceManager && _deviceHandle)
-	{
-		_deviceManager->CloseDeviceHandle(_deviceHandle);
-		_deviceHandle = nullptr;
-	}
-	_deviceManager.reset();
-	if (SUCCEEDED(manager->QueryInterface(IID_PPV_ARGS(&_deviceManager))))
-	{
-		LOG_IF_FAILED(_deviceManager->OpenDeviceHandle(&_deviceHandle));
-	}
-
 	LOG_IF_FAILED(_frameGenerator.SetD3DManager(manager, _videoWidth, _videoHeight));
 	return S_OK;
 }
@@ -412,9 +288,7 @@ HRESULT MediaStream::SetVideoConfig(UINT32 width, UINT32 height, UINT32 fpsNum, 
 
 HRESULT MediaStream::SetRuntimeContext(const StreamRuntimeContext& context)
 {
-	_rtspManager = context.rtspManager;
 	_generation = context.config.generation;
-	_engine = context.config.engine;
 	return SetVideoConfig(
 		context.config.width,
 		context.config.height,
@@ -430,13 +304,6 @@ void MediaStream::Shutdown()
 		LOG_IF_FAILED_MSG(_queue->Shutdown(), "Queue shutdown failed");
 		_queue.reset();
 	}
-
-	if (_deviceManager && _deviceHandle)
-	{
-		LOG_IF_FAILED(_deviceManager->CloseDeviceHandle(_deviceHandle));
-		_deviceHandle = nullptr;
-	}
-	_deviceManager.reset();
 
 	_descriptor.reset();
 	_source.reset();
@@ -527,12 +394,11 @@ STDMETHODIMP MediaStream::RequestSample(IUnknown* pToken)
 	RETURN_IF_FAILED(sample->SetSampleDuration((10000000LL * _hintFpsDen) / max(1u, _hintFpsNum)));
 
 	wil::com_ptr_nothrow<IMFSample> outSample;
-	RtspSessionState rtspState = _rtspManager ? _rtspManager->GetState() : RtspSessionState::Stopped;
 
-	if (_engine == VCamEngine_Ffmpeg)
+	// The frame comes from the app (FFmpeg) via shared memory; the copy is always
+	// CPU (system-memory NV12 slot). CopyFrameChannelFrame returns S_OK only when a
+	// fresh frame is available — otherwise we fall through to the synthetic frame.
 	{
-		// FFmpeg engine: the frame comes from the app via shared memory, not the
-		// in-process RTSP reader. Copy is always CPU (system-memory NV12 slot).
 		LARGE_INTEGER freq{}, t0{}, t1{};
 		QueryPerformanceFrequency(&freq);
 		QueryPerformanceCounter(&t0);
@@ -543,84 +409,17 @@ STDMETHODIMP MediaStream::RequestSample(IUnknown* pToken)
 			outSample = sample;
 			_renderedFrameCount++;
 			_hasDeliveredFrame = true;
-			_lastCopyWasGpu = false;
 			_lastCopyMs = freq.QuadPart > 0
 				? (double)(t1.QuadPart - t0.QuadPart) * 1000.0 / (double)freq.QuadPart
 				: 0.0;
 		}
 	}
-	else if (_rtspManager)
-	{
-		RtspFrameSnapshot frame;
-		HRESULT hrFrame = _rtspManager->TryGetLatestFrame(frame);
-		if (hrFrame == S_OK && frame.valid)
-		{
-			LARGE_INTEGER freq{}, t0{}, t1{};
-			QueryPerformanceFrequency(&freq);
-			QueryPerformanceCounter(&t0);
-			HRESULT hrCopy = CopyRtspFrame(frame, sample.get());
-			QueryPerformanceCounter(&t1);
-			if (SUCCEEDED(hrCopy))
-			{
-				outSample = sample;
-				_renderedFrameCount++;
-
-				// TakeLatestSample (RtspReaderCallback) intentionally does NOT clear the
-				// cached frame after handing it out — it keeps re-serving the last decoded
-				// frame so the consumer always gets something even when RTSP runs slower
-				// than the consumer asks. We tried declining instead of re-serving
-				// (returning MF_E_SAMPLEALLOCATOR_EMPTY when frame.frameSeq matched the
-				// last delivery) and it made the whole pipeline unstable in practice —
-				// that HRESULT is tied to the allocator's own release-notification
-				// mechanism, not a generic "ask me again" signal, so overloading it here
-				// broke the Frame Server's retry timing. Back to always delivering
-				// something; frame.frameSeq (bumped in OnReadSample only for a genuinely
-				// new sample) is kept purely for stats, to tell a fresh frame from a
-				// re-serve of the previous one.
-				if (_hasDeliveredFrame && frame.frameSeq == _lastDeliveredFrameSeq)
-					_declinedFrameCount++; // "declined" in the stats sense: not a new frame
-				_lastDeliveredFrameSeq = frame.frameSeq;
-				_hasDeliveredFrame = true;
-
-				_lastCopyMs = freq.QuadPart > 0
-					? (double)(t1.QuadPart - t0.QuadPart) * 1000.0 / (double)freq.QuadPart
-					: 0.0;
-
-				// Drift: wall-clock elapsed vs media-timeline elapsed since the first
-				// frame of this session (same formula as the preview path in
-				// RTCamNative/VideoReaderCbk.cpp, so the two numbers mean the same
-				// thing). Reset the baseline whenever the generation changes (new
-				// Start()/reconnect) so a stale baseline from a previous session
-				// doesn't leak into the new one.
-				if (!_driftBaseSet || frame.generation != _driftGeneration)
-				{
-					_driftBaseSet = true;
-					_driftGeneration = frame.generation;
-					_driftBaseTickMs = GetTickCount64();
-					_driftBasePtsMs = frame.sampleTime / 10000; // 100ns -> ms
-					_driftMs = 0.0;
-				}
-				else
-				{
-					ULONGLONG nowTick = GetTickCount64();
-					LONGLONG ptsMs = frame.sampleTime / 10000;
-					double wallElapsed = (double)(nowTick - _driftBaseTickMs);
-					double mediaElapsed = (double)(ptsMs - _driftBasePtsMs);
-					_driftMs = wallElapsed - mediaElapsed;
-				}
-			}
-		}
-	}
 
 	if (!outSample)
 	{
-		// Only reachable before the very first RTSP frame has ever arrived, or if
-		// CopyRtspFrame itself failed. Same synthetic-frame fallback as
-		// Reconnecting/Failed: don't block, just show something so a disconnected
-		// camera doesn't look like a silent stall.
-		if (rtspState == RtspSessionState::Failed)
-			WINTRACE(L"MediaStream::RequestSample - RTSP manager failed, using synthetic frame");
-
+		// Reachable before the first frame ever arrives or when the producer's
+		// heartbeat is stale (app closed / not decoding yet). Don't block — show the
+		// synthetic frame so a disconnected camera doesn't look like a silent stall.
 		IMFSample* rawOut = nullptr;
 		if (SUCCEEDED(_frameGenerator.Generate(sample.get(), _format, &rawOut)) && rawOut)
 			outSample.attach(rawOut);
@@ -646,37 +445,25 @@ void MediaStream::PublishStats()
 {
 	VCamFrameServerStats snapshot{};
 
-	UINT64 rx = 0, dropped = 0;
-	if (_engine == VCamEngine_Ffmpeg)
-	{
-		// No in-process RTSP session in this mode: derive state from whether the app
-		// producer's heartbeat is fresh, and rx from the producer's own frame counter.
-		snapshot.sessionState = static_cast<uint32_t>(
-			_ffmpegFresh ? VCamSessionStateWire::Running : VCamSessionStateWire::Starting);
-		rx = _frameChannelRxFrames;
-	}
-	else
-	{
-		snapshot.sessionState = static_cast<uint32_t>(
-			_rtspManager ? _rtspManager->GetState() : RtspSessionState::Stopped);
-		if (_rtspManager)
-			_rtspManager->GetFrameCounters(rx, dropped);
-	}
-	snapshot.rxFrames = rx;
-	snapshot.droppedFrames = dropped;
+	// The app (FFmpeg) is the producer: derive state from whether its heartbeat is
+	// fresh, and rx from the producer's own frame counter. The Frame Server's own
+	// copy is always CPU (system-memory NV12 slot), so the hw-accel flags — which
+	// tracked the old in-process GPU zero-copy path — are always 0 here; the real
+	// decode-on-GPU signal lives app-side (VCam_IsFfmpegProducerHardware).
+	snapshot.sessionState = static_cast<uint32_t>(
+		_ffmpegFresh ? VCamSessionStateWire::Running : VCamSessionStateWire::Starting);
+	snapshot.rxFrames = _frameChannelRxFrames;
+	snapshot.droppedFrames = 0;
 	snapshot.renderedFrames = _renderedFrameCount;
 	snapshot.declinedFrames = _declinedFrameCount;
-	snapshot.driftMs = _driftMs;
+	snapshot.driftMs = 0.0; // pacing/latency is managed app-side by the FFmpeg producer
 	snapshot.lastCopyMs = _lastCopyMs;
 	snapshot.width = _videoWidth;
 	snapshot.height = _videoHeight;
 	snapshot.fpsNum = _hintFpsNum;
 	snapshot.fpsDen = _hintFpsDen;
-	// "Capable" = the Frame Server handed this stream a D3D11 device manager
-	// (SetD3DManager), the precondition for the zero-copy path to ever engage.
-	// "Active" = the last copy actually took that path (see CopyRtspFrame).
-	snapshot.hwAccelCapable = (_deviceManager && _deviceHandle) ? 1u : 0u;
-	snapshot.hwAccelActive = _lastCopyWasGpu ? 1u : 0u;
+	snapshot.hwAccelCapable = 0u;
+	snapshot.hwAccelActive = 0u;
 
 	StatsPublisher::Instance().Publish(snapshot);
 }

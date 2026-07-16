@@ -1,6 +1,6 @@
 #pragma once
 #include <wchar.h>
-#include "RtspSessionManager.h"
+#include "CameraSessionConfig.h"
 
 struct MediaStream;
 
@@ -41,7 +41,6 @@ public:
 	VCamMediaSource() :	_streams(_numStreams)
 	{
 		SetBaseAttributesTraceName(L"VCamMediaSourceAtts");
-		_rtspManager = &RtspSessionManager::Instance();
 		for (auto i = 0; i < _numStreams; i++)
 		{
 			auto stream = winrt::make_self<MediaStream>();
@@ -58,9 +57,7 @@ private:
 	CameraSessionConfig _camera_config{};
 	const int _numStreams = 1;  // 1 stream for now
 	winrt::slim_mutex _lock;
-	IRtspSessionManager* _rtspManager = nullptr;
 
-	//wil::com_ptr_nothrow<RtspReaderCallback> _rtspFrameReader;
 	winrt::com_array<wil::com_ptr_nothrow<MediaStream>> _streams;
 	wil::com_ptr_nothrow<IMFMediaEventQueue> _queue;
 	wil::com_ptr_nothrow<IMFPresentationDescriptor> _descriptor;

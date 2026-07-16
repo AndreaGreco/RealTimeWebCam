@@ -169,21 +169,18 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="CSourceOpenMonitor.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="Logger.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="StatsReader.h" />
-    <ClInclude Include="VideoPlayer.h" />
-    <ClInclude Include="VideoReaderCbk.h" />
     <ClInclude Include="VirtualCamera.h" />
     <ClInclude Include="FfmpegRtspSource.h" />
+    <ClInclude Include="FfmpegPreviewPlayer.h" />
     <ClInclude Include="FrameChannelWriter.h" />
     <ClInclude Include="..\Shared\VCamStats.h" />
     <ClInclude Include="..\Shared\VCamFrameChannel.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="CSourceOpenMonitor.cpp" />
     <ClCompile Include="Logger.cpp" />
     <ClCompile Include="RTCamNative.cpp" />
     <ClCompile Include="pch.cpp">
@@ -193,11 +190,10 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="StatsReader.cpp" />
-    <ClCompile Include="VideoPlayer.cpp" />
-    <ClCompile Include="VideoReaderCbk.cpp" />
     <ClCompile Include="VirtualCamera.cpp" />
     <!-- FFmpeg engine: native (non-/clr) translation units — the libav C headers
-         don't mix with C++/CLI, and they don't use the project PCH. -->
+         don't mix with C++/CLI, and they don't use the project PCH. The preview
+         player and its exports are here too (they pull in libav via FfmpegRtspSource). -->
     <ClCompile Include="FfmpegRtspSource.cpp">
       <CompileAsManaged>false</CompileAsManaged>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
@@ -207,6 +203,14 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="FfmpegExports.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="FfmpegPreviewPlayer.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="PreviewExports.cpp">
       <CompileAsManaged>false</CompileAsManaged>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>

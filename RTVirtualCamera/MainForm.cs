@@ -69,20 +69,15 @@ namespace RTVirtualCamera
                     FrameServerRates fr;
                     if (virtualCamera != null && virtualCamera.TryGetFrameServerRates(out fr) && fr.Available)
                     {
-                        bool ffmpeg = Settings.Current.VideoEngine == VideoEngine.Ffmpeg;
-                        // In FFmpeg mode the decode happens in the app producer (GPU via
-                        // d3d11va, or software); the Frame Server's own copy is always CPU.
-                        bool ffmpegHw = ffmpeg && virtualCamera.IsFfmpegProducerHardware();
-                        string engine = ffmpeg ? (ffmpegHw ? "FFmpeg HW" : "FFmpeg SW") : "MF";
-                        string hw = ffmpeg
-                            ? (ffmpegHw ? "decode: GPU (d3d11va)" : "decode: CPU (software)")
-                            : !fr.HwAccelCapable
-                                ? "CPU (no D3D device)"
-                                : fr.HwAccelActive ? "GPU" : "CPU (fallback)";
+                        // Decode happens in the app producer (GPU via d3d11va, or software);
+                        // the Frame Server's own frame-channel copy is always CPU.
+                        bool ffmpegHw = virtualCamera.IsFfmpegProducerHardware();
+                        string engine = ffmpegHw ? "FFmpeg HW" : "FFmpeg SW";
+                        string hw = ffmpegHw ? "decode: GPU (d3d11va)" : "decode: CPU (software)";
                         string stale = fr.Stale ? "  [stale]" : string.Empty;
                         statsLabel.Text = string.Format(
-                            "[Frame Server · {8}] RX {0:0.0} fps  |  render {1:0.0} fps ({7:0.0} dup)  |  drop {2:0.0} fps  |  drift {3:+0;-0} ms  |  copy {4:0.0} ms  |  {5}{6}",
-                            fr.RxFps, fr.RenderedFps, fr.DroppedFps, fr.DriftMs, fr.LastCopyMs, hw, stale, fr.DeclinedFps, engine);
+                            "[Frame Server · {0}] RX {1:0.0} fps  |  render {2:0.0} fps ({3:0.0} dup)  |  copy {4:0.0} ms  |  {5}{6}",
+                            engine, fr.RxFps, fr.RenderedFps, fr.DeclinedFps, fr.LastCopyMs, hw, stale);
                     }
                     else
                     {
@@ -230,7 +225,6 @@ namespace RTVirtualCamera
                     config.FpsNum = streamInfo.fpsNum;
                     config.FpsDen = streamInfo.fpsDen;
                     config.Format = streamInfo.subtype;
-                    config.Engine = (uint)Settings.Current.VideoEngine;
                     virtualCamera.SetConfig(config);
 
                     if (virtualCamera.Register())
@@ -239,15 +233,12 @@ namespace RTVirtualCamera
 
                         if (virtualCamera.Start())
                         {
-                            // FFmpeg engine: the Frame Server won't open the RTSP source
-                            // itself — the app must decode and stream frames to it. Start
-                            // the user-space producer now that the camera is running.
-                            if (Settings.Current.VideoEngine == VideoEngine.Ffmpeg)
-                            {
-                                if (!virtualCamera.StartFfmpegProducer(
-                                        config.RtspUrl, config.Width, config.Height, config.FpsNum, config.FpsDen))
-                                    System.Diagnostics.Debug.WriteLine("FFmpeg producer failed to start");
-                            }
+                            // The Frame Server never opens the RTSP source itself — the app
+                            // decodes with FFmpeg and streams frames to it. Start the
+                            // user-space producer now that the camera is running.
+                            if (!virtualCamera.StartFfmpegProducer(
+                                    config.RtspUrl, config.Width, config.Height, config.FpsNum, config.FpsDen))
+                                System.Diagnostics.Debug.WriteLine("FFmpeg producer failed to start");
 
                             StopPreview();
                             SetPreviewStatus(AppStrings.Get("Preview_VCamStarted"));

@@ -234,12 +234,11 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="Activator.h" />
+    <ClInclude Include="CameraSessionConfig.h" />
     <ClInclude Include="EnumNames.h" />
     <ClInclude Include="FrameGenerator.h" />
-    <ClInclude Include="RtspReaderCallback.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="IVCamConfiguration.h" />
-    <ClInclude Include="RtspSessionManager.h" />
     <ClInclude Include="StatsPublisher.h" />
     <ClInclude Include="FrameChannelReader.h" />
     <ClInclude Include="VCamMediaSource.h" />
@@ -258,13 +257,11 @@
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="EnumNames.cpp" />
     <ClCompile Include="FrameGenerator.cpp" />
-    <ClCompile Include="RtspSessionManager.cpp" />
     <ClCompile Include="StatsPublisher.cpp" />
     <ClCompile Include="FrameChannelReader.cpp" />
     <ClCompile Include="VCamMediaSource.cpp" />
     <ClCompile Include="MediaStream.cpp" />
     <ClCompile Include="MFTools.cpp" />
-    <ClCompile Include="RtspReaderCallback.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">Create</PrecompiledHeader>

@@ -42,22 +42,27 @@ The script copies the DLL to `C:\Projects\RTVirtualCamera` before registering (L
 
 ```
 RTVirtualCamera.exe (C# WinForms)
-  └─ P/Invoke → RTCamNative.dll (C++)
-       ├─ VideoPlayer  → PREVIEW in the UI (EVR). Software decode, in the app process.
-       └─ VirtualCamera → MFCreateVirtualCamera() + RTSP attributes, then Start()
+  └─ P/Invoke → RTCamNative.dll (C++/CLI)
+       ├─ FfmpegPreviewPlayer → PREVIEW in the UI (libav decode → GDI blit into the panel)
+       └─ VirtualCamera       → MFCreateVirtualCamera() + RTSP attributes, then Start()
+       └─ FfmpegRtspSource (producer) → decodes RTSP (d3d11va/SW) → NV12
+            → FrameChannelWriter → Global\RTVCam_Frames_<CLSID> (shared memory)
 
 Windows Frame Server (svchost.exe)  ← separate process, Local Service
   └─ loads VirtualCamera.dll (COM, registered in HKLM)
-       └─ opens the RTSP with IMFSourceReader (GPU/DXVA decode, zero-copy)
-       └─ delivers frames to Zoom/Teams/…
+       └─ FrameChannelReader: CREATES the frame mapping (service privilege)
+       └─ MediaStream::RequestSample → reads the latest NV12 frame → delivers to Zoom/Teams/…
+       └─ synthetic frame when the app producer's heartbeat is stale
 ```
 
-Two **independent** paths that each open the RTSP on their own (no shared memory between processes):
+A **single** FFmpeg receive path: the app decodes the RTSP stream in user space (preview and
+virtual-camera producer share the same `FfmpegRtspSource` decode core, one connection at a time)
+and pushes NV12 frames to the Frame Server through the frame shared memory. The Frame Server never
+opens the RTSP source itself. Because the decode lives in the app process, the camera is live only
+while the app is running.
 
-- **Preview** (in the app): software decode + EVR. Convenient but heavier; at high framerates it drops frames to stay responsive. This is what the diagnostics bar measures.
-- **Frame Server** (for Zoom): hardware DXVA decode with a GPU→GPU copy, always keeping only the latest frame. This is the one that matters for video calls.
-
-Code-level details (key classes, critical invariants, frame-copy path, reconnection, known bugs): see [`CLAUDE.md`](CLAUDE.md).
+Code-level details (key classes, critical invariants, frame-copy path, latency handling, live
+stats): see [`CLAUDE.md`](CLAUDE.md).
 
 ---
 

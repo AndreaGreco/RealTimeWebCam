@@ -1,6 +1,6 @@
 #pragma once
 #include "FrameGenerator.h"
-#include "RtspSessionManager.h"
+#include "CameraSessionConfig.h"
 #include <atomic>
 
 struct MediaStream : winrt::implements<MediaStream, CBaseAttributes<IMFAttributes>, IMFMediaStream2, IKsControl>
@@ -61,17 +61,10 @@ private:
 	}
 #endif
 
-	// HRESULT InitializeRTSPReader();
-	HRESULT CopyRtspFrame(const RtspFrameSnapshot& frame, IMFSample* targetSample);
-	// GPU zero-copy: CopySubresourceRegion between two DXGI textures on the shared device.
-	HRESULT CopyRtspFrameGpu(IMFDXGIBuffer* srcDxgi, IMFDXGIBuffer* dstDxgi);
-	// CPU fallback: a single MFCopyImage from the source MF buffer into the dest buffer.
-	HRESULT CopyRtspFrameCpu(IMFMediaBuffer* srcBuffer, IMFMediaBuffer* dstBuffer);
 	// Copies a contiguous NV12 source (Y then interleaved UV at src + srcPitch*height)
 	// into the destination sample buffer, honoring the dest's real pitch (2D or flat).
-	// Shared by the RTSP CPU fallback and the FFmpeg frame-channel path.
 	HRESULT CopyNv12ToSample(IMFMediaBuffer* dstBuffer, const BYTE* src, LONG srcPitch, UINT32 width, UINT32 height);
-	// FFmpeg engine: reads the latest NV12 frame from the frame shared memory
+	// Reads the latest NV12 frame the app published into the frame shared memory
 	// (FrameChannelReader) and copies it into targetSample. Returns S_FALSE if no
 	// fresh frame is available (caller falls back to the synthetic frame).
 	HRESULT CopyFrameChannelFrame(IMFSample* targetSample);
@@ -86,9 +79,6 @@ private:
 	wil::com_ptr_nothrow<IMFMediaSource> _source;
 	wil::com_ptr_nothrow<IMFVideoSampleAllocatorEx> _allocator;
 	wil::com_ptr_nothrow<IMFMediaType> _currentType; // cached from last Start(), used by SetStreamState(RUNNING)
-	wil::com_ptr_nothrow<IUnknown> _dxgiManager;
-	wil::com_ptr_nothrow<IMFDXGIDeviceManager> _deviceManager; // QI of _dxgiManager, for GPU copy
-	HANDLE _deviceHandle = nullptr;                            // open device handle for LockDevice
 	int _index;
 
 	UINT32 _videoWidth;
@@ -97,30 +87,23 @@ private:
 	UINT32 _hintFpsNum;   // fps numerator from app-side VCamConfig (default 30)
 	UINT32 _hintFpsDen;   // fps denominator from app-side VCamConfig (default 1)
 	UINT64 _generation = 0;
-	UINT32 _engine = 0;  // VCamEngine: 0 = Media Foundation (RtspSessionManager), 1 = FFmpeg (FrameChannelReader)
-	IRtspSessionManager* _rtspManager = nullptr;
 
-	// Fallback frame generator (used when RTSP is unavailable)
+	// Fallback frame generator (synthetic frame shown before the first real frame
+	// arrives, or whenever the app producer's heartbeat is stale).
 	FrameGenerator _frameGenerator;
 
 	// --- Live diagnostics (StatsPublisher, see Shared/VCamStats.h) ---------
 	// All of these are only ever touched from RequestSample(), which already
 	// runs under _lock, so no extra synchronization is needed here.
 	UINT64 _renderedFrameCount = 0;   // frames actually handed to the requesting app (real copy, includes re-serves)
-	UINT64 _declinedFrameCount = 0;   // of the above, how many were a re-serve of the same RTSP frame as last
+	UINT64 _declinedFrameCount = 0;   // of the above, how many were a re-serve of the same frame as last
 	                                   // time (name kept from an earlier, reverted attempt at actually declining
 	                                   // these — see RequestSample; it's a count only, delivery is unaffected)
-	UINT64 _lastDeliveredFrameSeq = 0; // RtspFrameSnapshot::frameSeq of the last frame delivered (dup detection)
+	UINT64 _lastDeliveredFrameSeq = 0; // frameSeq of the last frame delivered (dup detection)
 	bool   _hasDeliveredFrame = false; // false until the first frame is ever delivered
-	double _lastCopyMs = 0.0;         // cost of the last CopyRtspFrame call
-	bool   _lastCopyWasGpu = false;   // which path CopyRtspFrame took last time
-	bool   _driftBaseSet = false;
-	UINT64 _driftGeneration = 0;      // RtspFrameSnapshot::generation the current drift baseline belongs to
-	ULONGLONG _driftBaseTickMs = 0;
-	LONGLONG  _driftBasePtsMs = 0;
-	double _driftMs = 0.0;
+	double _lastCopyMs = 0.0;         // cost of the last frame-channel copy (always CPU)
 
-	// --- FFmpeg engine live diagnostics (only meaningful when _engine == Ffmpeg) --
+	// The app producer's rx counter and heartbeat freshness from the last RequestSample.
 	UINT64 _frameChannelRxFrames = 0; // header framesWritten of the last frame we saw (producer's rx counter)
 	bool   _ffmpegFresh = false;      // producer heartbeat was fresh on the last RequestSample
 

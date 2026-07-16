@@ -6,10 +6,16 @@
 #include <cstdint>
 #include <memory>
 #include "FfmpegRtspSource.h"
+#include "FrameChannelWriter.h"
 
 namespace
 {
 	std::unique_ptr<FfmpegRtspSource> g_producer;
+	// The writer that pushes decoded NV12 into the frame shared memory the Frame
+	// Server reads. Owned here (not by FfmpegRtspSource) so the same decode core can
+	// serve the preview with a different sink. The mapping is CREATED by the Frame
+	// Server; EnsureOpen() just opens it for writing once it exists.
+	FrameChannelWriter g_writer;
 }
 
 extern "C" {
@@ -26,13 +32,22 @@ extern "C" {
 		else
 			g_producer = std::make_unique<FfmpegRtspSource>();
 
-		return g_producer->Start(std::wstring(url), width, height, fpsNum, fpsDen) ? 0 : -1;
+		// Sink: copy each decoded NV12 frame into the next shared-memory ring slot.
+		auto sink = [](const uint8_t* y, int strideY, const uint8_t* uv, int strideUV,
+		               uint32_t /*w*/, uint32_t /*h*/)
+		{
+			if (g_writer.EnsureOpen())
+				g_writer.WriteFrame(y, strideY, uv, strideUV);
+		};
+
+		return g_producer->Start(std::wstring(url), width, height, fpsNum, fpsDen, sink) ? 0 : -1;
 	}
 
 	__declspec(dllexport) int VCam_StopFfmpegProducer()
 	{
 		if (g_producer)
 			g_producer->Stop();
+		g_writer.Close();
 		return 0;
 	}
 

@@ -27,14 +27,15 @@
  *
  *  5. Quando Zoom/Teams/Windows Camera apre la virtual camera:
  *       Frame Server chiama MediaSource::Start()
- *       → MediaStream::Start()
- *       → RtspSessionManager::Start(config)
+ *       → MediaStream::Start()  (nessuna apertura RTSP lato Frame Server)
  *
  *  6. RequestSample() — chiamato ~30x/sec dal Frame Server
- *       MediaStream legge l'ultimo frame dal manager RTSP condiviso,
- *       lo copia nel sample allocato e lo consegna al Frame Server.
+ *       MediaStream legge l'ultimo frame NV12 dalla shared memory riempita
+ *       dall'app (FfmpegRtspSource → FrameChannelWriter → FrameChannelReader),
+ *       lo copia nel sample allocato e lo consegna al Frame Server. Se l'app non
+ *       sta producendo (heartbeat stantìo) mostra il frame sintetico.
  *
- *  7. Stop/Shutdown fermano stream e manager.
+ *  7. Stop/Shutdown fermano gli stream.
  * ══════════════════════════════════════════════════════════════════════════════
  */
 #include "pch.h"
@@ -69,22 +70,21 @@ HRESULT VCamMediaSource::SetupCameraSettings(IMFAttributes* attributes)
 	if (FAILED(attributes->GetUINT32(MF_VCAM_HEIGHT, &_camera_config.height))) _camera_config.height = 1080;
 	if (FAILED(attributes->GetUINT32(MF_VCAM_FPS_NUM, &_camera_config.fpsNum))) _camera_config.fpsNum = 30;
 	if (FAILED(attributes->GetUINT32(MF_VCAM_FPS_DEN, &_camera_config.fpsDen))) _camera_config.fpsDen = 1;
-	if (FAILED(attributes->GetUINT32(MF_VCAM_ENGINE,  &_camera_config.engine))) _camera_config.engine = VCamEngine_MediaFoundation;
 
 	if (_camera_config.width == 0) _camera_config.width = 1920;
 	if (_camera_config.height == 0) _camera_config.height = 1080;
 	if (_camera_config.fpsNum == 0) _camera_config.fpsNum = 30;
 	if (_camera_config.fpsDen == 0) _camera_config.fpsDen = 1;
 
-	// Sanity-clamp the advertised frame rate. It comes straight from the RTSP
-	// source's own declared MF_MT_FRAME_RATE (probed app-side in VideoPlayer.cpp),
-	// and some cameras report a nominal/encoder rate that has nothing to do with
-	// what they actually deliver. This value paces MediaStream::RequestSample —
-	// an inflated value makes the Frame Server request far more samples/sec than
-	// the RTSP source can supply, and RtspSessionManager just re-serves the same
-	// cached frame for the excess requests. That's what a "render fps" wildly
-	// higher than "rx fps" in the live stats means: not dropped/duplicated RTSP
-	// frames, but the pacing itself being wrong. Fall back to 30fps if implausible.
+	// Sanity-clamp the advertised frame rate. It comes from the RTSP source's own
+	// declared frame rate (probed app-side via FFmpeg), and some cameras report a
+	// nominal/encoder rate that has nothing to do with what they actually deliver.
+	// This value paces MediaStream::RequestSample — an inflated value makes the
+	// Frame Server request far more samples/sec than the app producer supplies, and
+	// the frame channel just re-serves the same slot for the excess requests. That's
+	// what a "render fps" wildly higher than "rx fps" in the live stats means: not
+	// dropped/duplicated frames, but the pacing itself being wrong. Fall back to
+	// 30fps if implausible.
 	constexpr UINT32 kMaxSaneFps = 60;
 	if (_camera_config.fpsNum / _camera_config.fpsDen > kMaxSaneFps)
 	{
@@ -97,25 +97,21 @@ HRESULT VCamMediaSource::SetupCameraSettings(IMFAttributes* attributes)
 	_camera_config.format = MFVideoFormat_NV12;
 	_camera_config.valid = true;
 
-	// FFmpeg engine: the app (RTCamNative) decodes and pushes frames through the
-	// frame shared memory. Create the mapping now (during activation, before any
-	// consumer opens the camera) so the app's writer can open it — creating a
-	// Global\ object needs the service's privilege, so it must happen here, not
-	// app-side. The Frame Server will NOT open the RTSP source itself in this mode.
-	if (_camera_config.engine == VCamEngine_Ffmpeg)
-	{
-		FrameChannelReader::Instance().EnsureMapped(
-			_camera_config.width, _camera_config.height,
-			_camera_config.fpsNum, _camera_config.fpsDen);
-	}
+	// The app (RTCamNative) decodes with FFmpeg and pushes frames through the frame
+	// shared memory. Create the mapping now (during activation, before any consumer
+	// opens the camera) so the app's writer can open it — creating a Global\ object
+	// needs the service's privilege, so it must happen here, not app-side. The Frame
+	// Server never opens the RTSP source itself; it only reads this channel.
+	FrameChannelReader::Instance().EnsureMapped(
+		_camera_config.width, _camera_config.height,
+		_camera_config.fpsNum, _camera_config.fpsDen);
 
-	WINTRACE(L"VCamMediaSource::SetupCameraSettings - config received: url=%s %ux%u @%u/%u engine=%u gen=%llu",
+	WINTRACE(L"VCamMediaSource::SetupCameraSettings - config received: url=%s %ux%u @%u/%u gen=%llu",
 		_camera_config.rtspUrl,
 		_camera_config.width,
 		_camera_config.height,
 		_camera_config.fpsNum,
 		_camera_config.fpsDen,
-		_camera_config.engine,
 		_camera_config.generation);
 
 	LOG_IF_FAILED(attributes->CopyAllItems(this));
@@ -126,7 +122,6 @@ HRESULT VCamMediaSource::ApplyRuntimeContext()
 {
 	StreamRuntimeContext context{};
 	context.config = _camera_config;
-	context.rtspManager = _rtspManager;
 	WINTRACE(L"VCamMediaSource::ApplyRuntimeContext - config %u x %u @ %u / %u gen=%llu format=%ls",
 		static_cast<unsigned>(context.config.width),
 		static_cast<unsigned>(context.config.height),
@@ -312,9 +307,6 @@ STDMETHODIMP VCamMediaSource::Shutdown()
 		_streams[i]->Shutdown();
 	}
 
-	if (_rtspManager)
-		LOG_IF_FAILED(_rtspManager->Stop(_camera_config.generation));
-
 	_descriptor.reset();
 	_attributes.reset();
 	return S_OK;
@@ -329,13 +321,8 @@ STDMETHODIMP VCamMediaSource::Start(IMFPresentationDescriptor* pPresentationDesc
 	winrt::slim_lock_guard lock(_lock);
 	RETURN_HR_IF(MF_E_SHUTDOWN, !_queue || !_descriptor);
 
-	// Only the Media Foundation engine opens the RTSP source in-process. In FFmpeg
-	// mode the app is the producer (frames arrive via FrameChannelReader), so the
-	// RtspSessionManager stays stopped.
-	if (_camera_config.valid && _rtspManager && _camera_config.engine == VCamEngine_MediaFoundation)
-	{
-		LOG_IF_FAILED(_rtspManager->Start(_camera_config));
-	}
+	// The Frame Server never opens the RTSP source itself: the app is the producer
+	// (frames arrive via FrameChannelReader, mapping created in SetupCameraSettings).
 
 	DWORD count;
 	RETURN_IF_FAILED(pPresentationDescriptor->GetStreamDescriptorCount(&count));
@@ -415,9 +402,6 @@ STDMETHODIMP VCamMediaSource::Stop()
 		RETURN_IF_FAILED(_descriptor->DeselectStream(i));
 	}
 
-	if (_rtspManager)
-		LOG_IF_FAILED(_rtspManager->Stop(_camera_config.generation));
-
 	RETURN_IF_FAILED(_queue->QueueEventParamVar(MESourceStopped, GUID_NULL, S_OK, &time));
 	return S_OK;
 }
@@ -451,11 +435,9 @@ STDMETHODIMP VCamMediaSource::SetD3DManager(IUnknown* pManager)
 	RETURN_HR_IF_NULL(E_POINTER, pManager);
 	winrt::slim_lock_guard lock(_lock);
 
-	// Share the same device manager with the RTSP reader so the decoder produces
-	// GPU textures that MediaStream copies GPU->GPU. Forwarded before Start() runs.
-	if (_rtspManager)
-		_rtspManager->SetD3DManager(pManager);
-
+	// The Frame Server's device manager is only used for the output sample allocator
+	// (the consumer's samples). Frames arrive as system-memory NV12 from the app, so
+	// there is no source-side GPU device to share anymore.
 	for (DWORD i = 0; i < _streams.size(); i++)
 	{
 		RETURN_IF_FAILED(_streams[i]->SetD3DManager(pManager));

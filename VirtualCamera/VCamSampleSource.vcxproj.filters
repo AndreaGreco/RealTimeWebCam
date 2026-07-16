@@ -51,13 +51,10 @@
     <ClInclude Include="IVCamConfiguration.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="RtspReaderCallback.h">
+    <ClInclude Include="CameraSessionConfig.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Tools.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="RtspSessionManager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="StatsPublisher.h">
@@ -96,12 +93,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="FrameGenerator.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="RtspReaderCallback.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="RtspSessionManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="StatsPublisher.cpp">

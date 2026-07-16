@@ -31,29 +31,16 @@ static const GUID MF_VCAM_FPS_NUM =
 static const GUID MF_VCAM_FPS_DEN =
 	{ 0xa3c1e7b6, 0x9f4d, 0x4e82, { 0xb0, 0x61, 0xf5, 0xa2, 0x08, 0xd3, 0x6c, 0x10 } };
 
-// {A3C1E7B7-9F4D-4E82-B061-F5A208D36C10}  receive engine (UINT32, see VCamEngine below)
-static const GUID MF_VCAM_ENGINE =
-	{ 0xa3c1e7b7, 0x9f4d, 0x4e82, { 0xb0, 0x61, 0xf5, 0xa2, 0x08, 0xd3, 0x6c, 0x10 } };
-
-// Which pipeline decodes the RTSP stream. Passed via MF_VCAM_ENGINE before Start()
-// and read in SetupCameraSettings. Keep in sync with the C# VideoEngine enum.
-//   MediaFoundation: Frame Server opens the RTSP source itself (IMFSourceReader,
-//                    in-process). Self-contained — works with the app closed.
-//   Ffmpeg:          the app (RTCamNative, user-space) decodes with libav and
-//                    pushes NV12 frames through the frame shared memory
-//                    (Shared/VCamFrameChannel.h); the Frame Server reads those.
-//                    Live only while the app is running.
-enum VCamEngine : UINT32
-{
-	VCamEngine_MediaFoundation = 0,
-	VCamEngine_Ffmpeg = 1,
-};
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Configuration block — used internally in C++ only (not sent as a blob).
 // The C# mirror VCamConfig in VirtualCameraWrapper.cs carries the same fields;
 // the C# side fills it from the probed StreamInfo and the C++ SetConfig()
 // function extracts the individual fields for the MF attribute calls above.
+//
+// There is a single receive path: the app (RTCamNative) decodes the RTSP stream
+// with FFmpeg (user-space) and pushes NV12 frames through the frame shared memory
+// (Shared/VCamFrameChannel.h); the Frame Server reads those. So there is no engine
+// selector — the Frame Server never opens the RTSP source itself.
 // ─────────────────────────────────────────────────────────────────────────────
 struct VCamConfig
 {
@@ -63,5 +50,4 @@ struct VCamConfig
 	UINT32   fpsNum;       // frame-rate numerator    (e.g. 30); 0 = default 30
 	UINT32   fpsDen;       // frame-rate denominator  (e.g. 1);  0 = default 1
 	GUID     format;       // preferred output subtype (GUID_NULL = NV12 auto)
-	UINT32   engine;       // VCamEngine: 0 = Media Foundation (Frame Server), 1 = FFmpeg (user-space)
 };
