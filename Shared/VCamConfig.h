@@ -31,6 +31,10 @@ static const GUID MF_VCAM_FPS_NUM =
 static const GUID MF_VCAM_FPS_DEN =
 	{ 0xa3c1e7b6, 0x9f4d, 0x4e82, { 0xb0, 0x61, 0xf5, 0xa2, 0x08, 0xd3, 0x6c, 0x10 } };
 
+// {A3C1E7B8-9F4D-4E82-B061-F5A208D36C10}  diagnostic frame-counter overlay (UINT32: 0=off, 1=on)
+static const GUID MF_VCAM_OVERLAY =
+	{ 0xa3c1e7b8, 0x9f4d, 0x4e82, { 0xb0, 0x61, 0xf5, 0xa2, 0x08, 0xd3, 0x6c, 0x10 } };
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Configuration block — used internally in C++ only (not sent as a blob).
 // The C# mirror VCamConfig in VirtualCameraWrapper.cs carries the same fields;
@@ -50,4 +54,5 @@ struct VCamConfig
 	UINT32   fpsNum;       // frame-rate numerator    (e.g. 30); 0 = default 30
 	UINT32   fpsDen;       // frame-rate denominator  (e.g. 1);  0 = default 1
 	GUID     format;       // preferred output subtype (GUID_NULL = NV12 auto)
+	UINT32   overlay;      // diagnostic frame-counter overlay: 0 = off, 1 = on
 };

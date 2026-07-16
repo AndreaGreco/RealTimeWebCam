@@ -225,6 +225,7 @@ namespace RTVirtualCamera
                     config.FpsNum = streamInfo.fpsNum;
                     config.FpsDen = streamInfo.fpsDen;
                     config.Format = streamInfo.subtype;
+                    config.Overlay = Settings.Current.FrameCounterOverlay ? 1u : 0u;
                     virtualCamera.SetConfig(config);
 
                     if (virtualCamera.Register())

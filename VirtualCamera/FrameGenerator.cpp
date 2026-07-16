@@ -119,7 +119,8 @@ HRESULT FrameGenerator::CreateRenderTargetResources(UINT width, UINT height)
 	return S_OK;
 }
 
-HRESULT FrameGenerator::Generate(IMFSample* sample, REFGUID format, IMFSample** outSample)
+HRESULT FrameGenerator::Generate(IMFSample* sample, REFGUID format, IMFSample** outSample,
+	bool drawCounter, UINT64 counter)
 {
 	RETURN_HR_IF_NULL(E_POINTER, sample);
 	RETURN_HR_IF_NULL(E_POINTER, outSample);
@@ -131,12 +132,18 @@ HRESULT FrameGenerator::Generate(IMFSample* sample, REFGUID format, IMFSample** 
 		_renderTarget->BeginDraw();
 		_renderTarget->Clear(D2D1::ColorF(0.08f, 0.08f, 0.08f, 1.0f));
 
-		// Build tag baked at compile time — changes every build to confirm DLL was redeployed
-		static const wchar_t buildTag[] =
-			L"Camera IP non connessa\n"
-			_CRT_WIDE(__DATE__) L" " _CRT_WIDE(__TIME__);
+		// Build tag baked at compile time — changes every build to confirm DLL was redeployed.
+		// With the diagnostic overlay on, append the delivery counter so the synthetic frame
+		// advances at the same rate the real path is delivered.
+		wchar_t text[128];
+		if (drawCounter)
+			swprintf_s(text, L"Camera IP non connessa\n%S %S\nframe: %llu",
+				__DATE__, __TIME__, (unsigned long long)counter);
+		else
+			swprintf_s(text, L"Camera IP non connessa\n%S %S", __DATE__, __TIME__);
+
 		wil::com_ptr_nothrow<IDWriteTextLayout> layout;
-		RETURN_IF_FAILED(_dwrite->CreateTextLayout(buildTag, (UINT32)wcslen(buildTag), _textFormat.get(), (FLOAT)_width, (FLOAT)_height, &layout));
+		RETURN_IF_FAILED(_dwrite->CreateTextLayout(text, (UINT32)wcslen(text), _textFormat.get(), (FLOAT)_width, (FLOAT)_height, &layout));
 		_renderTarget->DrawTextLayout(D2D1::Point2F(0, 0), layout.get(), _whiteBrush.get());
 		_renderTarget->EndDraw();
 	}

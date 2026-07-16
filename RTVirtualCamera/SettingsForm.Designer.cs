@@ -32,6 +32,7 @@ namespace RTVirtualCamera
             languageComboBox = new System.Windows.Forms.ComboBox();
             generalSectionLabel = new System.Windows.Forms.Label();
             AutoStartCheckBox = new System.Windows.Forms.CheckBox();
+            OverlayCheckBox = new System.Windows.Forms.CheckBox();
             closeButton = new System.Windows.Forms.Button();
             SuspendLayout();
             //
@@ -75,14 +76,25 @@ namespace RTVirtualCamera
             AutoStartCheckBox.UseVisualStyleBackColor = true;
             AutoStartCheckBox.CheckedChanged += AutoStartCheckBox_CheckedChanged;
             //
+            // OverlayCheckBox
+            //
+            OverlayCheckBox.AutoSize = true;
+            OverlayCheckBox.Location = new System.Drawing.Point(20, 128);
+            OverlayCheckBox.Name = "OverlayCheckBox";
+            OverlayCheckBox.Size = new System.Drawing.Size(160, 19);
+            OverlayCheckBox.TabIndex = 4;
+            OverlayCheckBox.Text = "Frame counter overlay";
+            OverlayCheckBox.UseVisualStyleBackColor = true;
+            OverlayCheckBox.CheckedChanged += OverlayCheckBox_CheckedChanged;
+            //
             // closeButton
             //
             closeButton.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
             closeButton.DialogResult = System.Windows.Forms.DialogResult.OK;
-            closeButton.Location = new System.Drawing.Point(244, 148);
+            closeButton.Location = new System.Drawing.Point(244, 174);
             closeButton.Name = "closeButton";
             closeButton.Size = new System.Drawing.Size(76, 26);
-            closeButton.TabIndex = 4;
+            closeButton.TabIndex = 5;
             closeButton.Text = "Close";
             closeButton.UseVisualStyleBackColor = true;
             //
@@ -92,8 +104,9 @@ namespace RTVirtualCamera
             AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             CancelButton = closeButton;
-            ClientSize = new System.Drawing.Size(340, 194);
+            ClientSize = new System.Drawing.Size(340, 220);
             Controls.Add(closeButton);
+            Controls.Add(OverlayCheckBox);
             Controls.Add(AutoStartCheckBox);
             Controls.Add(generalSectionLabel);
             Controls.Add(languageComboBox);
@@ -117,6 +130,7 @@ namespace RTVirtualCamera
         private System.Windows.Forms.ComboBox languageComboBox;
         private System.Windows.Forms.Label generalSectionLabel;
         private System.Windows.Forms.CheckBox AutoStartCheckBox;
+        private System.Windows.Forms.CheckBox OverlayCheckBox;
         private System.Windows.Forms.Button closeButton;
     }
 }

@@ -19,6 +19,7 @@ namespace RTVirtualCamera
         public uint FpsNum;      // frame-rate numerator   (0 = default 30)
         public uint FpsDen;      // frame-rate denominator (0 = default 1)
         public Guid Format;      // preferred output subtype (Guid.Empty = NV12 auto)
+        public uint Overlay;     // diagnostic frame-counter overlay: 0 = off, 1 = on
     }
 
     /// <summary>Session state carried over the wire by Shared/VCamStats.h::VCamSessionStateWire.

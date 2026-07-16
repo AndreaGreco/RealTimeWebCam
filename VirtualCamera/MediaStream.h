@@ -2,6 +2,7 @@
 #include "FrameGenerator.h"
 #include "CameraSessionConfig.h"
 #include <atomic>
+#include <deque>
 
 struct MediaStream : winrt::implements<MediaStream, CBaseAttributes<IMFAttributes>, IMFMediaStream2, IKsControl>
 {
@@ -68,6 +69,22 @@ private:
 	// (FrameChannelReader) and copies it into targetSample. Returns S_FALSE if no
 	// fresh frame is available (caller falls back to the synthetic frame).
 	HRESULT CopyFrameChannelFrame(IMFSample* targetSample);
+	// Diagnostic overlay: burns a decimal counter into the Y plane of a delivered NV12
+	// sample (for real frames; the synthetic path draws its own via FrameGenerator).
+	// Best-effort — silently does nothing if the buffer can't be locked as NV12.
+	void DrawOverlayCounter(IMFSample* sample, UINT64 value);
+
+	// --- Asynchronous two-queue delivery (per the MS custom-media-source model) -----
+	// RequestSample queues the request token and returns immediately (never blocks a
+	// work-queue thread). A periodic threadpool timer marks one frame "due" per frame
+	// interval; DispatchSamples pairs a due credit with a pending request and produces +
+	// delivers exactly one sample. This paces delivery to the advertised frame rate
+	// without the fast NV12 copy path free-running to hundreds of samples/sec.
+	void DispatchSamples();                    // under _lock: drain (due AND pending) pairs
+	HRESULT ProduceAndQueue(IUnknown* pToken); // under _lock: allocate → fill → MEMediaSample
+	void OnDeliveryTick();                      // timer callback body (takes _lock)
+	static void CALLBACK DeliveryTimerThunk(PTP_CALLBACK_INSTANCE, void* ctx, PTP_TIMER);
+
 	HRESULT BuildFrameTypeNV12(wil::com_ptr_nothrow<IMFMediaType>& nv12Type);
 	HRESULT BuildDescriptor();
 
@@ -106,6 +123,22 @@ private:
 	// The app producer's rx counter and heartbeat freshness from the last RequestSample.
 	UINT64 _frameChannelRxFrames = 0; // header framesWritten of the last frame we saw (producer's rx counter)
 	bool   _ffmpegFresh = false;      // producer heartbeat was fresh on the last RequestSample
+
+	// --- Diagnostic frame-counter overlay ----------------------------------
+	// When enabled (VCamConfig.overlay), every delivered sample gets a decimal counter
+	// burned into it — so you can see on the real video (Zoom/preview) at what rate the
+	// consumer actually receives distinct frames, and confirm when synthetic frames are
+	// being served. Counts every delivery, so it advances at the "render" rate.
+	bool   _overlayEnabled = false;
+	UINT64 _overlayCounter = 0;
+
+	// --- Delivery pacing (async two-queue model) ----------------------------
+	// The Frame Server re-requests a sample as soon as the previous one is delivered,
+	// so instead of blocking we hold outstanding requests here and let a periodic
+	// threadpool timer gate delivery to the frame rate. See DispatchSamples().
+	std::deque<wil::com_ptr_nothrow<IUnknown>> _requests; // pending request tokens (may hold null)
+	bool      _frameDue = false;             // a timer tick made one frame due (max one credit)
+	PTP_TIMER _deliveryTimer = nullptr;      // periodic pacing timer, armed in Start()
 
 	// Publishes the current snapshot (whatever the outcome of this RequestSample
 	// call) to StatsPublisher. Called once at the end of RequestSample().

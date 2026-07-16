@@ -46,5 +46,8 @@ public:
 	HRESULT SetD3DManager(IUnknown* manager, UINT width, UINT height);
 	const bool HasD3DManager() const;
 	HRESULT EnsureRenderTarget(UINT width, UINT height);
-	HRESULT Generate(IMFSample* sample, REFGUID format, IMFSample** outSample);
+	// drawCounter/counter: diagnostic overlay — when true, the given value is drawn on
+	// the synthetic frame so it advances at the same "render" rate as the real path.
+	HRESULT Generate(IMFSample* sample, REFGUID format, IMFSample** outSample,
+	                 bool drawCounter = false, UINT64 counter = 0);
 };

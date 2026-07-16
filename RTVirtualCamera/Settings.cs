@@ -29,6 +29,10 @@ namespace RTVirtualCamera
         public bool AutoStart { get; set; } = false;
         public Uri RtspURL { get; set; }
 
+        // Diagnostic: burn a frame counter into every delivered frame (real + synthetic)
+        // so the actual consumer-side frame rate is visible on the video itself.
+        public bool FrameCounterOverlay { get; set; } = false;
+
         public static void Load()
         {
             try

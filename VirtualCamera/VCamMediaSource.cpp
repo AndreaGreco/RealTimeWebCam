@@ -70,6 +70,7 @@ HRESULT VCamMediaSource::SetupCameraSettings(IMFAttributes* attributes)
 	if (FAILED(attributes->GetUINT32(MF_VCAM_HEIGHT, &_camera_config.height))) _camera_config.height = 1080;
 	if (FAILED(attributes->GetUINT32(MF_VCAM_FPS_NUM, &_camera_config.fpsNum))) _camera_config.fpsNum = 30;
 	if (FAILED(attributes->GetUINT32(MF_VCAM_FPS_DEN, &_camera_config.fpsDen))) _camera_config.fpsDen = 1;
+	if (FAILED(attributes->GetUINT32(MF_VCAM_OVERLAY, &_camera_config.overlay))) _camera_config.overlay = 0;
 
 	if (_camera_config.width == 0) _camera_config.width = 1920;
 	if (_camera_config.height == 0) _camera_config.height = 1080;

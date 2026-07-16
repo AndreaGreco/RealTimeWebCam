@@ -19,6 +19,7 @@ struct CameraSessionConfig
 	UINT32 fpsDen = 1;
 	GUID format = MFVideoFormat_NV12;
 	UINT64 generation = 0;
+	UINT32 overlay = 0; // diagnostic frame-counter overlay (0 = off, 1 = on)
 };
 
 // Passed from VCamMediaSource to each MediaStream so a stream can (re)build its

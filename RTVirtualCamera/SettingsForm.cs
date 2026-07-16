@@ -59,6 +59,7 @@ namespace RTVirtualCamera
             languageSectionLabel.Text = AppStrings.Get("Menu_Language");
             generalSectionLabel.Text = AppStrings.Get("Settings_GeneralSection");
             AutoStartCheckBox.Text = AppStrings.Get("Settings_AutoStart");
+            OverlayCheckBox.Text = "Overlay contatore frame (diagnostica)";
             closeButton.Text = AppStrings.Get("Button_Close");
 
             languageComboBox.Items.Clear();
@@ -86,11 +87,18 @@ namespace RTVirtualCamera
             languageComboBox.SelectedIndexChanged += LanguageComboBox_SelectedIndexChanged;
 
             AutoStartCheckBox.Checked = Settings.Current.AutoStart;
+            OverlayCheckBox.Checked = Settings.Current.FrameCounterOverlay;
         }
 
         private void AutoStartCheckBox_CheckedChanged(object sender, EventArgs e)
         {
             Settings.Current.AutoStart = AutoStartCheckBox.Checked;
+            Settings.Current.Save();
+        }
+
+        private void OverlayCheckBox_CheckedChanged(object sender, EventArgs e)
+        {
+            Settings.Current.FrameCounterOverlay = OverlayCheckBox.Checked;
             Settings.Current.Save();
         }
     }
