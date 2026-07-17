@@ -277,4 +277,55 @@ Licencia MIT — © Simon Mourier, Andrea Greco.</value>
   <data name="Menu_Language" xml:space="preserve">
     <value>Idioma</value>
   </data>
+  <data name="Settings_NetworkSection" xml:space="preserve">
+    <value>Red</value>
+  </data>
+  <data name="Settings_Transport" xml:space="preserve">
+    <value>Transporte RTSP</value>
+  </data>
+  <data name="Settings_Transport_Auto" xml:space="preserve">
+    <value>Auto (UDP, respaldo TCP)</value>
+  </data>
+  <data name="Settings_Transport_Udp" xml:space="preserve">
+    <value>Solo UDP</value>
+  </data>
+  <data name="Settings_Transport_Tcp" xml:space="preserve">
+    <value>Solo TCP</value>
+  </data>
+  <data name="Settings_HardwareDecode" xml:space="preserve">
+    <value>Decodificación por hardware (GPU)</value>
+  </data>
+  <data name="Settings_SocketTimeout" xml:space="preserve">
+    <value>Tiempo de espera del socket (ms)</value>
+  </data>
+  <data name="Settings_ReorderQueue" xml:space="preserve">
+    <value>Búfer de reordenación RTP (paq.)</value>
+  </data>
+  <data name="Settings_LatencyCap" xml:space="preserve">
+    <value>Límite de latencia (ms)</value>
+  </data>
+  <data name="Settings_FrameCounterOverlay" xml:space="preserve">
+    <value>Superposición de contador de fotogramas (diagnóstico)</value>
+  </data>
+  <data name="Stats_State_CameraActive" xml:space="preserve">
+    <value>Cámara activa</value>
+  </data>
+  <data name="Stats_State_WaitingStale" xml:space="preserve">
+    <value>Esperando (obsoleto)</value>
+  </data>
+  <data name="Stats_State_WaitingStats" xml:space="preserve">
+    <value>Esperando estadísticas…</value>
+  </data>
+  <data name="Stats_State_PreviewActive" xml:space="preserve">
+    <value>Vista previa activa</value>
+  </data>
+  <data name="Stats_State_Inactive" xml:space="preserve">
+    <value>Inactiva</value>
+  </data>
+  <data name="Stats_Engine_Preview" xml:space="preserve">
+    <value>FFmpeg (vista previa)</value>
+  </data>
+  <data name="Value_NotAvailable" xml:space="preserve">
+    <value>n/d</value>
+  </data>
 </root>

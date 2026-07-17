@@ -85,6 +85,17 @@ namespace RTVirtualCamera
         public bool HwAccelActive;
     }
 
+    /// <summary>
+    /// RTSP lower-transport preference. Values must match the native
+    /// RtspTransport enum in RTCamNative/FfmpegRtspSource.h (ABI for VCam_SetRtspTransport).
+    /// </summary>
+    public enum RtspTransportMode
+    {
+        Auto = 0, // UDP preferred, TCP fallback ("udp+tcp")
+        Udp = 1,  // force UDP only
+        Tcp = 2,  // force TCP only
+    }
+
     public class VirtualCameraWrapper : IDisposable
     {
         [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
@@ -141,6 +152,61 @@ namespace RTVirtualCamera
 
         [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
         private static extern int VCam_IsFfmpegProducerHardware();
+
+        // Process-wide FFmpeg engine options (shared by preview + producer). Applied on
+        // the next connection open — see FfmpegExports.cpp / FfmpegRtspSource.
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
+        private static extern void VCam_SetRtspTransport(int mode);
+
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
+        private static extern void VCam_SetHardwareDecode(int enabled);
+
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
+        private static extern void VCam_SetSocketTimeoutMs(int ms);
+
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
+        private static extern void VCam_SetReorderQueue(int packets);
+
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
+        private static extern void VCam_SetLatencyCapMs(int ms);
+
+        // Live transport actually carrying the producer's frames: 0 none, 1 UDP, 2 TCP.
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
+        private static extern int VCam_GetActiveTransport();
+
+        /// <summary>
+        /// Pushes all engine options from Settings.Current into RTCamNative. Static because
+        /// the options are process-wide (they configure the shared decode core), not tied
+        /// to a camera instance. Call at startup and whenever the settings change; the new
+        /// values take effect the next time the preview or the producer opens a connection.
+        /// </summary>
+        public static void ApplyEngineSettings()
+        {
+            Settings s = Settings.Current;
+            VCam_SetRtspTransport((int)s.RtspTransport);
+            VCam_SetHardwareDecode(s.HardwareDecode ? 1 : 0);
+            VCam_SetSocketTimeoutMs(s.SocketTimeoutMs);
+            VCam_SetReorderQueue(s.ReorderQueueSize);
+            VCam_SetLatencyCapMs(s.LatencyCapMs);
+        }
+
+        /// <summary>Human-readable label for a native active-transport code (0/1/2).</summary>
+        public static string TransportLabel(int activeTransport)
+        {
+            switch (activeTransport)
+            {
+                case 1: return "UDP";
+                case 2: return "TCP";
+                default: return null; // not connected
+            }
+        }
+
+        /// <summary>Live transport carrying the producer's frames ("UDP"/"TCP"), or null.</summary>
+        public string GetActiveTransportLabel()
+        {
+            if (disposed) return null;
+            return TransportLabel(VCam_GetActiveTransport());
+        }
 
         private IntPtr vcamHandle;
         private bool disposed = false;

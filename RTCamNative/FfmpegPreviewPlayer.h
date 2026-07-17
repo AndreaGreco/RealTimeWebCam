@@ -24,6 +24,28 @@ struct StreamInfo
 	UINT32 bitrate = 0;
 };
 
+// Human-readable connection characteristics of the current source, gathered once
+// at initialize() from the FFmpeg probe and polled by the C# UI to fill the
+// "Connessione" table. Mirrored byte-for-byte by
+// RTVirtualCamera/VideoPlayerWrapper.cs::ConnectionInfo (CharSet.Ansi). The char[]
+// fields are NUL-terminated ASCII/UTF-8 straight from libav (empty when unknown).
+// int64 first so the following uint32s stay naturally aligned on both sides.
+struct ConnectionInfo
+{
+	INT64  bitrate = 0;   // bits/s reported by libav (0 = unknown)
+	UINT32 width = 0;
+	UINT32 height = 0;
+	UINT32 fpsNum = 0;
+	UINT32 fpsDen = 0;
+	INT32  valid = 0;     // 1 = the fields below are populated
+
+	char container[64] = {};
+	char transport[16] = {};
+	char videoCodec[32] = {};
+	char profile[48] = {};
+	char pixelFormat[24] = {};
+};
+
 // Live diagnostics for the preview path, polled from the C# UI. Mirrored
 // byte-for-byte by RTVirtualCamera/VideoPlayerWrapper.cs::PreviewStats.
 struct PreviewStats
@@ -70,10 +92,19 @@ public:
 	int getVideoStreamInfo(StreamInfo* pInfo, UINT32 maxCount, UINT32* count);
 	int getPreviewStats(PreviewStats* pStats);
 
+	// Returns the connection characteristics cached by initialize(). 0 on success,
+	// E_INVALIDARG if pInfo is null. When the source has not been probed yet the
+	// struct is returned with valid=0.
+	int getConnectionInfo(ConnectionInfo* pInfo);
+
 	void updateVideoPosition() {} // GDI path re-reads the client rect each frame
 
 	bool getIsPlaying() const { return _playing.load(); }
 	bool getIsPaused()  const { return false; }
+
+	// Which RTSP transport is actually carrying the preview's frames right now:
+	// 0 = not connected, 1 = UDP, 2 = TCP (see FfmpegRtspSource::ActiveTransport).
+	int getActiveTransport() const { return _source.ActiveTransport(); }
 
 private:
 	// Sink callback (decode thread): NV12 -> BGRA -> back buffer -> panel.
@@ -86,6 +117,8 @@ private:
 
 	StreamInfo _streamInfo;
 	bool _hasStreamInfo = false;
+
+	ConnectionInfo _connInfo; // filled by initialize() from the FFmpeg probe
 
 	FfmpegRtspSource _source;
 	std::atomic<bool> _playing{ false };

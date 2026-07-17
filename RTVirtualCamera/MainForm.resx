@@ -238,7 +238,7 @@
     <value>panel1</value>
   </data>
   <data name="$this.ClientSize" type="System.Drawing.Size, System.Drawing">
-    <value>915, 776</value>
+    <value>1255, 776</value>
   </data>
   <data name="&gt;&gt;playButton.Parent" xml:space="preserve">
     <value>panel1</value>

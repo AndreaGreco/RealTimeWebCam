@@ -61,6 +61,11 @@ extern "C" {
 		return player ? player->getPreviewStats(stats) : -1;
 	}
 
+	__declspec(dllexport) int GetConnectionInfo(FfmpegPreviewPlayer* player, ConnectionInfo* info)
+	{
+		return player ? player->getConnectionInfo(info) : -1;
+	}
+
 	__declspec(dllexport) void UpdateVideoPosition(FfmpegPreviewPlayer* player)
 	{
 		if (player)
@@ -75,6 +80,12 @@ extern "C" {
 	__declspec(dllexport) bool IsPaused(FfmpegPreviewPlayer* player)
 	{
 		return player ? player->getIsPaused() : false;
+	}
+
+	// Live RTSP transport carrying the preview: 0 = none, 1 = UDP, 2 = TCP.
+	__declspec(dllexport) int GetActiveTransport(FfmpegPreviewPlayer* player)
+	{
+		return player ? player->getActiveTransport() : 0;
 	}
 
 } // extern "C"

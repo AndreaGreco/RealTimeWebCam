@@ -8,14 +8,34 @@
 // Geometry/codec probed from an RTSP source without starting a decode session.
 // POD only — no libav types leak into this header, so managed (/clr) callers can
 // include it if needed. Filled by FfmpegRtspSource::Probe (valid=false on failure).
+// The char[] fields carry the human-readable connection characteristics shown in
+// the UI (container/transport/codec/profile/pixel format); they are short ASCII/
+// UTF-8 strings straight from libav, NUL-terminated, empty when unknown.
 struct FfmpegProbeInfo
 {
 	uint32_t width = 0;
 	uint32_t height = 0;
 	uint32_t fpsNum = 0;
 	uint32_t fpsDen = 0;
-	int      codecId = 0; // AVCodecID as int (0 = none/unknown)
+	int      codecId = 0;   // AVCodecID as int (0 = none/unknown)
+	int64_t  bitrate = 0;   // bits/s reported by libav (0 = unknown, common for live RTSP)
 	bool     valid = false;
+
+	char container[64] = {};    // demuxer long name (e.g. "RTSP input", "QuickTime / MOV")
+	char transport[16] = {};    // "TCP"/"UDP" for RTSP, empty otherwise
+	char videoCodec[32] = {};   // e.g. "h264", "hevc"
+	char profile[48] = {};      // e.g. "High", "Main 10" (empty if unknown)
+	char pixelFormat[24] = {};  // e.g. "yuv420p", "yuvj420p"
+};
+
+// Preferred RTSP lower transport, chosen by the user in the settings dialog and
+// applied the next time a connection is opened (preview or producer). Values are
+// part of the P/Invoke ABI (RTVirtualCamera settings) — keep them in sync.
+enum class RtspTransport : int
+{
+	Auto = 0, // UDP preferred, TCP fallback ("udp+tcp")
+	Udp  = 1, // force UDP only
+	Tcp  = 2, // force TCP only
 };
 
 // User-space RTSP receiver for the (now single) FFmpeg engine. Runs entirely in
@@ -70,9 +90,42 @@ public:
 	// in ms; 0 when the stream carries no usable PTS. Used as the preview drift value.
 	int64_t LastLagMs() const { return _lastLagMs.load(); }
 
+	// Which RTSP lower transport is actually carrying frames right now, as an
+	// RtspTransport value cast to int: 0 = not connected / no frame yet, 1 = UDP,
+	// 2 = TCP. Unlike TransportPreference() this reflects reality — in Auto mode the
+	// decode loop probes UDP first and falls back to TCP itself, so the value is
+	// definitive once frames flow. Reset to 0 whenever the connection drops.
+	int ActiveTransport() const { return _activeTransport.load(); }
+
 	// Opens the URL just long enough to read geometry/codec, then closes it.
 	// Blocking (bounded by the RTSP socket timeout); safe to call before Start().
 	static FfmpegProbeInfo Probe(const std::wstring& rtspUrl);
+
+	// Process-wide engine options, set from the settings dialog before a session
+	// starts and read by every new connection (Probe + DecodeLoop). Thread-safe;
+	// changing them does not affect a connection already open — they take effect on
+	// the next preview/producer start (or the next reconnect). Defaults below.
+	static void SetTransportPreference(RtspTransport t);   // default Auto
+	static RtspTransport TransportPreference();
+	static void SetHardwareDecodeEnabled(bool enabled);    // default on
+	static bool HardwareDecodeEnabled();
+
+	// Socket timeout for the RTSP connection (libav "stimeout"), in milliseconds.
+	// Also bounds how long a dead UDP attempt blocks before Auto falls back to TCP.
+	static void SetSocketTimeoutMs(int ms);                // default 5000
+	static int  SocketTimeoutMs();
+
+	// RTP jitter/reorder buffer depth (libav "reorder_queue_size"), in packets. 0
+	// disables it (lowest latency, but UDP reordering then shreds the picture); a few
+	// packets tolerate minor UDP reordering. Ignored effectively on TCP.
+	static void SetReorderQueueSize(int packets);          // default 8
+	static int  ReorderQueueSize();
+
+	// Latency cap: when a decoded frame falls more than this many ms behind live, the
+	// decode loop resyncs (drops to the next keyframe). Lower = tighter latency but
+	// more visible jumps on a slow source; higher = smoother but laggier.
+	static void SetMaxLagMs(int ms);                       // default 350
+	static int  MaxLagMs();
 
 private:
 	void DecodeLoop(std::string url, uint32_t targetW, uint32_t targetH);
@@ -85,5 +138,6 @@ private:
 	std::atomic<uint64_t> _framesDecoded{ 0 };
 	std::atomic<bool> _hwActive{ false };
 	std::atomic<int64_t> _lastLagMs{ 0 };
+	std::atomic<int> _activeTransport{ 0 }; // 0 none, 1 UDP, 2 TCP (see ActiveTransport)
 	FrameSink _sink;
 };

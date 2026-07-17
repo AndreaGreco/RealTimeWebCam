@@ -37,6 +37,32 @@ namespace RTVirtualCamera
         public double lastRenderMs;  // last CPU->GPU copy + ProcessSample cost
     }
 
+    // Mirror of RTCamNative/FfmpegPreviewPlayer.h::ConnectionInfo (byte-for-byte).
+    // CharSet.Ansi: the char[] buffers hold NUL-terminated ASCII/UTF-8 straight from
+    // libav. Int64 first so the following uint fields stay naturally aligned, matching
+    // the native struct's default packing.
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+    public struct ConnectionInfo
+    {
+        public long bitrate;   // bits/s reported by libav (0 = unknown)
+        public uint width;
+        public uint height;
+        public uint fpsNum;
+        public uint fpsDen;
+        public int valid;      // 1 = populated (source was probed)
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)]
+        public string container;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 16)]
+        public string transport;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+        public string videoCodec;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 48)]
+        public string profile;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 24)]
+        public string pixelFormat;
+    }
+
     // Live preview rates derived from two PreviewStats snapshots over wall-clock.
     public struct PreviewRates
     {
@@ -80,6 +106,9 @@ namespace RTVirtualCamera
         private static extern int GetPreviewStats(IntPtr player, out PreviewStats stats);
 
         [DllImport("RTCamNative.dll")]
+        private static extern int GetConnectionInfo(IntPtr player, out ConnectionInfo info);
+
+        [DllImport("RTCamNative.dll")]
         private static extern void SetWindowHandle(IntPtr player, IntPtr hwnd);
 
         [DllImport("RTCamNative.dll")]
@@ -99,6 +128,10 @@ namespace RTVirtualCamera
 
         [DllImport("RTCamNative.dll")]
         private static extern bool IsPaused(IntPtr player);
+
+        // Live RTSP transport carrying the preview's frames: 0 none, 1 UDP, 2 TCP.
+        [DllImport("RTCamNative.dll")]
+        private static extern int GetActiveTransport(IntPtr player);
 
         public uint LastWin32Error { get; private set; }
 
@@ -133,6 +166,17 @@ namespace RTVirtualCamera
             }
 
             return outs;
+        }
+
+        // Connection characteristics (container/transport/codec/…) cached by the
+        // native player at Initialize(). valid==0 until the source has been probed.
+        public bool TryGetConnectionInfo(out ConnectionInfo info)
+        {
+            info = default(ConnectionInfo);
+            if (disposed)
+                return false;
+
+            return GetConnectionInfo(playerInstance, out info) == 0 && info.valid != 0;
         }
 
         // Raw counters snapshot from the native preview path.
@@ -177,6 +221,15 @@ namespace RTVirtualCamera
             prevStatsTicks = nowTicks;
             hasPrevStats = true;
             return true;
+        }
+
+        /// <summary>Live transport carrying the preview's frames ("UDP"/"TCP"), or null.</summary>
+        public string GetActiveTransportLabel()
+        {
+            if (disposed)
+                return null;
+
+            return VirtualCameraWrapper.TransportLabel(GetActiveTransport(playerInstance));
         }
 
         public void SetWindowHandle(IntPtr windowHandle)

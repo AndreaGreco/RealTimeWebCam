@@ -16,10 +16,10 @@ namespace RTVirtualCamera
         private bool isVCamRunning = false;
         private StreamInfo streamInfo;
 
-        // Live preview diagnostics (preview path only — the VCam/Zoom path runs in
-        // the Frame Server process and can't be read from here).
+        // Live diagnostics timer for the side panel. The panel itself (statsPanel with
+        // the connList / statsList tables) lives in MainForm.Designer.cs so it shows up
+        // in the Windows Forms designer; this timer just refreshes the values.
         private System.Windows.Forms.Timer statsTimer;
-        private Label statsLabel;
 
         private sealed class SourceProbeResult
         {
@@ -27,6 +27,8 @@ namespace RTVirtualCamera
             public string UserMessage { get; set; }
             public string TechnicalDetails { get; set; }
             public StreamInfo[] Streams { get; set; }
+            public ConnectionInfo Connection { get; set; }
+            public bool HasConnection { get; set; }
         }
 
         public MainForm()
@@ -35,35 +37,74 @@ namespace RTVirtualCamera
 
             ApplyLocalizedTexts();
             InitializeVideoPlayer();
-            InitializeStatsOverlay();
+            InitializeStatsTimer();
             videoPanel.Resize += VideoPanel_Resize;
             Shown += MainForm_Shown;
         }
 
-        private void InitializeStatsOverlay()
+        // The two tables (connList / statsList) and their container (statsPanel) are
+        // defined in MainForm.Designer.cs with their fixed rows (each ListViewItem
+        // carries a Name key used by SetRow). Here we only drive the refresh timer.
+        private void InitializeStatsTimer()
         {
-            statsLabel = new Label
-            {
-                Dock = DockStyle.Top,
-                Height = 22,
-                TextAlign = ContentAlignment.MiddleLeft,
-                BackColor = Color.Black,
-                ForeColor = Color.Lime,
-                Font = new Font("Consolas", 9f),
-                Text = "preview stats: --"
-            };
-            Controls.Add(statsLabel);
-            statsLabel.BringToFront();
-
             statsTimer = new System.Windows.Forms.Timer { Interval = 500 };
             statsTimer.Tick += StatsTimer_Tick;
             statsTimer.Start();
+        }
+
+        private static void SetRow(ListView lv, string key, string value)
+        {
+            ListViewItem[] found = lv.Items.Find(key, false);
+            if (found.Length > 0)
+                found[0].SubItems[1].Text = string.IsNullOrEmpty(value) ? "—" : value;
+        }
+
+        private void ApplyConnectionInfo(SourceProbeResult probe)
+        {
+            if (probe == null || !probe.HasConnection || probe.Connection.valid == 0)
+                return;
+
+            ConnectionInfo c = probe.Connection;
+
+            string codec = c.videoCodec ?? string.Empty;
+            if (!string.IsNullOrEmpty(c.profile))
+                codec = (codec.Length > 0 ? codec + " (" + c.profile + ")" : c.profile);
+
+            string fps = c.fpsDen > 0
+                ? (c.fpsNum / (double)c.fpsDen).ToString("0.##")
+                : null;
+
+            string bitrate;
+            if (c.bitrate <= 0)
+                bitrate = AppStrings.Get("Value_NotAvailable");
+            else if (c.bitrate >= 1000000)
+                bitrate = (c.bitrate / 1000000.0).ToString("0.0") + " Mbps";
+            else
+                bitrate = (c.bitrate / 1000.0).ToString("0") + " kbps";
+
+            SetRow(connList, "container", c.container);
+            SetRow(connList, "transport", c.transport);
+            SetRow(connList, "codec", codec);
+            SetRow(connList, "pixfmt", c.pixelFormat);
+            SetRow(connList, "resolution",
+                (c.width > 0 && c.height > 0) ? c.width + "×" + c.height : null);
+            SetRow(connList, "fps", fps);
+            SetRow(connList, "bitrate", bitrate);
         }
 
         private void StatsTimer_Tick(object sender, EventArgs e)
         {
             try
             {
+                // Reflect the *actual* live RTSP transport (UDP/TCP) in the connection
+                // table, overriding the probe's guess once frames are flowing. Null while
+                // not connected — then the probed value stays.
+                string activeTransport = isVCamRunning
+                    ? (virtualCamera != null ? virtualCamera.GetActiveTransportLabel() : null)
+                    : (videoPlayer != null ? videoPlayer.GetActiveTransportLabel() : null);
+                if (!string.IsNullOrEmpty(activeTransport))
+                    SetRow(connList, "transport", activeTransport);
+
                 if (isVCamRunning)
                 {
                     FrameServerRates fr;
@@ -72,16 +113,19 @@ namespace RTVirtualCamera
                         // Decode happens in the app producer (GPU via d3d11va, or software);
                         // the Frame Server's own frame-channel copy is always CPU.
                         bool ffmpegHw = virtualCamera.IsFfmpegProducerHardware();
-                        string engine = ffmpegHw ? "FFmpeg HW" : "FFmpeg SW";
-                        string hw = ffmpegHw ? "decode: GPU (d3d11va)" : "decode: CPU (software)";
-                        string stale = fr.Stale ? "  [stale]" : string.Empty;
-                        statsLabel.Text = string.Format(
-                            "[Frame Server · {0}] RX {1:0.0} fps  |  render {2:0.0} fps ({3:0.0} dup)  |  copy {4:0.0} ms  |  {5}{6}",
-                            engine, fr.RxFps, fr.RenderedFps, fr.DeclinedFps, fr.LastCopyMs, hw, stale);
+                        SetRow(statsList, "state", fr.Stale ? AppStrings.Get("Stats_State_WaitingStale") : AppStrings.Get("Stats_State_CameraActive"));
+                        SetRow(statsList, "engine", ffmpegHw ? "FFmpeg HW" : "FFmpeg SW");
+                        SetRow(statsList, "decode", ffmpegHw ? "GPU (d3d11va)" : "CPU (software)");
+                        SetRow(statsList, "rx", fr.RxFps.ToString("0.0"));
+                        SetRow(statsList, "render", fr.RenderedFps.ToString("0.0"));
+                        SetRow(statsList, "dup", fr.DeclinedFps.ToString("0.0"));
+                        SetRow(statsList, "drop", fr.DroppedFps.ToString("0.0"));
+                        SetRow(statsList, "proc", fr.LastCopyMs.ToString("0.0"));
+                        SetRow(statsList, "drift", fr.DriftMs.ToString("+0;-0;0"));
                     }
                     else
                     {
-                        statsLabel.Text = "[Frame Server] in attesa di statistiche...";
+                        SetRow(statsList, "state", AppStrings.Get("Stats_State_WaitingStats"));
                     }
                 }
                 else
@@ -89,13 +133,19 @@ namespace RTVirtualCamera
                     PreviewRates r;
                     if (videoPlayer != null && videoPlayer.TryGetRates(out r))
                     {
-                        statsLabel.Text = string.Format(
-                            "RX {0:0.0} fps  |  render {1:0.0} fps  |  drop {2:0.0} fps  |  drift {3:+0;-0} ms  |  copy {4:0} ms",
-                            r.ReceivedFps, r.RenderedFps, r.DroppedFps, r.DriftMs, r.LastRenderMs);
+                        SetRow(statsList, "state", AppStrings.Get("Stats_State_PreviewActive"));
+                        SetRow(statsList, "engine", AppStrings.Get("Stats_Engine_Preview"));
+                        SetRow(statsList, "decode", "—");
+                        SetRow(statsList, "rx", r.ReceivedFps.ToString("0.0"));
+                        SetRow(statsList, "render", r.RenderedFps.ToString("0.0"));
+                        SetRow(statsList, "dup", "—");
+                        SetRow(statsList, "drop", r.DroppedFps.ToString("0.0"));
+                        SetRow(statsList, "proc", r.LastRenderMs.ToString("0.0"));
+                        SetRow(statsList, "drift", r.DriftMs.ToString("+0;-0;0"));
                     }
                     else
                     {
-                        statsLabel.Text = "preview stats: anteprima non attiva";
+                        SetRow(statsList, "state", AppStrings.Get("Stats_State_Inactive"));
                     }
                 }
             }
@@ -175,6 +225,7 @@ namespace RTVirtualCamera
                     }
 
                     ApplyStreamInfo(probe.Streams);
+                    ApplyConnectionInfo(probe);
 
                     if (StartPreviewFromPath())
                     {
@@ -214,6 +265,7 @@ namespace RTVirtualCamera
                     }
 
                     ApplyStreamInfo(probe.Streams);
+                    ApplyConnectionInfo(probe);
 
                     virtualCamera = new VirtualCameraWrapper();
                     virtualCamera.SetCameraName("RTSP Virtual Camera");
@@ -473,12 +525,17 @@ namespace RTVirtualCamera
                         AppStrings.Get("Probe_NoStreams_Details"));
                 }
 
+                ConnectionInfo conn;
+                bool hasConn = probePlayer.TryGetConnectionInfo(out conn);
+
                 return new SourceProbeResult
                 {
                     Success = true,
                     UserMessage = string.Empty,
                     TechnicalDetails = string.Empty,
-                    Streams = infos
+                    Streams = infos,
+                    Connection = conn,
+                    HasConnection = hasConn
                 };
             }
         }
@@ -574,6 +631,9 @@ namespace RTVirtualCamera
         private void MainForm_Load(object sender, EventArgs e)
         {
             Settings.Load();
+            // Push the persisted FFmpeg engine options (transport, hardware decode, and
+            // the numeric tuning params) into RTCamNative before any connection is opened.
+            VirtualCameraWrapper.ApplyEngineSettings();
             this.pathTextBox.Text = Settings.Current.RtspURL?.ToString() ?? "rtsp://example.io:1234/webcam";
             // Autostart is handled in MainForm_Shown (after the window is visible) on a
             // background thread, so an unreachable source never blocks the UI thread.
@@ -612,6 +672,7 @@ namespace RTVirtualCamera
                         }
 
                         ApplyStreamInfo(probe.Streams);
+                        ApplyConnectionInfo(probe);
                         if (StartPreviewFromPath())
                             startVCamButton.Enabled = true;
                     });

@@ -286,4 +286,55 @@ Licenza MIT — © Simon Mourier, Andrea Greco.</value>
   <data name="Menu_Language" xml:space="preserve">
     <value>Lingua</value>
   </data>
+  <data name="Settings_NetworkSection" xml:space="preserve">
+    <value>Rete</value>
+  </data>
+  <data name="Settings_Transport" xml:space="preserve">
+    <value>Trasporto RTSP</value>
+  </data>
+  <data name="Settings_Transport_Auto" xml:space="preserve">
+    <value>Auto (UDP, ripiego TCP)</value>
+  </data>
+  <data name="Settings_Transport_Udp" xml:space="preserve">
+    <value>Solo UDP</value>
+  </data>
+  <data name="Settings_Transport_Tcp" xml:space="preserve">
+    <value>Solo TCP</value>
+  </data>
+  <data name="Settings_HardwareDecode" xml:space="preserve">
+    <value>Decodifica hardware (GPU)</value>
+  </data>
+  <data name="Settings_SocketTimeout" xml:space="preserve">
+    <value>Timeout socket (ms)</value>
+  </data>
+  <data name="Settings_ReorderQueue" xml:space="preserve">
+    <value>Buffer riordino RTP (pkt)</value>
+  </data>
+  <data name="Settings_LatencyCap" xml:space="preserve">
+    <value>Cap latenza (ms)</value>
+  </data>
+  <data name="Settings_FrameCounterOverlay" xml:space="preserve">
+    <value>Overlay contatore frame (diagnostica)</value>
+  </data>
+  <data name="Stats_State_CameraActive" xml:space="preserve">
+    <value>Camera attiva</value>
+  </data>
+  <data name="Stats_State_WaitingStale" xml:space="preserve">
+    <value>In attesa (stale)</value>
+  </data>
+  <data name="Stats_State_WaitingStats" xml:space="preserve">
+    <value>In attesa di statistiche…</value>
+  </data>
+  <data name="Stats_State_PreviewActive" xml:space="preserve">
+    <value>Anteprima attiva</value>
+  </data>
+  <data name="Stats_State_Inactive" xml:space="preserve">
+    <value>Non attiva</value>
+  </data>
+  <data name="Stats_Engine_Preview" xml:space="preserve">
+    <value>FFmpeg (anteprima)</value>
+  </data>
+  <data name="Value_NotAvailable" xml:space="preserve">
+    <value>n/d</value>
+  </data>
 </root>

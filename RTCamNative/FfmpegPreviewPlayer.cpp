@@ -45,6 +45,20 @@ int FfmpegPreviewPlayer::initialize()
 	_streamInfo.subtype = GUID_NULL; // cosmetic: the Frame Server always outputs NV12
 	_streamInfo.bitrate = 0;
 	_hasStreamInfo = true;
+
+	// Cache the human-readable connection characteristics for the UI table.
+	_connInfo = ConnectionInfo{};
+	_connInfo.bitrate = probe.bitrate;
+	_connInfo.width = probe.width;
+	_connInfo.height = probe.height;
+	_connInfo.fpsNum = probe.fpsNum;
+	_connInfo.fpsDen = probe.fpsDen;
+	_connInfo.valid = 1;
+	memcpy(_connInfo.container, probe.container, sizeof(_connInfo.container));
+	memcpy(_connInfo.transport, probe.transport, sizeof(_connInfo.transport));
+	memcpy(_connInfo.videoCodec, probe.videoCodec, sizeof(_connInfo.videoCodec));
+	memcpy(_connInfo.profile, probe.profile, sizeof(_connInfo.profile));
+	memcpy(_connInfo.pixelFormat, probe.pixelFormat, sizeof(_connInfo.pixelFormat));
 	return 0;
 }
 
@@ -128,6 +142,15 @@ int FfmpegPreviewPlayer::getPreviewStats(PreviewStats* pStats)
 	pStats->droppedFrames = 0;
 	pStats->driftMs = (double)_source.LastLagMs();
 	pStats->lastRenderMs = _lastRenderMs.load();
+	return S_OK;
+}
+
+int FfmpegPreviewPlayer::getConnectionInfo(ConnectionInfo* pInfo)
+{
+	if (!pInfo)
+		return E_INVALIDARG;
+
+	*pInfo = _connInfo; // valid==0 until initialize() has probed the source
 	return S_OK;
 }
 

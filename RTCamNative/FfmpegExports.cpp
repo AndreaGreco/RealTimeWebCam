@@ -68,4 +68,47 @@ extern "C" {
 		return (g_producer && g_producer->IsHardware()) ? 1 : 0;
 	}
 
+	// Process-wide FFmpeg engine options, set from the app's settings dialog. They
+	// configure the shared FfmpegRtspSource statics, so they apply to both the preview
+	// and the producer, and take effect the next time a connection is opened.
+	// mode: 0 = Auto (UDP preferred, TCP fallback), 1 = UDP only, 2 = TCP only.
+	__declspec(dllexport) void VCam_SetRtspTransport(int mode)
+	{
+		RtspTransport t = RtspTransport::Auto;
+		if (mode == (int)RtspTransport::Udp) t = RtspTransport::Udp;
+		else if (mode == (int)RtspTransport::Tcp) t = RtspTransport::Tcp;
+		FfmpegRtspSource::SetTransportPreference(t);
+	}
+
+	// enabled != 0 lets the decoder use d3d11va (GPU); 0 forces software decode.
+	__declspec(dllexport) void VCam_SetHardwareDecode(int enabled)
+	{
+		FfmpegRtspSource::SetHardwareDecodeEnabled(enabled != 0);
+	}
+
+	// RTSP socket timeout (libav "stimeout"), in milliseconds.
+	__declspec(dllexport) void VCam_SetSocketTimeoutMs(int ms)
+	{
+		FfmpegRtspSource::SetSocketTimeoutMs(ms);
+	}
+
+	// RTP jitter/reorder buffer depth (libav "reorder_queue_size"), in packets.
+	__declspec(dllexport) void VCam_SetReorderQueue(int packets)
+	{
+		FfmpegRtspSource::SetReorderQueueSize(packets);
+	}
+
+	// Latency cap: resync-to-live threshold in milliseconds.
+	__declspec(dllexport) void VCam_SetLatencyCapMs(int ms)
+	{
+		FfmpegRtspSource::SetMaxLagMs(ms);
+	}
+
+	// Which RTSP transport is actually carrying the producer's frames right now:
+	// 0 = not connected, 1 = UDP, 2 = TCP. Definitive even in Auto mode.
+	__declspec(dllexport) int VCam_GetActiveTransport()
+	{
+		return g_producer ? g_producer->ActiveTransport() : 0;
+	}
+
 } // extern "C"

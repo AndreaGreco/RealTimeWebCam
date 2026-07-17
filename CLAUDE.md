@@ -128,7 +128,7 @@ space and is an accepted trade-off.
 | `FfmpegRtspSource` | `FfmpegRtspSource.cpp/.h` | **Native** (non-/clr). The single RTSP receiver: libav open/decode (d3d11va GPU or software), latency cap + resync-to-live, `sws_scale` → NV12, hands each frame to a caller-supplied `FrameSink`. Reconnects on its own until `Stop()`. Also `Probe()` (geometry/codec) as a static. |
 | `FfmpegExports.cpp` | — | C exports for the virtual-camera producer (`VCam_StartFfmpegProducer` etc.). Owns a `FrameChannelWriter`; its sink writes NV12 into the frame shared memory. |
 | `FfmpegPreviewPlayer` | `FfmpegPreviewPlayer.cpp/.h` | **Native**. FFmpeg-based preview (replaces the old MF/EVR `VideoPlayer`). Reuses `FfmpegRtspSource`; its sink converts NV12→BGRA and blits into the WinForms panel HWND with a double-buffered GDI path. Keeps `PreviewStats`. |
-| `PreviewExports.cpp` | — | C exports the C# preview wrapper P/Invokes (`CreateVideoPlayer`/`SetVideoPath`/`PlayVideo`/`GetVideoStreamInfo`/…), implemented on `FfmpegPreviewPlayer` — same names/signatures as before, so the managed side is unchanged. |
+| `PreviewExports.cpp` | — | C exports the C# preview wrapper P/Invokes (`CreateVideoPlayer`/`SetVideoPath`/`PlayVideo`/`GetVideoStreamInfo`/…), implemented on `FfmpegPreviewPlayer`. The original set kept the old Media Foundation names/signatures; `GetConnectionInfo` (container/transport/codec/bitrate for the UI "Connessione" table) was added later. |
 | `FrameChannelWriter` | `FrameChannelWriter.cpp/.h` | **Native**. Opens the frame mapping (created by the Frame Server) for writing, publishes NV12 into the ring slot under the header seqlock. |
 | `StatsReader` | `StatsReader.cpp/.h` | Singleton (`Instance()`). Opens the stats shared memory (read-only) and exports `VCam_GetFrameServerStats()` for P/Invoke. |
 
@@ -195,20 +195,49 @@ Design points:
 
 ### Latency handling (in `FfmpegRtspSource`)
 
-The decode loop opens RTSP with low-latency demux options (`rtsp_transport=tcp`,
-`reorder_queue_size=0`, `max_delay=0`, `fflags=nobuffer+discardcorrupt`, `flags=low_delay`,
-`avioflags=direct`, `analyzeduration=0`), and the decoder with `AV_CODEC_FLAG_LOW_DELAY` +
-`FF_THREAD_SLICE`. Hardware decode (`d3d11va`) is attached when available; GPU frames are
-downloaded to system-memory NV12 for the channel. A **latency cap** anchors a wall-clock ↔ PTS
-baseline and, when a decoded frame falls more than `kMaxLagMs` (350 ms) behind live, resyncs by
-dropping the rest of the GOP (skip to the next keyframe) and flushing the decoder. This is what
-keeps a fast/misbehaving source from accumulating unbounded latency — the failure mode that a
-previous MF-based preview exhibited (reading ~130 fps from a 30 fps source with growing drift).
+The decode loop opens RTSP with low-latency demux options: `rtsp_transport` and
+`reorder_queue_size` (default 8) come from the user settings (see "User-tunable engine options"
+below), plus the fixed `max_delay=0`, `fflags=nobuffer+discardcorrupt`, `flags=low_delay`,
+`avioflags=direct`, `analyzeduration=0`, and the decoder with `AV_CODEC_FLAG_LOW_DELAY` +
+`FF_THREAD_SLICE`. Hardware decode (`d3d11va`) is attached when available (and not disabled in
+settings); GPU frames are downloaded to system-memory NV12 for the channel. A **latency cap**
+anchors a wall-clock ↔ PTS baseline and, when a decoded frame falls more than `kMaxLagMs`
+(default 350 ms, `MaxLagMs()`) behind live, resyncs by dropping the rest of the GOP (skip to the
+next keyframe) and flushing the decoder. This is what keeps a fast/misbehaving source from
+accumulating unbounded latency — the failure mode that a previous MF-based preview exhibited
+(reading ~130 fps from a 30 fps source with growing drift).
 
 The same `FfmpegRtspSource` core serves both the preview and the virtual-camera producer, each
 with its own `FrameSink`; they never run at the same time (the preview stops when the camera
 starts), so only one RTSP connection is open at a time. Reconnection is built into the decode
 loop: on a stream break it sleeps 1s and retries `avformat_open_input` until `Stop()`.
+
+**User-tunable engine options.** The settings dialog (`SettingsForm`) exposes several
+process-wide FFmpeg options, persisted in `Settings` and pushed into the native engine via
+`VirtualCameraWrapper.ApplyEngineSettings()` (reads `Settings.Current`) → the `VCam_Set*` exports
+in `FfmpegExports.cpp`, which set statics on `FfmpegRtspSource`. They are read when a connection
+opens (`Probe` + `DecodeLoop`), so a change takes effect on the next preview/producer start or the
+next reconnect, not mid-session. Applied once at startup in `MainForm_Load` and again whenever the
+dialog changes a value.
+
+| Setting | Native static | libav option | Notes |
+|---|---|---|---|
+| `RtspTransport` | `SetTransportPreference` | `rtsp_transport` | Auto / UDP-only / TCP-only |
+| `HardwareDecode` | `SetHardwareDecodeEnabled` | (d3d11va device) | off ⇒ software decode |
+| `SocketTimeoutMs` | `SetSocketTimeoutMs` | `stimeout` (µs) | also bounds the UDP→TCP fallback wait |
+| `ReorderQueueSize` | `SetReorderQueueSize` | `reorder_queue_size` | RTP jitter buffer depth (packets) |
+| `LatencyCapMs` | `SetMaxLagMs` | (own resync) | resync-to-live threshold |
+
+**Active transport (the real one).** libav's `udp+tcp` mask hides which lower transport actually
+won, so in Auto mode the `DecodeLoop` drives the fallback itself: it opens with a single explicit
+`rtsp_transport` (UDP first), and if an attempt connects but delivers no frame within the socket
+timeout (UDP blocked), it flips to TCP on the next attempt and keeps alternating until one carries
+frames. `_activeTransport` (0=none, 1=UDP, 2=TCP) is published once the first frame of an attempt
+arrives and reset on drop; `ActiveTransport()` exposes it. The UI reads it live —
+`VCam_GetActiveTransport()` (producer) / `GetActiveTransport(player)` (preview) — and overwrites
+the probe's guess in the "Connessione" transport row (`MainForm.StatsTimer_Tick`). A forced
+UDP-only / TCP-only preference never flips. (`Probe` still uses the `udp+tcp` mask — it is only a
+quick connectivity/geometry check, not a streaming session.)
 
 ---
 
