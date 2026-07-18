@@ -45,7 +45,7 @@ To uninstall: Windows *Apps & features*, or run the MSI again.
 
 If your IP camera already exposes RTSP, all you need is its URL (e.g. `rtsp://192.168.1.10:554/stream`). If instead you want to turn a **USB webcam** (e.g. on a Linux mini-PC / Raspberry Pi) into an RTSP source, the proven recipe is **MediaMTX + FFmpeg** via Docker.
 
-> ⚠️ **The single most important thing in the whole setup.** Media Foundation's RTSP source is picky about how the H.264 is "packetized". If the encoder emits **multiple slices per frame** (the default for `-tune zerolatency`/`ultrafast` with multiple threads), MF treats every slice as a frame of its own: you receive 4–8× the real frames, timestamps freeze and latency explodes. `ffplay` re-assembles everything and looks fine — so *don't* trust ffplay alone. **Force a single slice per frame** with `-x264-params sliced-threads=0`.
+> 💡 **Encode for low latency at the source.** The app receives and decodes the stream with **FFmpeg** in its own process, so it reassembles frames robustly — the old requirement to force a single H.264 slice per frame is **gone** (multi-slice streams now decode correctly, exactly as `ffplay` always did). What still matters for a real-time picture is encoding without buffering: `-tune zerolatency`, a baseline profile (no B-frames), and a keyframe roughly every second. The recipe below already does all of this.
 
 ### docker-compose
 
@@ -86,11 +86,11 @@ The URL to enter in the app will be `rtsp://<server-IP>:8554/webcam`.
 
 ### Golden rules for low latency
 
-- **`-x264-params sliced-threads=0`** — one slice per frame (see the warning above). Non-negotiable with MF.
-- **One honest framerate.** No `-vf fps=N` upsampling from a capture running at a different rate: it generates synthetic timestamps that MF misreads. Capture and stream at the same real rate (if the webcam only does 15 fps, stream 15).
 - **`-tune zerolatency` + `-profile:v baseline`** — no B-frames, no lookahead.
-- **`-g 30`** — a keyframe every second (fast recovery on connect).
-- **`MTX_PROTOCOLS=tcp`** is reliable on a LAN. On lossy networks consider UDP.
+- **One honest framerate.** No `-vf fps=N` upsampling from a capture running at a different rate: it invents synthetic timestamps and adds jitter. Capture and stream at the same real rate (if the webcam only does 15 fps, stream 15).
+- **`-g 30`** — a keyframe every second (fast recovery on connect and after packet loss).
+- **`-x264-params sliced-threads=0`** — no longer required (FFmpeg reassembles multi-slice frames correctly); harmless to leave in.
+- **Transport.** `MTX_PROTOCOLS=tcp` is rock-solid on a LAN. The app itself defaults to **UDP with automatic TCP fallback** and lets you force UDP-only or TCP-only in *Settings → Network* — the connection panel then shows which transport is actually carrying frames.
 
 ### Verify
 
@@ -113,27 +113,36 @@ It should be practically real-time and report the expected framerate (e.g. `30 f
 
 ### Settings
 
-Open **Settings** from the app to pick the interface language (System / Italiano / English / Español / Deutsch) and to turn on auto-start (opens the stream automatically on launch, no click needed). A language change takes effect after restarting the app.
+Open **Settings** from the app to:
 
-### The diagnostics bar (at the top)
+- pick the interface language (System / Italiano / English / Español / Deutsch — takes effect after restarting the app);
+- turn on **auto-start** (opens the stream automatically on launch, no click needed);
+- choose the **RTSP transport** (Auto with TCP fallback / UDP only / TCP only) and fine-tune the FFmpeg engine (hardware decode on/off, socket timeout, RTP reorder-buffer depth, latency cap);
+- toggle a diagnostic **frame-counter overlay** burned into the video (off by default).
 
-While previewing, a bar shows metrics for the **preview only** (the camera that Zoom sees runs inside the Frame Server, a separate process that can't be read from here):
+### The diagnostics panels (at the top)
+
+Two small tables sit above the video. **Connection** describes the open stream — container, **transport** (the one *actually* carrying frames, `UDP`/`TCP`), codec, pixel format, resolution, frame rate, bitrate. **Stats** shows live rates: while you're only previewing they refer to the preview; once the virtual camera is running they come from the Frame Server (the separate process that feeds Zoom).
 
 | Field | Meaning |
 |---|---|
-| **RX** | frames/s actually received from the source (the *real* value, not the nominal one) |
-| **render** | frames/s actually drawn |
-| **drop** | frames/s discarded by the adaptive control (to stay real-time) |
-| **drift** | wall-clock vs media timeline offset: ~stable = fixed latency, rising = build-up |
-| **copy** | cost of the last frame copy (ms) |
+| **State** | preview active / camera active / waiting for the source |
+| **Engine** | `Preview`, or `FFmpeg HW` / `FFmpeg SW` — whether the decoder ran on the GPU (d3d11va) or in software |
+| **Decode** | `GPU (d3d11va)` or `CPU (software)` |
+| **RX (fps)** | frames/s actually received from the source (the *real* value, not the nominal one) |
+| **Render (fps)** | frames/s actually delivered / drawn |
+| **Duplicates (fps)** | frames re-served because the consumer polls faster than the source produces new ones (harmless) |
+| **Dropped (fps)** | frames discarded to stay real-time (latency-cap resync) |
+| **Processing (ms)** | cost of the last frame copy/render |
+| **Drift (ms)** | wall-clock vs media timeline offset: ~stable = fixed latency, steadily rising = latency building up |
 
-Quick tell: if **RX ≫ the real framerate** (e.g. 150 with a 30 fps source), you're almost certainly streaming multi-slice H.264 → apply `sliced-threads=0` (see above).
+Quick tell: if **RX** sits well below the source's real framerate, the network or the source is dropping frames — try forcing **TCP** transport in *Settings → Network*.
 
 ---
 
 ## Troubleshooting
 
-**Video lagging / latency that keeps growing.** Almost always the source: multi-slice H.264 (`sliced-threads=0` fixes it) or framerate upsampling. Check the bar: `RX` should be ≈ the real framerate and `drift` stable. Verify with `ffplay` on the server side.
+**Video lagging / latency that keeps growing.** The FFmpeg engine caps latency and resyncs to live, so this is rare; when it happens it's usually the source (framerate upsampling) or an unstable network. Check the stats: `RX` should be ≈ the real framerate and `Drift` stable. The two knobs to try are the latency cap and the transport (*Settings → Network*). Verify the source with `ffplay` on the server side.
 
 **The virtual camera doesn't appear, or shows black frames.** Either the RTSP URL isn't reachable from the Windows machine, or there's no source yet (you'll see the fallback frame). With a reachable URL the picture appears within a second or two.
 

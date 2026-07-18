@@ -7,6 +7,20 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.1] - 2026-07-18
+
+Maintenance release: a small UI-string fix and documentation brought in line with the FFmpeg receive engine.
+
+### Fixed
+- Italian "Start" button label showed `Avvia!!` (stray exclamation marks) instead of `Avvia`.
+
+### Documentation
+- **README (EN + IT) corrected for the FFmpeg receive path.** The receiver is no longer Media Foundation, so the guidance built around MF's packetization quirks is gone:
+  - Removed the "force a single H.264 slice per frame / `sliced-threads=0` is non-negotiable" warning — FFmpeg reassembles multi-slice streams correctly (as `ffplay` always did). The encoder recipe stays, reframed as general low-latency advice.
+  - Dropped the "RX ≫ real framerate ⇒ multi-slice H.264" diagnostic tell and the matching troubleshooting entry, both of which described the removed MF symptom.
+  - Rewrote the diagnostics section for the current UI: two panels (**Connection** / **Stats**) instead of one bar, the full current field set (State, Engine, Decode, RX, Render, Duplicates, Dropped, Processing, Drift), and the fact that the stats reflect the Frame Server once the virtual camera is running (not preview-only).
+  - Documented the settings added in 1.0.0 (selectable RTSP transport with live active-transport display, FFmpeg engine tuning, frame-counter overlay).
+
 ## [1.0.0] - 2026-07-17
 
 First stable release. The receive pipeline is now a single, tunable FFmpeg user-space engine feeding the Media Foundation virtual camera through shared memory.
@@ -77,6 +91,7 @@ First stable release. The receive pipeline is now a single, tunable FFmpeg user-
 - `PAUSED→RUNNING` transition (`SetStreamState`) returning `E_POINTER`.
 - Memory leak on Stop/Start cycle.
 
+[1.0.1]: https://github.com/andrea-greco/RealTimeWebCam/compare/1.0.0...1.0.1
 [1.0.0]: https://github.com/andrea-greco/RealTimeWebCam/compare/0.2.0...1.0.0
 [0.2.0]: https://github.com/andrea-greco/RealTimeWebCam/compare/0.1.0...0.2.0
 [0.1.0]: https://github.com/andrea-greco/RealTimeWebCam/releases/tag/0.1.0

@@ -45,7 +45,7 @@ Per disinstallare: *App e funzionalità* di Windows, oppure ri-esegui l'MSI.
 
 Se la tua telecamera IP espone già RTSP, ti basta il suo URL (es. `rtsp://192.168.1.10:554/stream`). Se invece vuoi trasformare una **webcam USB** (es. su un mini-PC Linux/Raspberry) in una sorgente RTSP, lo schema collaudato è **MediaMTX + FFmpeg** via Docker.
 
-> ⚠️ **Il punto più importante di tutta la configurazione.** Il source RTSP di Media Foundation è schizzinoso su come l'H.264 è "impacchettato". Se l'encoder produce **più slice per frame** (è il default di `-tune zerolatency`/`ultrafast` con thread multipli), MF tratta ogni slice come un frame a sé: ricevi 4–8× i frame reali, i timestamp si congelano e la latenza esplode. `ffplay` invece riassembla tutto e sembra a posto — quindi *non* fidarti solo di ffplay. **Forza un solo slice per frame** con `-x264-params sliced-threads=0`.
+> 💡 **Codifica a bassa latenza alla sorgente.** L'app riceve e decodifica lo stream con **FFmpeg** nel proprio processo, quindi riassembla i frame in modo robusto — il vecchio vincolo di forzare un solo slice H.264 per frame **non serve più** (gli stream multi-slice ora si decodificano correttamente, esattamente come faceva da sempre `ffplay`). Ciò che conta ancora per un'immagine in tempo reale è codificare senza buffering: `-tune zerolatency`, un profilo baseline (niente B-frame) e un keyframe circa ogni secondo. La ricetta qui sotto fa già tutto questo.
 
 ### docker-compose
 
@@ -86,11 +86,11 @@ L'URL da mettere nell'app sarà `rtsp://<IP-del-server>:8554/webcam`.
 
 ### Regole d'oro per la bassa latenza
 
-- **`-x264-params sliced-threads=0`** — un solo slice per frame (vedi avviso sopra). Imprescindibile con MF.
-- **Un solo framerate, onesto.** Niente upsampling `-vf fps=N` da una cattura a framerate diverso: genera timestamp sintetici che MF interpreta male. Cattura e trasmetti allo stesso rate reale (se la webcam fa solo 15 fps, trasmetti 15).
 - **`-tune zerolatency` + `-profile:v baseline`** — niente B-frame né lookahead.
-- **`-g 30`** — keyframe ogni secondo (recupero rapido alla connessione).
-- **`MTX_PROTOCOLS=tcp`** su LAN è affidabile. Su reti con perdite valuta UDP.
+- **Un solo framerate, onesto.** Niente upsampling `-vf fps=N` da una cattura a framerate diverso: inventa timestamp sintetici e aggiunge jitter. Cattura e trasmetti allo stesso rate reale (se la webcam fa solo 15 fps, trasmetti 15).
+- **`-g 30`** — keyframe ogni secondo (recupero rapido alla connessione e dopo perdite di pacchetti).
+- **`-x264-params sliced-threads=0`** — non più necessario (FFmpeg riassembla correttamente i frame multi-slice); si può lasciare, è innocuo.
+- **Trasporto.** `MTX_PROTOCOLS=tcp` su LAN è solidissimo. L'app stessa usa di default **UDP con fallback automatico a TCP** e permette di forzare solo UDP o solo TCP in *Impostazioni → Rete* — il pannello di connessione mostra poi quale trasporto sta effettivamente trasportando i frame.
 
 ### Verifica
 
@@ -113,27 +113,36 @@ Deve essere praticamente in tempo reale e riportare il framerate atteso (es. `30
 
 ### Impostazioni
 
-Apri **Impostazioni** dall'app per scegliere la lingua dell'interfaccia (Sistema / Italiano / English / Español / Deutsch) e per attivare l'avvio automatico (apre lo stream da solo al lancio, senza bisogno di click). Il cambio lingua ha effetto dopo il riavvio dell'app.
+Apri **Impostazioni** dall'app per:
 
-### La barra di diagnostica (in alto)
+- scegliere la lingua dell'interfaccia (Sistema / Italiano / English / Español / Deutsch — ha effetto dopo il riavvio dell'app);
+- attivare l'**avvio automatico** (apre lo stream da solo al lancio, senza bisogno di click);
+- scegliere il **trasporto RTSP** (Auto con fallback TCP / solo UDP / solo TCP) e regolare finemente il motore FFmpeg (decodifica hardware on/off, timeout socket, profondità del buffer di riordino RTP, cap di latenza);
+- attivare un **overlay diagnostico con contatore di frame** impresso sul video (disattivo di default).
 
-Durante il preview, una barra mostra le metriche **del solo preview** (la camera per Zoom gira nel Frame Server, processo separato non leggibile da qui):
+### I pannelli di diagnostica (in alto)
+
+Sopra il video ci sono due piccole tabelle. **Connessione** descrive lo stream aperto — contenitore, **trasporto** (quello che sta *davvero* trasportando i frame, `UDP`/`TCP`), codec, formato pixel, risoluzione, frame rate, bitrate. **Statistiche** mostra le velocità live: finché sei solo in preview si riferiscono al preview; quando la virtual camera è attiva arrivano dal Frame Server (il processo separato che alimenta Zoom).
 
 | Campo | Significato |
 |---|---|
-| **RX** | frame/s realmente ricevuti dalla sorgente (il valore *vero*, non quello nominale) |
-| **render** | frame/s effettivamente disegnati |
-| **drop** | frame/s scartati dal controllo adattivo (per restare in tempo reale) |
-| **drift** | scostamento wall‑clock vs timeline media: ~stabile = latenza fissa, in crescita = accumulo |
-| **copy** | costo dell'ultima copia frame (ms) |
+| **Stato** | preview attivo / camera attiva / in attesa della sorgente |
+| **Motore** | `Preview`, oppure `FFmpeg HW` / `FFmpeg SW` — se il decoder ha girato su GPU (d3d11va) o in software |
+| **Decodifica** | `GPU (d3d11va)` oppure `CPU (software)` |
+| **RX (fps)** | frame/s realmente ricevuti dalla sorgente (il valore *vero*, non quello nominale) |
+| **Render (fps)** | frame/s effettivamente consegnati / disegnati |
+| **Duplicati (fps)** | frame ri-serviti perché il consumatore interroga più in fretta di quanto la sorgente produca (innocuo) |
+| **Persi (fps)** | frame scartati per restare in tempo reale (resync del cap di latenza) |
+| **Elaborazione (ms)** | costo dell'ultima copia/render del frame |
+| **Drift (ms)** | scostamento wall‑clock vs timeline media: ~stabile = latenza fissa, in crescita costante = accumulo |
 
-Indicazione rapida: se **RX ≫ framerate reale** (es. 150 con sorgente a 30), quasi sicuramente stai trasmettendo H.264 multi‑slice → applica `sliced-threads=0` (vedi sopra).
+Indicazione rapida: se **RX** è molto sotto il framerate reale della sorgente, la rete o la sorgente stanno perdendo frame — prova a forzare il trasporto **TCP** in *Impostazioni → Rete*.
 
 ---
 
 ## Troubleshooting
 
-**Video in ritardo / latenza che cresce.** Quasi sempre è la sorgente: H.264 multi‑slice (`sliced-threads=0` lo risolve) o upsampling di framerate. Controlla la barra: `RX` deve essere ≈ al framerate reale, il `drift` stabile. Verifica con `ffplay` lato server.
+**Video in ritardo / latenza che cresce.** Il motore FFmpeg limita la latenza e si risincronizza sul live, quindi è raro; quando capita di solito è la sorgente (upsampling di framerate) o una rete instabile. Controlla le statistiche: `RX` deve essere ≈ al framerate reale e il `Drift` stabile. Le due manopole da provare sono il cap di latenza e il trasporto (*Impostazioni → Rete*). Verifica la sorgente con `ffplay` lato server.
 
 **La virtual camera non appare o mostra frame neri.** L'URL RTSP non è raggiungibile dalla macchina Windows, oppure manca ancora la sorgente (vedi il frame di fallback). Con un URL raggiungibile l'immagine compare in un secondo o due.
 
