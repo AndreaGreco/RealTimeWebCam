@@ -1,10 +1,26 @@
-# RealTimeWebCam — da RTSP a webcam virtuale (Windows 11)
+<div align="center">
 
-Accade in alcune organizzazioni di avere a disposizione una camera IP da portare sulle più comuni applicazioni di meeting: Zoom, Teams, Meet, Skype & co. Queste, per una limitazione tecnica, **non** accettano sorgenti RTSP dirette. Questo progetto registra una **webcam virtuale** che mostra i frame in arrivo dalla camera IP RTSP, così qualunque app che sappia scegliere una webcam può usarla.
+# RealTimeWebCam
 
-Funziona su **Windows 11** (21H2 o successivo) grazie all'API [`MFCreateVirtualCamera`](https://learn.microsoft.com/windows/win32/api/mfvirtualcamera/nf-mfvirtualcamera-mfcreatevirtualcamera).
+**Usa qualsiasi telecamera IP / RTSP come webcam su Zoom, Teams, Meet e Skype in Windows 11.**
 
-> 🇬🇧 English version: **[README.md](README.md)** — 🛠️ Per compilare dai sorgenti o capire come funziona dentro: **[DEVELOPMENT.md](DEVELOPMENT.md)**.
+[![Build](https://github.com/AndreaGreco/RealTimeWebCam/actions/workflows/msbuild.yml/badge.svg)](https://github.com/AndreaGreco/RealTimeWebCam/actions/workflows/msbuild.yml)
+[![Ultima release](https://img.shields.io/github/v/release/AndreaGreco/RealTimeWebCam?label=release)](https://github.com/AndreaGreco/RealTimeWebCam/releases/latest)
+[![Download](https://img.shields.io/github/downloads/AndreaGreco/RealTimeWebCam/total)](https://github.com/AndreaGreco/RealTimeWebCam/releases)
+[![Licenza: MIT](https://img.shields.io/badge/licenza-MIT-blue.svg)](LICENSE)
+[![Windows 11](https://img.shields.io/badge/Windows-11%2021H2%2B-0078D6?logo=windows&logoColor=white)](#requisiti)
+
+### ⬇️ [**Scarica l'installer**](https://github.com/AndreaGreco/RealTimeWebCam/releases/latest) &nbsp;·&nbsp; 🇬🇧 [English](README.md) &nbsp;·&nbsp; 🛠️ [Compilare dai sorgenti](DEVELOPMENT.md)
+
+</div>
+
+<!-- TODO screenshot: vedi la nota equivalente in README.md -->
+
+---
+
+Le app di meeting — Zoom, Teams, Meet, Skype & co. — per una limitazione tecnica **non** accettano sorgenti RTSP dirette: sanno elencare solo webcam. RealTimeWebCam colma il divario registrando una vera **webcam virtuale** alimentata dalla tua telecamera IP RTSP, così qualunque app che sappia scegliere una webcam può usare il flusso.
+
+Gratuito e open source, un unico MSI self-contained, senza account e senza cloud.
 
 ---
 
@@ -15,21 +31,32 @@ Funziona su **Windows 11** (21H2 o successivo) grazie all'API [`MFCreateVirtualC
 3. [Configurare la sorgente RTSP](#configurare-la-sorgente-rtsp) ← la parte che conviene leggere
 4. [Usare l'applicazione](#usare-lapplicazione)
 5. [Troubleshooting](#troubleshooting)
-6. [Crediti e licenza](#crediti-e-licenza)
+6. [Sviluppi futuri](#sviluppi-futuri)
+7. [Crediti e licenza](#crediti-e-licenza)
 
 ---
 
 ## Cosa fa e cosa serve
 
-- **Input:** un flusso **RTSP** (telecamera IP, oppure un media server).
-- **Output:** una webcam virtuale chiamata *"RTSP Virtual Camera"* visibile in tutte le app.
-- **Requisiti:** Windows 11 21H2+.
+- **Input:** un flusso **RTSP** — una telecamera IP, un NVR, oppure un media server come [MediaMTX](https://github.com/bluenviron/mediamtx).
+- **Output:** una webcam virtuale chiamata *"RTSP Virtual Camera"*, visibile in tutte le app che elencano webcam.
+- **Bassa latenza per costruzione:** decodifica FFmpeg con un tetto di latenza che si risincronizza al live invece di accumulare ritardo.
+- **Accelerazione hardware:** decodifica su GPU via `d3d11va` quando disponibile, fallback software automatico.
+- **Rete resiliente:** UDP con fallback automatico a TCP, oppure forzatura di uno dei due; riconnessione automatica in caso di caduta.
+- **Diagnostica live:** framerate reali di ricezione/render, transport attivo, codec, bitrate e drift mostrati nell'app.
+- **Localizzata:** Italiano, English, Español, Deutsch.
+
+### Requisiti
+
+**Windows 11** (21H2 o successivo) — la webcam virtuale si basa sull'API [`MFCreateVirtualCamera`](https://learn.microsoft.com/windows/win32/api/mfvirtualcamera/nf-mfvirtualcamera-mfcreatevirtualcamera), che su Windows 10 non esiste.
 
 ---
 
 ## Installazione (MSI)
 
-Per il solo utilizzo, usa l'installer: **`RT-VirtualCam-Setup.msi`** (file unico, self-contained — include il runtime .NET 10, quindi non serve installare nient'altro prima).
+### ⬇️ [**Scarica `RT-VirtualCam-Setup.msi`**](https://github.com/AndreaGreco/RealTimeWebCam/releases/latest)
+
+File unico, self-contained — include il runtime .NET 10, quindi non serve installare nient'altro prima.
 
 1. Esegui l'MSI e accetta la licenza MIT.
 2. (Opzionale) spunta il collegamento sul desktop; il collegamento nel menu Start viene aggiunto automaticamente.
@@ -149,6 +176,17 @@ Indicazione rapida: se **RX** è molto sotto il framerate reale della sorgente, 
 **`E_ACCESSDENIED` / "Access Denied" all'avvio.** Con l'installazione via MSI non succede — riguarda solo le DLL compilate/spostate a mano. Vedi [DEVELOPMENT.md](DEVELOPMENT.md).
 
 **Log e impostazioni.** In `%LOCALAPPDATA%\RTVirtualCamera\` (`debug.log`, `settings.json`).
+
+---
+
+## Sviluppi futuri
+
+Pianificati, non ancora implementati:
+
+- [ ] **Sorgenti RTSP multiple** — configurare più flussi e passare dall'uno all'altro dall'app.
+- [ ] **Installazione senza diritti di amministratore** — installazione per-utente che non richiede elevazione.
+
+Idee, segnalazioni di bug e note di compatibilità con le telecamere sono benvenute — apri una [issue](https://github.com/AndreaGreco/RealTimeWebCam/issues).
 
 ---
 
