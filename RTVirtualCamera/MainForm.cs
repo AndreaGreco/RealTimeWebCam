@@ -47,6 +47,9 @@ namespace RTVirtualCamera
         // carries a Name key used by SetRow). Here we only drive the refresh timer.
         private void InitializeStatsTimer()
         {
+            EnableDoubleBuffering(connList);
+            EnableDoubleBuffering(statsList);
+
             statsTimer = new System.Windows.Forms.Timer { Interval = 500 };
             statsTimer.Tick += StatsTimer_Tick;
             statsTimer.Start();
@@ -55,8 +58,32 @@ namespace RTVirtualCamera
         private static void SetRow(ListView lv, string key, string value)
         {
             ListViewItem[] found = lv.Items.Find(key, false);
-            if (found.Length > 0)
-                found[0].SubItems[1].Text = string.IsNullOrEmpty(value) ? "—" : value;
+            if (found.Length == 0)
+                return;
+
+            string text = string.IsNullOrEmpty(value) ? "—" : value;
+            // Only touch the cell when the text actually changed: an unchanged assignment
+            // still invalidates/repaints the row, and most rows are static between ticks.
+            if (found[0].SubItems[1].Text != text)
+                found[0].SubItems[1].Text = text;
+        }
+
+        // Enables the protected Control.DoubleBuffered on a ListView (not exposed publicly)
+        // so its single batched repaint is flicker-free.
+        private static void EnableDoubleBuffering(Control control)
+        {
+            try
+            {
+                typeof(Control).InvokeMember("DoubleBuffered",
+                    System.Reflection.BindingFlags.SetProperty
+                        | System.Reflection.BindingFlags.Instance
+                        | System.Reflection.BindingFlags.NonPublic,
+                    null, control, new object[] { true });
+            }
+            catch
+            {
+                // Non-critical: BeginUpdate/EndUpdate already suppresses most of the flicker.
+            }
         }
 
         private void ApplyConnectionInfo(SourceProbeResult probe)
@@ -74,26 +101,64 @@ namespace RTVirtualCamera
                 ? (c.fpsNum / (double)c.fpsDen).ToString("0.##")
                 : null;
 
-            string bitrate;
-            if (c.bitrate <= 0)
-                bitrate = AppStrings.Get("Value_NotAvailable");
-            else if (c.bitrate >= 1000000)
-                bitrate = (c.bitrate / 1000000.0).ToString("0.0") + " Mbps";
-            else
-                bitrate = (c.bitrate / 1000.0).ToString("0") + " kbps";
+            connList.BeginUpdate();
+            try
+            {
+                SetRow(connList, "container", c.container);
+                SetRow(connList, "transport", c.transport);
+                SetRow(connList, "codec", codec);
+                SetRow(connList, "pixfmt", c.pixelFormat);
+                SetRow(connList, "resolution",
+                    (c.width > 0 && c.height > 0) ? c.width + "×" + c.height : null);
+                SetRow(connList, "fps", fps);
+                SetRow(connList, "bitrate", FormatBitrate(c.bitrate));
+            }
+            finally
+            {
+                connList.EndUpdate();
+            }
+        }
 
-            SetRow(connList, "container", c.container);
-            SetRow(connList, "transport", c.transport);
-            SetRow(connList, "codec", codec);
-            SetRow(connList, "pixfmt", c.pixelFormat);
-            SetRow(connList, "resolution",
-                (c.width > 0 && c.height > 0) ? c.width + "×" + c.height : null);
-            SetRow(connList, "fps", fps);
-            SetRow(connList, "bitrate", bitrate);
+        // Formats a bits/s value for the connection table; "n/a" for <= 0.
+        private static string FormatBitrate(long bps)
+        {
+            if (bps <= 0)
+                return AppStrings.Get("Value_NotAvailable");
+            if (bps >= 1000000)
+                return (bps / 1000000.0).ToString("0.0") + " Mbps";
+            return (bps / 1000.0).ToString("0") + " kbps";
+        }
+
+        // Mirrors the active engine settings into the connection table so the user can
+        // see exactly what is in use (values are language-neutral: numbers + units).
+        private void UpdateSettingsRows()
+        {
+            Settings s = Settings.Current;
+            SetRow(connList, "cfgTransport", TransportModeLabel(s.RtspTransport));
+            SetRow(connList, "cfgHw", s.HardwareDecode ? "on" : "off");
+            SetRow(connList, "cfgTimeout", s.SocketTimeoutMs + " ms");
+            SetRow(connList, "cfgReorder", s.ReorderQueueSize + " pkt");
+            SetRow(connList, "cfgBuffer", (s.UdpBufferSize / 1024) + " KB");
+            SetRow(connList, "cfgMaxDelay", s.MaxDelayMs + " ms");
+            SetRow(connList, "cfgLatency", s.LatencyCapMs + " ms");
+        }
+
+        private static string TransportModeLabel(RtspTransportMode mode)
+        {
+            switch (mode)
+            {
+                case RtspTransportMode.Udp: return "UDP";
+                case RtspTransportMode.Tcp: return "TCP";
+                default: return "Auto";
+            }
         }
 
         private void StatsTimer_Tick(object sender, EventArgs e)
         {
+            // Suspend drawing on both tables while we rewrite their cells, so the whole
+            // tick produces a single repaint instead of one per changed cell (flicker).
+            connList.BeginUpdate();
+            statsList.BeginUpdate();
             try
             {
                 // Reflect the *actual* live RTSP transport (UDP/TCP) in the connection
@@ -104,6 +169,17 @@ namespace RTVirtualCamera
                     : (videoPlayer != null ? videoPlayer.GetActiveTransportLabel() : null);
                 if (!string.IsNullOrEmpty(activeTransport))
                     SetRow(connList, "transport", activeTransport);
+
+                // Live measured bitrate (the SDP rarely advertises one, so the probe's
+                // value is usually n/a). Overrides the connection row once frames flow.
+                long liveBps = isVCamRunning
+                    ? (virtualCamera != null ? virtualCamera.GetBitrateBps() : 0)
+                    : (videoPlayer != null ? videoPlayer.GetBitrateBps() : 0);
+                if (liveBps > 0)
+                    SetRow(connList, "bitrate", FormatBitrate(liveBps));
+
+                // Reflect the engine settings currently in use.
+                UpdateSettingsRows();
 
                 if (isVCamRunning)
                 {
@@ -152,6 +228,12 @@ namespace RTVirtualCamera
             catch
             {
                 // Diagnostics only — never let a stats hiccup disturb the UI.
+            }
+            finally
+            {
+                // Pair every BeginUpdate with EndUpdate (repaints once, in reverse order).
+                statsList.EndUpdate();
+                connList.EndUpdate();
             }
         }
 
@@ -634,6 +716,9 @@ namespace RTVirtualCamera
             // Push the persisted FFmpeg engine options (transport, hardware decode, and
             // the numeric tuning params) into RTCamNative before any connection is opened.
             VirtualCameraWrapper.ApplyEngineSettings();
+            // Localize the Guide menu item at runtime (all 4 languages via AppStrings);
+            // the other menu items come from the form's own satellite resx.
+            guideToolStripMenuItem.Text = AppStrings.Get("Menu_Guide");
             this.pathTextBox.Text = Settings.Current.RtspURL?.ToString() ?? "rtsp://example.io:1234/webcam";
             // Autostart is handled in MainForm_Shown (after the window is visible) on a
             // background thread, so an unreachable source never blocks the UI thread.
@@ -702,6 +787,14 @@ namespace RTVirtualCamera
         {
             SettingsForm settingsForm = new SettingsForm();
             settingsForm.ShowDialog(this);
+        }
+
+        private void guideToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            using (EngineGuideForm guide = new EngineGuideForm())
+            {
+                guide.ShowDialog(this);
+            }
         }
 
         private void aboutToolStripMenuItem_Click(object sender, EventArgs e)

@@ -47,8 +47,19 @@ namespace RTVirtualCamera
         public int SocketTimeoutMs { get; set; } = 5000;
 
         // RTP jitter/reorder buffer depth (libav "reorder_queue_size"), packets. 0 =
-        // lowest latency but no tolerance for UDP reordering; a few packets smooth it.
-        public int ReorderQueueSize { get; set; } = 8;
+        // lowest latency but no tolerance for UDP reordering; a larger window absorbs the
+        // packet bursts of a high-bitrate stream (prevents the "green bands" packet loss).
+        public int ReorderQueueSize { get; set; } = 512;
+
+        // Underlying UDP receive buffer for the RTSP transport (libav "buffer_size"),
+        // bytes. The default socket buffer (~64 KB) overflows on a high-bitrate 1080p
+        // stream and the kernel drops datagrams (green bands); a few MB absorbs the burst.
+        // 0 leaves libav's default.
+        public int UdpBufferSize { get; set; } = 2 * 1024 * 1024; // 2 MB
+
+        // Demuxer max reorder delay (libav "max_delay"), milliseconds. 0 = lowest latency
+        // (output as-soon-as-decoded); a small value trades latency for jitter tolerance.
+        public int MaxDelayMs { get; set; } = 0;
 
         // Latency cap: resync-to-live threshold (ms). Lower = tighter latency, more jumps.
         public int LatencyCapMs { get; set; } = 350;

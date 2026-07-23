@@ -88,4 +88,10 @@ extern "C" {
 		return player ? player->getActiveTransport() : 0;
 	}
 
+	// Measured received video bitrate in bits/s (0 until measured / disconnected).
+	__declspec(dllexport) long long GetPreviewBitrate(FfmpegPreviewPlayer* player)
+	{
+		return player ? player->getBitrateBps() : 0;
+	}
+
 } // extern "C"

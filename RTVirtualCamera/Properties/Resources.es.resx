@@ -328,4 +328,64 @@ Licencia MIT — © Simon Mourier, Andrea Greco.</value>
   <data name="Value_NotAvailable" xml:space="preserve">
     <value>n/d</value>
   </data>
+  <data name="Settings_UdpBufferSize" xml:space="preserve">
+    <value>Búfer de socket UDP (KB)</value>
+  </data>
+  <data name="Settings_MaxDelay" xml:space="preserve">
+    <value>Retardo máximo (ms)</value>
+  </data>
+  <data name="Menu_Guide" xml:space="preserve">
+    <value>Guía</value>
+  </data>
+  <data name="Guide_Title" xml:space="preserve">
+    <value>Guía de opciones del motor</value>
+  </data>
+  <data name="Guide_Intro" xml:space="preserve">
+    <value>Cómo afecta cada opción de recepción de FFmpeg a la latencia y la fiabilidad. Los valores predeterminados favorecen el tiempo real manteniéndose robustos en la mayoría de las fuentes; aumenta los búferes si ves bandas verdes o tirones en un flujo de alto bitrate.</value>
+  </data>
+  <data name="Guide_FfmpegDocLink" xml:space="preserve">
+    <value>Documentación de FFmpeg</value>
+  </data>
+  <data name="OptHelp_transport_Tip" xml:space="preserve">
+    <value>Cómo se transporta el RTP: Auto (UDP, con TCP de reserva), solo UDP o solo TCP.</value>
+  </data>
+  <data name="OptHelp_transport_Body" xml:space="preserve">
+    <value>Elige el transporte de bajo nivel de RTSP. UDP tiene la menor latencia pero pierde paquetes en una red cargada o con pérdidas, lo que aparece como bandas verdes y corrupción. TCP es fiable (sin pérdida de paquetes) a costa de algo de latencia: la mejor opción para flujos de alto bitrate o redes que no controlas. Auto empieza en UDP y solo pasa a TCP si no llega ningún fotograma.</value>
+  </data>
+  <data name="OptHelp_hwdecode_Tip" xml:space="preserve">
+    <value>Decodifica en la GPU (d3d11va) cuando esté disponible; desactivado fuerza la decodificación por software.</value>
+  </data>
+  <data name="OptHelp_hwdecode_Body" xml:space="preserve">
+    <value>Cuando está activo, H.264/H.265 se decodifican en la GPU (Direct3D 11 / DXVA), mucho más económico para flujos de alta resolución y con menor latencia. Desactívalo si un controlador de GPU se comporta mal (artefactos, fallos) para recurrir a la decodificación por CPU.</value>
+  </data>
+  <data name="OptHelp_sockettimeout_Tip" xml:space="preserve">
+    <value>Cuánto esperar en el socket RTSP antes de rendirse (milisegundos).</value>
+  </data>
+  <data name="OptHelp_sockettimeout_Body" xml:space="preserve">
+    <value>Corresponde a stimeout de FFmpeg. Limita cuánto se bloquea una conexión estancada antes de que el motor reintente, y cuánto espera un intento UDP muerto antes de que Auto pase a TCP. Demasiado bajo puede abortar una fuente lenta pero viva; demasiado alto hace que una fuente realmente muerta cuelgue más antes de reconectar.</value>
+  </data>
+  <data name="OptHelp_reorder_Tip" xml:space="preserve">
+    <value>Cuántos paquetes RTP fuera de orden retener antes de descartarlos.</value>
+  </data>
+  <data name="OptHelp_reorder_Body" xml:space="preserve">
+    <value>Corresponde a reorder_queue_size de FFmpeg. En UDP los paquetes pueden llegar desordenados; una ventana mayor permite al motor esperarlos en lugar de descartarlos, que es lo que evita las porciones perdidas (bandas verdes) en un flujo de alto bitrate. Demasiado bajo destroza un flujo cargado; muy alto puede añadir latencia durante las pérdidas. Irrelevante en TCP.</value>
+  </data>
+  <data name="OptHelp_buffersize_Tip" xml:space="preserve">
+    <value>Tamaño del búfer de recepción UDP, en KB. Mayor absorbe las ráfagas de alto bitrate.</value>
+  </data>
+  <data name="OptHelp_buffersize_Body" xml:space="preserve">
+    <value>Corresponde a buffer_size de FFmpeg (el búfer de recepción del socket). Un fotograma 1080p de vídeo incompresible llega como una ráfaga de muchos paquetes; si el búfer es demasiado pequeño el sistema operativo descarta silenciosamente el exceso, causando bandas verdes. Unos pocos MB absorben la ráfaga. Esto —junto con la ventana de reordenación— es el remedio principal a la pérdida de paquetes en UDP incluso con ancho de banda abundante. 0 deja el valor predeterminado del sistema.</value>
+  </data>
+  <data name="OptHelp_maxdelay_Tip" xml:space="preserve">
+    <value>Tiempo extra que el demuxer puede esperar para reordenar paquetes (milisegundos).</value>
+  </data>
+  <data name="OptHelp_maxdelay_Body" xml:space="preserve">
+    <value>Corresponde a max_delay de FFmpeg. 0 emite cada fotograma en cuanto se decodifica (mínima latencia). Un pequeño valor distinto de cero da al búfer de reordenación tiempo para esperar paquetes tardíos, cambiando algo de latencia por una reproducción más fluida en una red con jitter.</value>
+  </data>
+  <data name="OptHelp_latencycap_Tip" xml:space="preserve">
+    <value>Si la imagen se retrasa tanto respecto al directo, salta de nuevo al directo (milisegundos).</value>
+  </data>
+  <data name="OptHelp_latencycap_Body" xml:space="preserve">
+    <value>Es nuestra propia protección de resincronización al directo, no una opción de FFmpeg. Si un fotograma decodificado se retrasa más de estos milisegundos respecto al tiempo real (un decodificador lento o una fuente a ráfagas que acumula retraso), el motor salta al siguiente fotograma clave para ponerse al día. Más bajo mantiene la latencia ajustada pero causa más saltos visibles; más alto es más fluido pero con más retardo.</value>
+  </data>
 </root>

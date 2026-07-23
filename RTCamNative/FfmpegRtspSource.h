@@ -90,6 +90,12 @@ public:
 	// in ms; 0 when the stream carries no usable PTS. Used as the preview drift value.
 	int64_t LastLagMs() const { return _lastLagMs.load(); }
 
+	// Measured received video bitrate in bits/s, averaged over a ~1s window. Unlike the
+	// SDP-advertised bitrate (usually absent on live RTSP, hence the probe reports 0),
+	// this is computed from the actual demuxed packet sizes. 0 until the first window
+	// completes or when the connection is down.
+	int64_t BitrateBps() const { return _bitrateBps.load(); }
+
 	// Which RTSP lower transport is actually carrying frames right now, as an
 	// RtspTransport value cast to int: 0 = not connected / no frame yet, 1 = UDP,
 	// 2 = TCP. Unlike TransportPreference() this reflects reality — in Auto mode the
@@ -116,10 +122,24 @@ public:
 	static int  SocketTimeoutMs();
 
 	// RTP jitter/reorder buffer depth (libav "reorder_queue_size"), in packets. 0
-	// disables it (lowest latency, but UDP reordering then shreds the picture); a few
-	// packets tolerate minor UDP reordering. Ignored effectively on TCP.
-	static void SetReorderQueueSize(int packets);          // default 8
+	// disables it (lowest latency, but UDP reordering then shreds the picture); a
+	// larger window tolerates the packet bursts of a high-bitrate stream without
+	// dropping reordered packets (the "green bands" failure). Ignored effectively on TCP.
+	static void SetReorderQueueSize(int packets);          // default 512
 	static int  ReorderQueueSize();
+
+	// Underlying UDP receive buffer for the RTSP transport (libav "buffer_size"), in
+	// bytes. The Windows default socket buffer (~64 KB) overflows on the bursts of a
+	// high-bitrate 1080p stream, so the kernel silently drops datagrams → missing
+	// slices → green bands. A few MB absorbs the bursts. 0 leaves libav's default.
+	static void SetUdpBufferSize(int bytes);               // default 2 MB
+	static int  UdpBufferSize();
+
+	// Demuxer max reorder delay (libav "max_delay"), in milliseconds. 0 keeps output
+	// as-soon-as-decoded (lowest latency); a small value gives the reorder buffer room
+	// to wait for late/out-of-order packets, trading a little latency for robustness.
+	static void SetMaxDelayMs(int ms);                     // default 0
+	static int  MaxDelayMs();
 
 	// Latency cap: when a decoded frame falls more than this many ms behind live, the
 	// decode loop resyncs (drops to the next keyframe). Lower = tighter latency but
@@ -138,6 +158,7 @@ private:
 	std::atomic<uint64_t> _framesDecoded{ 0 };
 	std::atomic<bool> _hwActive{ false };
 	std::atomic<int64_t> _lastLagMs{ 0 };
+	std::atomic<int64_t> _bitrateBps{ 0 };  // measured received video bitrate (see BitrateBps)
 	std::atomic<int> _activeTransport{ 0 }; // 0 none, 1 UDP, 2 TCP (see ActiveTransport)
 	FrameSink _sink;
 };

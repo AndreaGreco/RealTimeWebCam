@@ -37,6 +37,7 @@ namespace RTVirtualCamera
             fileToolStripMenuItem = new ToolStripMenuItem();
             exitToolStripMenuItem = new ToolStripMenuItem();
             settingsToolStripMenuItem = new ToolStripMenuItem();
+            guideToolStripMenuItem = new ToolStripMenuItem();
             aboutToolStripMenuItem = new ToolStripMenuItem();
             videoPanel = new Panel();
             previewStatusLabel = new Label();
@@ -72,6 +73,20 @@ namespace RTVirtualCamera
             lvFps.Name = "fps";
             ListViewItem lvBitrate = new ListViewItem(new string[] { "Bitrate", "—" });
             lvBitrate.Name = "bitrate";
+            ListViewItem lvCfgTransport = new ListViewItem(new string[] { "Preferenza trasporto", "—" });
+            lvCfgTransport.Name = "cfgTransport";
+            ListViewItem lvCfgHw = new ListViewItem(new string[] { "Decodifica HW", "—" });
+            lvCfgHw.Name = "cfgHw";
+            ListViewItem lvCfgTimeout = new ListViewItem(new string[] { "Timeout socket", "—" });
+            lvCfgTimeout.Name = "cfgTimeout";
+            ListViewItem lvCfgReorder = new ListViewItem(new string[] { "Reorder RTP", "—" });
+            lvCfgReorder.Name = "cfgReorder";
+            ListViewItem lvCfgBuffer = new ListViewItem(new string[] { "Buffer UDP", "—" });
+            lvCfgBuffer.Name = "cfgBuffer";
+            ListViewItem lvCfgMaxDelay = new ListViewItem(new string[] { "Max delay", "—" });
+            lvCfgMaxDelay.Name = "cfgMaxDelay";
+            ListViewItem lvCfgLatency = new ListViewItem(new string[] { "Cap latenza", "—" });
+            lvCfgLatency.Name = "cfgLatency";
             ListViewItem lvState = new ListViewItem(new string[] { "Stato", "—" });
             lvState.Name = "state";
             ListViewItem lvEngine = new ListViewItem(new string[] { "Motore", "—" });
@@ -101,7 +116,7 @@ namespace RTVirtualCamera
             // menuStrip1
             // 
             resources.ApplyResources(menuStrip1, "menuStrip1");
-            menuStrip1.Items.AddRange(new ToolStripItem[] { fileToolStripMenuItem, settingsToolStripMenuItem, aboutToolStripMenuItem });
+            menuStrip1.Items.AddRange(new ToolStripItem[] { fileToolStripMenuItem, settingsToolStripMenuItem, guideToolStripMenuItem, aboutToolStripMenuItem });
             menuStrip1.Name = "menuStrip1";
             // 
             // fileToolStripMenuItem
@@ -121,7 +136,13 @@ namespace RTVirtualCamera
             resources.ApplyResources(settingsToolStripMenuItem, "settingsToolStripMenuItem");
             settingsToolStripMenuItem.Name = "settingsToolStripMenuItem";
             settingsToolStripMenuItem.Click += settingsToolStripMenuItem_Click;
-            // 
+            //
+            // guideToolStripMenuItem
+            //
+            guideToolStripMenuItem.Name = "guideToolStripMenuItem";
+            guideToolStripMenuItem.Text = "Guide";
+            guideToolStripMenuItem.Click += guideToolStripMenuItem_Click;
+            //
             // aboutToolStripMenuItem
             // 
             resources.ApplyResources(aboutToolStripMenuItem, "aboutToolStripMenuItem");
@@ -242,7 +263,7 @@ namespace RTVirtualCamera
             connList.FullRowSelect = true;
             connList.GridLines = true;
             connList.HeaderStyle = ColumnHeaderStyle.Nonclickable;
-            connList.Items.AddRange(new ListViewItem[] { lvContainer, lvTransport, lvCodec, lvPixfmt, lvResolution, lvFps, lvBitrate });
+            connList.Items.AddRange(new ListViewItem[] { lvContainer, lvTransport, lvCodec, lvPixfmt, lvResolution, lvFps, lvBitrate, lvCfgTransport, lvCfgHw, lvCfgTimeout, lvCfgReorder, lvCfgBuffer, lvCfgMaxDelay, lvCfgLatency });
             connList.Location = new Point(3, 28);
             connList.MultiSelect = false;
             connList.Name = "connList";
@@ -330,6 +351,7 @@ namespace RTVirtualCamera
         private MenuStrip menuStrip1;
         private ToolStripMenuItem fileToolStripMenuItem;
         private ToolStripMenuItem settingsToolStripMenuItem;
+        private ToolStripMenuItem guideToolStripMenuItem;
         private ToolStripMenuItem aboutToolStripMenuItem;
         private ToolStripMenuItem exitToolStripMenuItem;
         private Panel videoPanel;

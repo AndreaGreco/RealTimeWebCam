@@ -98,6 +98,19 @@ extern "C" {
 		FfmpegRtspSource::SetReorderQueueSize(packets);
 	}
 
+	// UDP receive buffer for the RTSP transport (libav "buffer_size"), in bytes.
+	// 0 leaves libav's default. Absorbs high-bitrate packet bursts (anti green-bands).
+	__declspec(dllexport) void VCam_SetUdpBufferSize(int bytes)
+	{
+		FfmpegRtspSource::SetUdpBufferSize(bytes);
+	}
+
+	// Demuxer max reorder delay (libav "max_delay"), in milliseconds. 0 = lowest latency.
+	__declspec(dllexport) void VCam_SetMaxDelayMs(int ms)
+	{
+		FfmpegRtspSource::SetMaxDelayMs(ms);
+	}
+
 	// Latency cap: resync-to-live threshold in milliseconds.
 	__declspec(dllexport) void VCam_SetLatencyCapMs(int ms)
 	{
@@ -109,6 +122,12 @@ extern "C" {
 	__declspec(dllexport) int VCam_GetActiveTransport()
 	{
 		return g_producer ? g_producer->ActiveTransport() : 0;
+	}
+
+	// Measured received video bitrate in bits/s (0 if no producer / not yet measured).
+	__declspec(dllexport) long long VCam_GetFfmpegProducerBitrate()
+	{
+		return g_producer ? (long long)g_producer->BitrateBps() : 0;
 	}
 
 } // extern "C"

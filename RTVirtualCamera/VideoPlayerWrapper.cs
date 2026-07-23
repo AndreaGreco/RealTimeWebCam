@@ -133,6 +133,10 @@ namespace RTVirtualCamera
         [DllImport("RTCamNative.dll")]
         private static extern int GetActiveTransport(IntPtr player);
 
+        // Measured received video bitrate in bits/s (0 until measured / disconnected).
+        [DllImport("RTCamNative.dll")]
+        private static extern long GetPreviewBitrate(IntPtr player);
+
         public uint LastWin32Error { get; private set; }
 
         public VideoPlayerWrapper()
@@ -230,6 +234,15 @@ namespace RTVirtualCamera
                 return null;
 
             return VirtualCameraWrapper.TransportLabel(GetActiveTransport(playerInstance));
+        }
+
+        /// <summary>Measured received video bitrate in bits/s (0 if unknown/disconnected).</summary>
+        public long GetBitrateBps()
+        {
+            if (disposed)
+                return 0;
+
+            return GetPreviewBitrate(playerInstance);
         }
 
         public void SetWindowHandle(IntPtr windowHandle)

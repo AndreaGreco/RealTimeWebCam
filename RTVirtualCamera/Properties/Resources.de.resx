@@ -328,4 +328,64 @@ MIT-Lizenz — © Simon Mourier, Andrea Greco.</value>
   <data name="Value_NotAvailable" xml:space="preserve">
     <value>k. A.</value>
   </data>
+  <data name="Settings_UdpBufferSize" xml:space="preserve">
+    <value>UDP-Socket-Puffer (KB)</value>
+  </data>
+  <data name="Settings_MaxDelay" xml:space="preserve">
+    <value>Max. Verzögerung (ms)</value>
+  </data>
+  <data name="Menu_Guide" xml:space="preserve">
+    <value>Anleitung</value>
+  </data>
+  <data name="Guide_Title" xml:space="preserve">
+    <value>Anleitung zu den Engine-Optionen</value>
+  </data>
+  <data name="Guide_Intro" xml:space="preserve">
+    <value>Wie jede FFmpeg-Empfangsoption Latenz und Zuverlässigkeit beeinflusst. Die Standardwerte bevorzugen Echtzeit und bleiben bei den meisten Quellen robust; erhöhe die Puffer, wenn du bei einem Stream mit hoher Bitrate grüne Streifen oder Ruckeln siehst.</value>
+  </data>
+  <data name="Guide_FfmpegDocLink" xml:space="preserve">
+    <value>FFmpeg-Dokumentation</value>
+  </data>
+  <data name="OptHelp_transport_Tip" xml:space="preserve">
+    <value>Wie RTP übertragen wird: Auto (UDP, TCP als Rückfall), nur UDP oder nur TCP.</value>
+  </data>
+  <data name="OptHelp_transport_Body" xml:space="preserve">
+    <value>Wählt den unteren RTSP-Transport. UDP hat die geringste Latenz, verliert aber in einem ausgelasteten oder verlustbehafteten Netz Pakete, was sich als grüne Streifen und Bildstörungen zeigt. TCP ist zuverlässig (kein Paketverlust) auf Kosten etwas höherer Latenz — die beste Wahl für Streams mit hoher Bitrate oder Netze, die du nicht kontrollierst. Auto beginnt mit UDP und wechselt nur dann zu TCP, wenn überhaupt kein Bild ankommt.</value>
+  </data>
+  <data name="OptHelp_hwdecode_Tip" xml:space="preserve">
+    <value>Dekodiert auf der GPU (d3d11va), wenn verfügbar; aus erzwingt Software-Dekodierung.</value>
+  </data>
+  <data name="OptHelp_hwdecode_Body" xml:space="preserve">
+    <value>Wenn aktiv, werden H.264/H.265 auf der GPU (Direct3D 11 / DXVA) dekodiert, was bei hochauflösenden Streams deutlich günstiger ist und die Latenz niedrig hält. Schalte es aus, wenn sich ein GPU-Treiber fehlerhaft verhält (Artefakte, Abstürze), um auf CPU-Dekodierung zurückzufallen.</value>
+  </data>
+  <data name="OptHelp_sockettimeout_Tip" xml:space="preserve">
+    <value>Wie lange am RTSP-Socket gewartet wird, bevor aufgegeben wird (Millisekunden).</value>
+  </data>
+  <data name="OptHelp_sockettimeout_Body" xml:space="preserve">
+    <value>Entspricht stimeout von FFmpeg. Begrenzt, wie lange eine hängende Verbindung blockiert, bevor die Engine erneut versucht, und wie lange ein toter UDP-Versuch wartet, bevor Auto auf TCP wechselt. Zu niedrig kann eine langsame, aber lebende Quelle abbrechen; zu hoch lässt eine wirklich tote Quelle länger hängen, bevor neu verbunden wird.</value>
+  </data>
+  <data name="OptHelp_reorder_Tip" xml:space="preserve">
+    <value>Wie viele nicht in der Reihenfolge eintreffende RTP-Pakete gehalten werden, bevor sie verworfen werden.</value>
+  </data>
+  <data name="OptHelp_reorder_Body" xml:space="preserve">
+    <value>Entspricht reorder_queue_size von FFmpeg. Bei UDP können Pakete in falscher Reihenfolge ankommen; ein größeres Fenster lässt die Engine auf sie warten, statt sie zu verwerfen, und genau das verhindert fehlende Slices (grüne Streifen) bei einem Stream mit hoher Bitrate. Zu niedrig zerstört einen ausgelasteten Stream; sehr hoch kann bei Verlusten Latenz hinzufügen. Bei TCP irrelevant.</value>
+  </data>
+  <data name="OptHelp_buffersize_Tip" xml:space="preserve">
+    <value>Größe des UDP-Empfangspuffers in KB. Größer fängt Bursts mit hoher Bitrate ab.</value>
+  </data>
+  <data name="OptHelp_buffersize_Body" xml:space="preserve">
+    <value>Entspricht buffer_size von FFmpeg (der Socket-Empfangspuffer). Ein volles 1080p-Bild aus nicht komprimierbarem Video kommt als Burst vieler Pakete an; ist der Puffer zu klein, verwirft das Betriebssystem den Überlauf stillschweigend, was grüne Streifen verursacht. Einige MB fangen den Burst ab. Dies ist — zusammen mit dem Reorder-Fenster — das wichtigste Mittel gegen Paketverlust bei UDP, selbst wenn reichlich Bandbreite vorhanden ist. 0 belässt den Systemstandard.</value>
+  </data>
+  <data name="OptHelp_maxdelay_Tip" xml:space="preserve">
+    <value>Zusätzliche Zeit, die der Demuxer zum Neuordnen von Paketen warten darf (Millisekunden).</value>
+  </data>
+  <data name="OptHelp_maxdelay_Body" xml:space="preserve">
+    <value>Entspricht max_delay von FFmpeg. 0 gibt jedes Bild aus, sobald es dekodiert ist (geringste Latenz). Ein kleiner Wert ungleich null gibt dem Reorder-Puffer Zeit, auf verspätete Pakete zu warten, und tauscht etwas Latenz gegen eine flüssigere Wiedergabe in einem Netz mit Jitter.</value>
+  </data>
+  <data name="OptHelp_latencycap_Tip" xml:space="preserve">
+    <value>Fällt das Bild so weit hinter Live zurück, springe zurück zu Live (Millisekunden).</value>
+  </data>
+  <data name="OptHelp_latencycap_Body" xml:space="preserve">
+    <value>Dies ist unsere eigene Resync-zu-Live-Absicherung, keine FFmpeg-Option. Liegt ein dekodiertes Bild mehr als so viele Millisekunden hinter der Echtzeit (langsamer Dekoder oder eine schubweise Quelle, die einen Rückstand aufbaut), springt die Engine zum nächsten Keyframe, um aufzuholen. Niedriger hält die Latenz knapp, verursacht aber mehr sichtbare Sprünge; höher ist flüssiger, aber träger.</value>
+  </data>
 </root>

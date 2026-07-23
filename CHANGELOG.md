@@ -7,6 +7,27 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.1.0] - 2026-07-23
+
+Reliability, tunability and preview-performance release. Makes a high-bitrate RTSP source (e.g. a 1080p60 stream) hold its frame rate without the packet-loss corruption ("green bands") that aggressive low-latency UDP defaults caused, and surfaces what the engine is actually doing.
+
+### Added
+- **Two more FFmpeg engine options in Settings → Network**, both applied on the next connection:
+  - **UDP socket buffer** (`buffer_size`) — enlarges the kernel receive buffer so the packet bursts of a high-bitrate 1080p frame don't overflow it (the silent-drop cause of green bands). Shown in KB; 0 leaves libav's default.
+  - **Max delay** (`max_delay`) — demuxer reorder delay, previously hard-coded to 0, now tunable (ms).
+- **Inline "?" help on every engine option**: hover shows a one-line explanation, click opens the guide at that option's section. Backed by a single shared table (`EngineOptionHelp`) so the tooltips and the guide never drift.
+- **In-app engine guide** (`EngineGuideForm`, menu *Guide*): one scrollable section per option with a fuller explanation and a link to the relevant FFmpeg documentation. Localized in all four languages (IT/EN/ES/DE).
+- **Live measured received bitrate.** The SDP rarely advertises a bitrate on live RTSP (so the probe showed *n/a*); it is now computed from the actual demuxed packet sizes over a ~1s window and shown live in the Connection panel — `VCam_GetFfmpegProducerBitrate` (producer) / `GetPreviewBitrate` (preview).
+- **Active engine settings shown in the Connection table**: transport preference, hardware decode, socket timeout, RTP reorder, UDP buffer, max delay and latency cap, mirrored live from the current settings.
+
+### Changed
+- **New "real-time but robust on average" defaults.** `reorder_queue_size` 8 → **512** and UDP `buffer_size` 0 → **2 MB**, so UDP survives a high-bitrate stream (no more green bands) while `max_delay=0` + `nobuffer` + the latency cap keep it real-time. Existing `settings.json` values are preserved — the new defaults only apply to fresh installs.
+- **Preview rendering decoupled from decoding.** The decode thread's sink now only packs the latest NV12 frame into a staging buffer and signals; a dedicated render thread does the NV12→BGRA convert and the GDI blit. Previously that ~15–18 ms convert+blit ran on the decode thread and throttled the receive rate below the source's fps, building a backlog that the latency cap then dropped as progressive frame loss. The GDI stretch also moved from `HALFTONE` to the far cheaper `COLORONCOLOR`.
+- **Diagnostics tables no longer flicker.** Each refresh is batched with `BeginUpdate`/`EndUpdate` (one repaint per tick instead of one per cell), cells are only rewritten when their value actually changed, and both `ListView`s are double-buffered.
+
+### Fixed
+- Bitrate row showed *n/a* on live RTSP sources; it now reflects the measured throughput.
+
 ## [1.0.1] - 2026-07-18
 
 Maintenance release: a small UI-string fix and documentation brought in line with the FFmpeg receive engine.
@@ -91,6 +112,7 @@ First stable release. The receive pipeline is now a single, tunable FFmpeg user-
 - `PAUSED→RUNNING` transition (`SetStreamState`) returning `E_POINTER`.
 - Memory leak on Stop/Start cycle.
 
+[1.1.0]: https://github.com/andrea-greco/RealTimeWebCam/compare/1.0.1...1.1.0
 [1.0.1]: https://github.com/andrea-greco/RealTimeWebCam/compare/1.0.0...1.0.1
 [1.0.0]: https://github.com/andrea-greco/RealTimeWebCam/compare/0.2.0...1.0.0
 [0.2.0]: https://github.com/andrea-greco/RealTimeWebCam/compare/0.1.0...0.2.0

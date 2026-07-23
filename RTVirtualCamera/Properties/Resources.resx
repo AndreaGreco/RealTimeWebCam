@@ -337,4 +337,64 @@ MIT License — © Simon Mourier, Andrea Greco.</value>
   <data name="Value_NotAvailable" xml:space="preserve">
     <value>n/a</value>
   </data>
+  <data name="Settings_UdpBufferSize" xml:space="preserve">
+    <value>UDP socket buffer (KB)</value>
+  </data>
+  <data name="Settings_MaxDelay" xml:space="preserve">
+    <value>Max delay (ms)</value>
+  </data>
+  <data name="Menu_Guide" xml:space="preserve">
+    <value>Guide</value>
+  </data>
+  <data name="Guide_Title" xml:space="preserve">
+    <value>Engine options guide</value>
+  </data>
+  <data name="Guide_Intro" xml:space="preserve">
+    <value>How each FFmpeg receive option affects latency and reliability. The defaults favor real-time while staying robust on most sources; raise the buffers if you see green bands or stutter on a high-bitrate stream.</value>
+  </data>
+  <data name="Guide_FfmpegDocLink" xml:space="preserve">
+    <value>FFmpeg documentation</value>
+  </data>
+  <data name="OptHelp_transport_Tip" xml:space="preserve">
+    <value>How RTP is carried: Auto (UDP, TCP fallback), UDP only, or TCP only.</value>
+  </data>
+  <data name="OptHelp_transport_Body" xml:space="preserve">
+    <value>Chooses the RTSP lower transport. UDP has the lowest latency but drops packets on a busy or lossy network, which shows up as green bands and corruption. TCP is reliable (no packet loss) at the cost of a little latency — the best choice for high-bitrate streams or networks you don't control. Auto starts on UDP and falls back to TCP only if no frame arrives at all.</value>
+  </data>
+  <data name="OptHelp_hwdecode_Tip" xml:space="preserve">
+    <value>Decode on the GPU (d3d11va) when available; off forces software decoding.</value>
+  </data>
+  <data name="OptHelp_hwdecode_Body" xml:space="preserve">
+    <value>When on, H.264/H.265 are decoded on the GPU (Direct3D 11 / DXVA), which is much cheaper for high-resolution streams and keeps latency down. Turn it off if a GPU driver misbehaves (artifacts, crashes) to fall back to CPU decoding.</value>
+  </data>
+  <data name="OptHelp_sockettimeout_Tip" xml:space="preserve">
+    <value>How long to wait on the RTSP socket before giving up (milliseconds).</value>
+  </data>
+  <data name="OptHelp_sockettimeout_Body" xml:space="preserve">
+    <value>Maps to FFmpeg's stimeout. Bounds how long a stalled connection blocks before the engine retries, and how long a dead UDP attempt waits before Auto falls back to TCP. Too low can abort a slow-but-alive source; too high makes a truly dead source hang longer before reconnecting.</value>
+  </data>
+  <data name="OptHelp_reorder_Tip" xml:space="preserve">
+    <value>How many out-of-order RTP packets to hold before dropping them.</value>
+  </data>
+  <data name="OptHelp_reorder_Body" xml:space="preserve">
+    <value>Maps to FFmpeg's reorder_queue_size. On UDP, packets can arrive out of order; a larger window lets the engine wait for them instead of dropping them, which is what prevents missing slices (green bands) on a high-bitrate stream. Set too low it shreds a busy stream; very high can add latency during loss. Irrelevant on TCP.</value>
+  </data>
+  <data name="OptHelp_buffersize_Tip" xml:space="preserve">
+    <value>Size of the UDP receive buffer, in KB. Larger absorbs high-bitrate bursts.</value>
+  </data>
+  <data name="OptHelp_buffersize_Body" xml:space="preserve">
+    <value>Maps to FFmpeg's buffer_size (the socket receive buffer). A full 1080p frame of incompressible video arrives as a burst of many packets; if the buffer is too small the OS silently drops the overflow, causing green bands. A few MB absorbs the burst. This — together with the reorder window — is the main fix for packet loss on UDP even when bandwidth is plentiful. 0 leaves the system default.</value>
+  </data>
+  <data name="OptHelp_maxdelay_Tip" xml:space="preserve">
+    <value>Extra time the demuxer may wait to reorder packets (milliseconds).</value>
+  </data>
+  <data name="OptHelp_maxdelay_Body" xml:space="preserve">
+    <value>Maps to FFmpeg's max_delay. 0 emits each frame as soon as it's decoded (lowest latency). A small non-zero value gives the reorder buffer time to wait for late packets, trading a little latency for smoother playback on a jittery network.</value>
+  </data>
+  <data name="OptHelp_latencycap_Tip" xml:space="preserve">
+    <value>If the picture falls this far behind live, jump back to live (milliseconds).</value>
+  </data>
+  <data name="OptHelp_latencycap_Body" xml:space="preserve">
+    <value>This is our own resync-to-live guard, not an FFmpeg option. If a decoded frame is more than this many milliseconds behind real time (a slow decoder, or a bursty source building a backlog), the engine drops to the next keyframe to catch up. Lower keeps latency tight but causes more visible jumps; higher is smoother but laggier.</value>
+  </data>
 </root>

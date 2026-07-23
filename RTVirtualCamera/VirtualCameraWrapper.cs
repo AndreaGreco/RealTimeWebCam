@@ -168,11 +168,21 @@ namespace RTVirtualCamera
         private static extern void VCam_SetReorderQueue(int packets);
 
         [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
+        private static extern void VCam_SetUdpBufferSize(int bytes);
+
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
+        private static extern void VCam_SetMaxDelayMs(int ms);
+
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
         private static extern void VCam_SetLatencyCapMs(int ms);
 
         // Live transport actually carrying the producer's frames: 0 none, 1 UDP, 2 TCP.
         [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
         private static extern int VCam_GetActiveTransport();
+
+        // Measured received video bitrate in bits/s (0 until measured / disconnected).
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
+        private static extern long VCam_GetFfmpegProducerBitrate();
 
         /// <summary>
         /// Pushes all engine options from Settings.Current into RTCamNative. Static because
@@ -187,6 +197,8 @@ namespace RTVirtualCamera
             VCam_SetHardwareDecode(s.HardwareDecode ? 1 : 0);
             VCam_SetSocketTimeoutMs(s.SocketTimeoutMs);
             VCam_SetReorderQueue(s.ReorderQueueSize);
+            VCam_SetUdpBufferSize(s.UdpBufferSize);
+            VCam_SetMaxDelayMs(s.MaxDelayMs);
             VCam_SetLatencyCapMs(s.LatencyCapMs);
         }
 
@@ -206,6 +218,13 @@ namespace RTVirtualCamera
         {
             if (disposed) return null;
             return TransportLabel(VCam_GetActiveTransport());
+        }
+
+        /// <summary>Measured received video bitrate in bits/s (0 if unknown/disconnected).</summary>
+        public long GetBitrateBps()
+        {
+            if (disposed) return 0;
+            return VCam_GetFfmpegProducerBitrate();
         }
 
         private IntPtr vcamHandle;

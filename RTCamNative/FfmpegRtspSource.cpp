@@ -58,7 +58,9 @@ namespace
 	std::atomic<int>  g_transportPref{ (int)RtspTransport::Auto };
 	std::atomic<bool> g_hwDecodeEnabled{ true };
 	std::atomic<int>  g_socketTimeoutMs{ 5000 };
-	std::atomic<int>  g_reorderQueue{ 8 };
+	std::atomic<int>  g_reorderQueue{ 512 };
+	std::atomic<int>  g_udpBufferSize{ 2 * 1024 * 1024 }; // 2 MB
+	std::atomic<int>  g_maxDelayMs{ 0 };
 	std::atomic<int>  g_maxLagMs{ 350 };
 
 	// The rtsp_transport value libav wants for the current preference. "udp+tcp" is a
@@ -106,6 +108,10 @@ void FfmpegRtspSource::SetSocketTimeoutMs(int ms) { g_socketTimeoutMs.store(ms >
 int  FfmpegRtspSource::SocketTimeoutMs() { return g_socketTimeoutMs.load(); }
 void FfmpegRtspSource::SetReorderQueueSize(int packets) { g_reorderQueue.store(packets < 0 ? 0 : packets); }
 int  FfmpegRtspSource::ReorderQueueSize() { return g_reorderQueue.load(); }
+void FfmpegRtspSource::SetUdpBufferSize(int bytes) { g_udpBufferSize.store(bytes < 0 ? 0 : bytes); }
+int  FfmpegRtspSource::UdpBufferSize() { return g_udpBufferSize.load(); }
+void FfmpegRtspSource::SetMaxDelayMs(int ms) { g_maxDelayMs.store(ms < 0 ? 0 : ms); }
+int  FfmpegRtspSource::MaxDelayMs() { return g_maxDelayMs.load(); }
 void FfmpegRtspSource::SetMaxLagMs(int ms) { g_maxLagMs.store(ms > 0 ? ms : 1); }
 int  FfmpegRtspSource::MaxLagMs() { return g_maxLagMs.load(); }
 
@@ -205,6 +211,7 @@ bool FfmpegRtspSource::Start(const std::wstring& rtspUrl, uint32_t targetWidth, 
 	_framesDecoded.store(0);
 	_hwActive.store(false);
 	_lastLagMs.store(0);
+	_bitrateBps.store(0);
 	_activeTransport.store(0);
 	_sink = std::move(sink);
 	avformat_network_init();
@@ -289,16 +296,23 @@ void FfmpegRtspSource::DecodeLoop(std::string url, uint32_t targetW, uint32_t ta
 		// Snapshot the user-tunable numeric options for this attempt (see the setters).
 		const std::string stimeoutUs = std::to_string((int64_t)SocketTimeoutMs() * 1000);
 		const std::string reorderQ   = std::to_string(ReorderQueueSize());
+		const std::string maxDelayUs = std::to_string((int64_t)MaxDelayMs() * 1000);
+		const int         udpBufBytes = UdpBufferSize();
+		const std::string udpBuf     = std::to_string(udpBufBytes);
 
 		AVDictionary* opts = nullptr;
 		av_dict_set(&opts, "rtsp_transport", transportOpt, 0);
 		av_dict_set(&opts, "stimeout", stimeoutUs.c_str(), 0); // socket timeout (microseconds)
 		// --- Latency-critical demux options ---------------------------------------
 		// RTP reorder buffer: on TCP packets never reorder (harmless), but on UDP a
-		// value of 0 would drop every out-of-order packet and shred the picture. A few
-		// slots tolerate minor UDP reordering at a negligible latency cost.
+		// value of 0 would drop every out-of-order packet and shred the picture. A
+		// larger window absorbs the packet bursts of a high-bitrate stream.
 		av_dict_set(&opts, "reorder_queue_size", reorderQ.c_str(), 0);
-		av_dict_set(&opts, "max_delay", "0", 0);              // no demux reorder delay
+		// UDP receive buffer: the default socket buffer overflows on the bursts of a
+		// high-bitrate 1080p stream (green bands). 0 leaves libav's default alone.
+		if (udpBufBytes > 0)
+			av_dict_set(&opts, "buffer_size", udpBuf.c_str(), 0);
+		av_dict_set(&opts, "max_delay", maxDelayUs.c_str(), 0); // demux reorder delay (µs; 0 = none)
 		av_dict_set(&opts, "fflags", "nobuffer+discardcorrupt", 0); // don't buffer input; drop corrupt frames instead of stalling
 		av_dict_set(&opts, "flags", "low_delay", 0);          // ask the demuxer/codec for minimal delay
 		av_dict_set(&opts, "avioflags", "direct", 0);         // no read-ahead buffering on the socket
@@ -383,6 +397,11 @@ void FfmpegRtspSource::DecodeLoop(std::string url, uint32_t targetW, uint32_t ta
 		ULONGLONG wallBaseMs = 0;
 		bool skipToKeyframe = false;
 
+		// Received-bitrate meter: sum the demuxed video packet sizes over a ~1s window
+		// and publish bytes*8/elapsed. This is the real throughput (what the SDP omits).
+		int64_t   bitrateWindowBytes = 0;
+		ULONGLONG bitrateWindowStart = GetTickCount64();
+
 		// Inner loop: decode until the stream drops, errors, or we are stopped.
 		while (!_stop.load())
 		{
@@ -396,6 +415,19 @@ void FfmpegRtspSource::DecodeLoop(std::string url, uint32_t targetW, uint32_t ta
 			{
 				av_packet_unref(pkt);
 				continue;
+			}
+
+			// Bitrate meter: count this video packet, publish once per ~1s window.
+			bitrateWindowBytes += pkt->size;
+			{
+				const ULONGLONG bnow = GetTickCount64();
+				const ULONGLONG belapsed = bnow - bitrateWindowStart;
+				if (belapsed >= 1000)
+				{
+					_bitrateBps.store((int64_t)(bitrateWindowBytes * 8 * 1000 / (int64_t)belapsed));
+					bitrateWindowBytes = 0;
+					bitrateWindowStart = bnow;
+				}
 			}
 
 			// Resyncing to live: discard everything until the next keyframe, then flush.
@@ -497,6 +529,7 @@ void FfmpegRtspSource::DecodeLoop(std::string url, uint32_t targetW, uint32_t ta
 		avcodec_free_context(&cc);
 		avformat_close_input(&fmt);
 		_activeTransport.store(0); // connection dropped — no live transport
+		_bitrateBps.store(0);      // no throughput while disconnected
 
 		if (!_stop.load()) Sleep(1000); // brief pause before reconnecting
 	}

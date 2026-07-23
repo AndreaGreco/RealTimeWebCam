@@ -41,11 +41,17 @@ namespace RTVirtualCamera
             socketTimeoutNumeric = new System.Windows.Forms.NumericUpDown();
             reorderLabel = new System.Windows.Forms.Label();
             reorderNumeric = new System.Windows.Forms.NumericUpDown();
+            bufferSizeLabel = new System.Windows.Forms.Label();
+            bufferSizeNumeric = new System.Windows.Forms.NumericUpDown();
+            maxDelayLabel = new System.Windows.Forms.Label();
+            maxDelayNumeric = new System.Windows.Forms.NumericUpDown();
             latencyCapLabel = new System.Windows.Forms.Label();
             latencyCapNumeric = new System.Windows.Forms.NumericUpDown();
             closeButton = new System.Windows.Forms.Button();
             ((System.ComponentModel.ISupportInitialize)socketTimeoutNumeric).BeginInit();
             ((System.ComponentModel.ISupportInitialize)reorderNumeric).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)bufferSizeNumeric).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)maxDelayNumeric).BeginInit();
             ((System.ComponentModel.ISupportInitialize)latencyCapNumeric).BeginInit();
             SuspendLayout();
             //
@@ -175,25 +181,65 @@ namespace RTVirtualCamera
             reorderNumeric.Size = new System.Drawing.Size(100, 23);
             reorderNumeric.TabIndex = 12;
             reorderNumeric.Minimum = new decimal(new int[] { 0, 0, 0, 0 });
-            reorderNumeric.Maximum = new decimal(new int[] { 500, 0, 0, 0 });
-            reorderNumeric.Increment = new decimal(new int[] { 1, 0, 0, 0 });
+            reorderNumeric.Maximum = new decimal(new int[] { 2000, 0, 0, 0 });
+            reorderNumeric.Increment = new decimal(new int[] { 8, 0, 0, 0 });
             reorderNumeric.ValueChanged += ReorderNumeric_ValueChanged;
+            //
+            // bufferSizeLabel
+            //
+            bufferSizeLabel.AutoSize = true;
+            bufferSizeLabel.Location = new System.Drawing.Point(20, 344);
+            bufferSizeLabel.Name = "bufferSizeLabel";
+            bufferSizeLabel.Size = new System.Drawing.Size(120, 15);
+            bufferSizeLabel.TabIndex = 13;
+            bufferSizeLabel.Text = "UDP buffer (KB)";
+            //
+            // bufferSizeNumeric
+            //
+            bufferSizeNumeric.Location = new System.Drawing.Point(220, 342);
+            bufferSizeNumeric.Name = "bufferSizeNumeric";
+            bufferSizeNumeric.Size = new System.Drawing.Size(100, 23);
+            bufferSizeNumeric.TabIndex = 14;
+            bufferSizeNumeric.Minimum = new decimal(new int[] { 0, 0, 0, 0 });
+            bufferSizeNumeric.Maximum = new decimal(new int[] { 32768, 0, 0, 0 });
+            bufferSizeNumeric.Increment = new decimal(new int[] { 256, 0, 0, 0 });
+            bufferSizeNumeric.ValueChanged += BufferSizeNumeric_ValueChanged;
+            //
+            // maxDelayLabel
+            //
+            maxDelayLabel.AutoSize = true;
+            maxDelayLabel.Location = new System.Drawing.Point(20, 376);
+            maxDelayLabel.Name = "maxDelayLabel";
+            maxDelayLabel.Size = new System.Drawing.Size(120, 15);
+            maxDelayLabel.TabIndex = 15;
+            maxDelayLabel.Text = "Max delay (ms)";
+            //
+            // maxDelayNumeric
+            //
+            maxDelayNumeric.Location = new System.Drawing.Point(220, 374);
+            maxDelayNumeric.Name = "maxDelayNumeric";
+            maxDelayNumeric.Size = new System.Drawing.Size(100, 23);
+            maxDelayNumeric.TabIndex = 16;
+            maxDelayNumeric.Minimum = new decimal(new int[] { 0, 0, 0, 0 });
+            maxDelayNumeric.Maximum = new decimal(new int[] { 2000, 0, 0, 0 });
+            maxDelayNumeric.Increment = new decimal(new int[] { 50, 0, 0, 0 });
+            maxDelayNumeric.ValueChanged += MaxDelayNumeric_ValueChanged;
             //
             // latencyCapLabel
             //
             latencyCapLabel.AutoSize = true;
-            latencyCapLabel.Location = new System.Drawing.Point(20, 344);
+            latencyCapLabel.Location = new System.Drawing.Point(20, 408);
             latencyCapLabel.Name = "latencyCapLabel";
             latencyCapLabel.Size = new System.Drawing.Size(120, 15);
-            latencyCapLabel.TabIndex = 13;
+            latencyCapLabel.TabIndex = 17;
             latencyCapLabel.Text = "Latency cap (ms)";
             //
             // latencyCapNumeric
             //
-            latencyCapNumeric.Location = new System.Drawing.Point(220, 342);
+            latencyCapNumeric.Location = new System.Drawing.Point(220, 406);
             latencyCapNumeric.Name = "latencyCapNumeric";
             latencyCapNumeric.Size = new System.Drawing.Size(100, 23);
-            latencyCapNumeric.TabIndex = 14;
+            latencyCapNumeric.TabIndex = 18;
             latencyCapNumeric.Minimum = new decimal(new int[] { 50, 0, 0, 0 });
             latencyCapNumeric.Maximum = new decimal(new int[] { 5000, 0, 0, 0 });
             latencyCapNumeric.Increment = new decimal(new int[] { 50, 0, 0, 0 });
@@ -203,10 +249,10 @@ namespace RTVirtualCamera
             //
             closeButton.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
             closeButton.DialogResult = System.Windows.Forms.DialogResult.OK;
-            closeButton.Location = new System.Drawing.Point(244, 388);
+            closeButton.Location = new System.Drawing.Point(244, 452);
             closeButton.Name = "closeButton";
             closeButton.Size = new System.Drawing.Size(76, 26);
-            closeButton.TabIndex = 15;
+            closeButton.TabIndex = 19;
             closeButton.Text = "Close";
             closeButton.UseVisualStyleBackColor = true;
             //
@@ -216,10 +262,14 @@ namespace RTVirtualCamera
             AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             CancelButton = closeButton;
-            ClientSize = new System.Drawing.Size(340, 434);
+            ClientSize = new System.Drawing.Size(340, 498);
             Controls.Add(closeButton);
             Controls.Add(latencyCapNumeric);
             Controls.Add(latencyCapLabel);
+            Controls.Add(maxDelayNumeric);
+            Controls.Add(maxDelayLabel);
+            Controls.Add(bufferSizeNumeric);
+            Controls.Add(bufferSizeLabel);
             Controls.Add(reorderNumeric);
             Controls.Add(reorderLabel);
             Controls.Add(socketTimeoutNumeric);
@@ -244,6 +294,8 @@ namespace RTVirtualCamera
             Load += SettingsForm_Load;
             ((System.ComponentModel.ISupportInitialize)socketTimeoutNumeric).EndInit();
             ((System.ComponentModel.ISupportInitialize)reorderNumeric).EndInit();
+            ((System.ComponentModel.ISupportInitialize)bufferSizeNumeric).EndInit();
+            ((System.ComponentModel.ISupportInitialize)maxDelayNumeric).EndInit();
             ((System.ComponentModel.ISupportInitialize)latencyCapNumeric).EndInit();
             ResumeLayout(false);
             PerformLayout();
@@ -264,6 +316,10 @@ namespace RTVirtualCamera
         private System.Windows.Forms.NumericUpDown socketTimeoutNumeric;
         private System.Windows.Forms.Label reorderLabel;
         private System.Windows.Forms.NumericUpDown reorderNumeric;
+        private System.Windows.Forms.Label bufferSizeLabel;
+        private System.Windows.Forms.NumericUpDown bufferSizeNumeric;
+        private System.Windows.Forms.Label maxDelayLabel;
+        private System.Windows.Forms.NumericUpDown maxDelayNumeric;
         private System.Windows.Forms.Label latencyCapLabel;
         private System.Windows.Forms.NumericUpDown latencyCapNumeric;
         private System.Windows.Forms.Button closeButton;

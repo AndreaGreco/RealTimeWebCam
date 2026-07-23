@@ -1,10 +1,21 @@
 using System;
+using System.Drawing;
 using System.Windows.Forms;
 
 namespace RTVirtualCamera
 {
     public partial class SettingsForm : Form
     {
+        // Shared tooltip for every "?" help glyph. Longer AutoPopDelay because the tips
+        // are full sentences, not one-word hints.
+        private readonly ToolTip _helpTip = new ToolTip
+        {
+            InitialDelay = 300,
+            ReshowDelay = 100,
+            AutoPopDelay = 20000,
+            ShowAlways = true,
+        };
+
         public SettingsForm()
         {
             InitializeComponent();
@@ -105,6 +116,19 @@ namespace RTVirtualCamera
             SaveAndApply();
         }
 
+        // The control shows kilobytes; the setting is stored in bytes.
+        private void BufferSizeNumeric_ValueChanged(object sender, EventArgs e)
+        {
+            Settings.Current.UdpBufferSize = (int)bufferSizeNumeric.Value * 1024;
+            SaveAndApply();
+        }
+
+        private void MaxDelayNumeric_ValueChanged(object sender, EventArgs e)
+        {
+            Settings.Current.MaxDelayMs = (int)maxDelayNumeric.Value;
+            SaveAndApply();
+        }
+
         private void LatencyCapNumeric_ValueChanged(object sender, EventArgs e)
         {
             Settings.Current.LatencyCapMs = (int)latencyCapNumeric.Value;
@@ -132,6 +156,8 @@ namespace RTVirtualCamera
             HardwareDecodeCheckBox.Text = AppStrings.Get("Settings_HardwareDecode");
             socketTimeoutLabel.Text = AppStrings.Get("Settings_SocketTimeout");
             reorderLabel.Text = AppStrings.Get("Settings_ReorderQueue");
+            bufferSizeLabel.Text = AppStrings.Get("Settings_UdpBufferSize");
+            maxDelayLabel.Text = AppStrings.Get("Settings_MaxDelay");
             latencyCapLabel.Text = AppStrings.Get("Settings_LatencyCap");
             closeButton.Text = AppStrings.Get("Button_Close");
 
@@ -189,7 +215,56 @@ namespace RTVirtualCamera
             // idempotent and shows no dialog, unlike the language combo).
             socketTimeoutNumeric.Value = Clamp(Settings.Current.SocketTimeoutMs, socketTimeoutNumeric);
             reorderNumeric.Value = Clamp(Settings.Current.ReorderQueueSize, reorderNumeric);
+            bufferSizeNumeric.Value = Clamp(Settings.Current.UdpBufferSize / 1024, bufferSizeNumeric);
+            maxDelayNumeric.Value = Clamp(Settings.Current.MaxDelayMs, maxDelayNumeric);
             latencyCapNumeric.Value = Clamp(Settings.Current.LatencyCapMs, latencyCapNumeric);
+
+            // "?" help glyphs next to each engine option (built after the labels have
+            // their final localized text, so anchor.Right is accurate). Hover shows a
+            // short tip; click opens the guide anchored to that option's section.
+            AddHelpGlyph(transportLabel, "transport");
+            AddHelpGlyph(HardwareDecodeCheckBox, "hwdecode");
+            AddHelpGlyph(socketTimeoutLabel, "sockettimeout");
+            AddHelpGlyph(reorderLabel, "reorder");
+            AddHelpGlyph(bufferSizeLabel, "buffersize");
+            AddHelpGlyph(maxDelayLabel, "maxdelay");
+            AddHelpGlyph(latencyCapLabel, "latencycap");
+        }
+
+        // Creates a clickable "?" glyph immediately to the right of an option's label.
+        private void AddHelpGlyph(Control anchor, string optionKey)
+        {
+            EngineOptionHelp help = EngineOptionHelp.Find(optionKey);
+            if (help == null)
+            {
+                return;
+            }
+
+            Label glyph = new Label
+            {
+                AutoSize = true,
+                Text = "(?)",
+                Font = new Font(Font, FontStyle.Bold),
+                ForeColor = Color.FromArgb(0, 102, 204),
+                Cursor = Cursors.Hand,
+                Location = new Point(anchor.Right + 4, anchor.Top),
+                Tag = optionKey,
+            };
+            _helpTip.SetToolTip(glyph, AppStrings.Get(help.TipKey));
+            glyph.Click += HelpGlyph_Click;
+            Controls.Add(glyph);
+            glyph.BringToFront();
+        }
+
+        private void HelpGlyph_Click(object sender, EventArgs e)
+        {
+            if (sender is Control c && c.Tag is string key)
+            {
+                using (EngineGuideForm guide = new EngineGuideForm { InitialOptionKey = key })
+                {
+                    guide.ShowDialog(this);
+                }
+            }
         }
 
         private void AutoStartCheckBox_CheckedChanged(object sender, EventArgs e)
