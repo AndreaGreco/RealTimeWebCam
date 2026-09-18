@@ -38,6 +38,70 @@ The script copies the DLL to `C:\Projects\RTVirtualCamera` before registering (L
 
 ---
 
+## Create an RTSP source from a USB webcam
+
+If you don't have an RTSP camera but want to test with a plain **USB webcam** (e.g. on a Linux mini-PC / Raspberry Pi), the proven recipe is **MediaMTX + FFmpeg** via Docker.
+
+> 💡 **Encode for low latency at the source.** The app receives and decodes the stream with **FFmpeg** in its own process, so it reassembles frames robustly — the old requirement to force a single H.264 slice per frame is **gone** (multi-slice streams now decode correctly, exactly as `ffplay` always did). What still matters for a real-time picture is encoding without buffering: `-tune zerolatency`, a baseline profile (no B-frames), and a keyframe roughly every second. The recipe below already does all of this.
+
+### docker-compose
+
+```yaml
+services:
+  rtsp-server:
+    image: bluenviron/mediamtx
+    restart: unless-stopped
+    ports:
+      - "8554:8554"   # RTSP
+      - "1935:1935"   # RTMP (optional)
+      - "8888:8888"   # HLS (optional)
+    environment:
+      - MTX_PROTOCOLS=tcp
+
+  webcam:
+    image: linuxserver/ffmpeg:latest
+    restart: unless-stopped
+    depends_on:
+      - rtsp-server
+    devices:
+      - /dev/video0:/dev/video0
+    command: >-
+      -fflags nobuffer -flags low_delay -probesize 32 -analyzeduration 0
+      -f v4l2 -input_format mjpeg -framerate 30 -video_size 1280x720
+      -thread_queue_size 512 -i /dev/video0
+      -c:v libx264 -preset ultrafast -tune zerolatency
+      -x264-params sliced-threads=0
+      -profile:v baseline -pix_fmt yuv420p
+      -g 30 -sc_threshold 0
+      -crf 23 -maxrate 6000k -bufsize 2000k
+      -an
+      -f rtsp -rtsp_transport tcp
+      rtsp://rtsp-server:8554/webcam
+```
+
+The URL to enter in the app will be `rtsp://<server-IP>:8554/webcam`.
+
+### Golden rules for low latency
+
+- **`-tune zerolatency` + `-profile:v baseline`** — no B-frames, no lookahead.
+- **One honest framerate.** No `-vf fps=N` upsampling from a capture running at a different rate: it invents synthetic timestamps and adds jitter. Capture and stream at the same real rate (if the webcam only does 15 fps, stream 15).
+- **`-g 30`** — a keyframe every second (fast recovery on connect and after packet loss).
+- **`-x264-params sliced-threads=0`** — no longer required (FFmpeg reassembles multi-slice frames correctly); harmless to leave in.
+- **Transport.** `MTX_PROTOCOLS=tcp` is rock-solid on a LAN. The app itself defaults to **UDP with automatic TCP fallback** and lets you force UDP-only or TCP-only in *Settings → Network* — the connection panel then shows which transport is actually carrying frames.
+
+### Verify
+
+On the server, before moving to Windows:
+
+```bash
+ffplay -fflags nobuffer -flags low_delay -framedrop -rtsp_transport tcp \
+       rtsp://localhost:8554/webcam
+```
+
+It should be practically real-time and report the expected framerate (e.g. `30 fps`).
+
+---
+
 ## Architecture
 
 ```
