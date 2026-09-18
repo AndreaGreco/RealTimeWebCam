@@ -80,15 +80,15 @@ namespace RTVirtualCamera
             resources.ApplyResources(fileToolStripMenuItem, "fileToolStripMenuItem");
             fileToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { clearHistoryToolStripMenuItem, fileMenuSeparator, exitToolStripMenuItem });
             fileToolStripMenuItem.Name = "fileToolStripMenuItem";
-            //
+            // 
             // clearHistoryToolStripMenuItem
-            //
+            // 
             resources.ApplyResources(clearHistoryToolStripMenuItem, "clearHistoryToolStripMenuItem");
             clearHistoryToolStripMenuItem.Name = "clearHistoryToolStripMenuItem";
             clearHistoryToolStripMenuItem.Click += clearHistoryToolStripMenuItem_Click;
-            //
+            // 
             // fileMenuSeparator
-            //
+            // 
             resources.ApplyResources(fileMenuSeparator, "fileMenuSeparator");
             fileMenuSeparator.Name = "fileMenuSeparator";
             // 
@@ -159,14 +159,10 @@ namespace RTVirtualCamera
             // pathTextBox
             // 
             resources.ApplyResources(pathTextBox, "pathTextBox");
-            pathTextBox.Name = "pathTextBox";
-            pathTextBox.FormattingEnabled = true;
-            // Editable field + browsable history dropdown, with inline type-ahead over the
-            // stored URLs (like a browser address bar). Items are filled at runtime from
-            // Settings.RecentUrls (see MainForm.PopulateUrlHistory).
-            pathTextBox.DropDownStyle = ComboBoxStyle.DropDown;
             pathTextBox.AutoCompleteMode = AutoCompleteMode.SuggestAppend;
             pathTextBox.AutoCompleteSource = AutoCompleteSource.ListItems;
+            pathTextBox.FormattingEnabled = true;
+            pathTextBox.Name = "pathTextBox";
             // 
             // playButton
             // 

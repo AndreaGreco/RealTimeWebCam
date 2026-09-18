@@ -121,10 +121,10 @@
     <value>RT Virtual Camera</value>
   </data>
   <data name="Button_StartPreview" xml:space="preserve">
-    <value>Avvia anteprima</value>
+    <value>Avvia Anteprima</value>
   </data>
   <data name="Button_StopPreview" xml:space="preserve">
-    <value>Ferma anteprima</value>
+    <value>Ferma Anteprima</value>
   </data>
   <data name="Button_Browse" xml:space="preserve">
     <value>Sfoglia</value>
@@ -420,5 +420,38 @@ Licenza MIT — © Simon Mourier, Andrea Greco.</value>
   </data>
   <data name="Wait_TimeoutIn" xml:space="preserve">
     <value>Timeout tra {0} s</value>
+  </data>
+  <data name="Menu_File" xml:space="preserve">
+    <value>File</value>
+  </data>
+  <data name="Menu_Settings" xml:space="preserve">
+    <value>Impostazioni</value>
+  </data>
+  <data name="Menu_About" xml:space="preserve">
+    <value>Info</value>
+  </data>
+  <data name="Menu_Exit" xml:space="preserve">
+    <value>Esci</value>
+  </data>
+  <data name="Header_Connection" xml:space="preserve">
+    <value>Connessione (FFmpeg)</value>
+  </data>
+  <data name="Header_Stats" xml:space="preserve">
+    <value>Statistiche live</value>
+  </data>
+  <data name="Col_Property" xml:space="preserve">
+    <value>Proprietà</value>
+  </data>
+  <data name="Col_Value" xml:space="preserve">
+    <value>Valore</value>
+  </data>
+  <data name="Col_Metric" xml:space="preserve">
+    <value>Metrica</value>
+  </data>
+  <data name="Label_Source" xml:space="preserve">
+    <value>URL RTSP:</value>
+  </data>
+  <data name="Label_Properties" xml:space="preserve">
+    <value>Proprietà:</value>
   </data>
 </root>

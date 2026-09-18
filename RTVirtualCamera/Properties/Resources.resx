@@ -421,4 +421,37 @@ MIT License — © Simon Mourier, Andrea Greco.</value>
   <data name="Wait_TimeoutIn" xml:space="preserve">
     <value>Timeout in {0} s</value>
   </data>
+  <data name="Menu_File" xml:space="preserve">
+    <value>File</value>
+  </data>
+  <data name="Menu_Settings" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="Menu_About" xml:space="preserve">
+    <value>About</value>
+  </data>
+  <data name="Menu_Exit" xml:space="preserve">
+    <value>Exit</value>
+  </data>
+  <data name="Header_Connection" xml:space="preserve">
+    <value>Connection (FFmpeg)</value>
+  </data>
+  <data name="Header_Stats" xml:space="preserve">
+    <value>Live stats</value>
+  </data>
+  <data name="Col_Property" xml:space="preserve">
+    <value>Property</value>
+  </data>
+  <data name="Col_Value" xml:space="preserve">
+    <value>Value</value>
+  </data>
+  <data name="Col_Metric" xml:space="preserve">
+    <value>Metric</value>
+  </data>
+  <data name="Label_Source" xml:space="preserve">
+    <value>RTSP URL:</value>
+  </data>
+  <data name="Label_Properties" xml:space="preserve">
+    <value>Properties:</value>
+  </data>
 </root>

@@ -315,9 +315,25 @@ namespace RTVirtualCamera
 
 
 
+        // Single place that applies every user-facing string from AppStrings (the app's own
+        // 4-language resource set), so the form itself is not localized per-culture: the layout
+        // lives only in MainForm.resx and just the translations differ. Runs from the ctor after
+        // InitializeComponent; the thread UI culture is already set in Program.Main.
         private void ApplyLocalizedTexts()
         {
             Text = AppStrings.Get("App_Title");
+
+            // Menu bar
+            fileToolStripMenuItem.Text = AppStrings.Get("Menu_File");
+            clearHistoryToolStripMenuItem.Text = AppStrings.Get("Menu_ClearHistory");
+            exitToolStripMenuItem.Text = AppStrings.Get("Menu_Exit");
+            settingsToolStripMenuItem.Text = AppStrings.Get("Menu_Settings");
+            guideToolStripMenuItem.Text = AppStrings.Get("Menu_Guide");
+            aboutToolStripMenuItem.Text = AppStrings.Get("Menu_About");
+
+            // Source row + action buttons
+            pathLabel.Text = AppStrings.Get("Label_Source");
+            label2.Text = AppStrings.Get("Label_Properties");
 
             if (startVCamButton != null)
                 startVCamButton.Text = isVCamRunning ? AppStrings.Get("Button_StopVCam") : AppStrings.Get("Button_StartVCam");
@@ -327,6 +343,14 @@ namespace RTVirtualCamera
 
             if (previewStatusLabel != null && string.IsNullOrWhiteSpace(previewStatusLabel.Text))
                 previewStatusLabel.Text = AppStrings.Get("Preview_Inactive");
+
+            // Diagnostics side panel: headers and column captions
+            connHeader.Text = AppStrings.Get("Header_Connection");
+            statsHeader.Text = AppStrings.Get("Header_Stats");
+            connPropCol.Text = AppStrings.Get("Col_Property");
+            connValueCol.Text = AppStrings.Get("Col_Value");
+            statsPropCol.Text = AppStrings.Get("Col_Metric");
+            statsValueCol.Text = AppStrings.Get("Col_Value");
         }
 
         private void VideoPanel_Resize(object sender, EventArgs e)
@@ -944,10 +968,8 @@ namespace RTVirtualCamera
             // Push the persisted FFmpeg engine options (transport, hardware decode, and
             // the numeric tuning params) into RTCamNative before any connection is opened.
             VirtualCameraWrapper.ApplyEngineSettings();
-            // Localize the Guide menu item at runtime (all 4 languages via AppStrings);
-            // the other menu items come from the form's own satellite resx.
-            guideToolStripMenuItem.Text = AppStrings.Get("Menu_Guide");
-            clearHistoryToolStripMenuItem.Text = AppStrings.Get("Menu_ClearHistory");
+            // All menu/label/header text is applied from AppStrings in ApplyLocalizedTexts
+            // (called from the ctor); the form is no longer localized per-culture.
             string lastUrl = Settings.Current.RtspURL?.ToString() ?? "rtsp://example.io:1234/webcam";
             PopulateUrlHistory(lastUrl);
             // Autostart is handled in MainForm_Shown (after the window is visible) on a
