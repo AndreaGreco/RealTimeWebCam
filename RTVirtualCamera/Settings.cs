@@ -1,5 +1,6 @@
 ﻿using RTVirtualCamera.Properties;
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Resources;
@@ -28,6 +29,26 @@ namespace RTVirtualCamera
         public string Language { get; set; } = string.Empty;
         public bool AutoStart { get; set; } = false;
         public Uri RtspURL { get; set; }
+
+        // Address-bar history: URLs (or local paths) that connected successfully, most
+        // recent first. Fed to the source ComboBox for browse + type-ahead, like a
+        // browser's URL bar. Capped at MaxRecentUrls; RtspURL stays the single "last used".
+        public const int MaxRecentUrls = 15;
+        public List<string> RecentUrls { get; set; } = new List<string>();
+
+        // Moves `url` to the front of the history (dedup, case-insensitive) and trims the
+        // tail to the cap. Call only after a source actually connects.
+        public void AddRecentUrl(string url)
+        {
+            if (string.IsNullOrWhiteSpace(url))
+                return;
+
+            url = url.Trim();
+            RecentUrls.RemoveAll(u => string.Equals(u, url, StringComparison.OrdinalIgnoreCase));
+            RecentUrls.Insert(0, url);
+            if (RecentUrls.Count > MaxRecentUrls)
+                RecentUrls.RemoveRange(MaxRecentUrls, RecentUrls.Count - MaxRecentUrls);
+        }
 
         // Diagnostic: burn a frame counter into every delivered frame (real + synthetic)
         // so the actual consumer-side frame rate is visible on the video itself.

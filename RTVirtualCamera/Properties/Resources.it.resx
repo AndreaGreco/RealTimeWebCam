@@ -346,6 +346,9 @@ Licenza MIT — © Simon Mourier, Andrea Greco.</value>
   <data name="Menu_Guide" xml:space="preserve">
     <value>Guida</value>
   </data>
+  <data name="Menu_ClearHistory" xml:space="preserve">
+    <value>Cancella cronologia indirizzi</value>
+  </data>
   <data name="Guide_Title" xml:space="preserve">
     <value>Guida alle opzioni del motore</value>
   </data>

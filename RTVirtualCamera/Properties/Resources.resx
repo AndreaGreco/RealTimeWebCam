@@ -346,6 +346,9 @@ MIT License — © Simon Mourier, Andrea Greco.</value>
   <data name="Menu_Guide" xml:space="preserve">
     <value>Guide</value>
   </data>
+  <data name="Menu_ClearHistory" xml:space="preserve">
+    <value>Clear address history</value>
+  </data>
   <data name="Guide_Title" xml:space="preserve">
     <value>Engine options guide</value>
   </data>

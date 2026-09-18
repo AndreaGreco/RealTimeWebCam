@@ -375,8 +375,7 @@ namespace RTVirtualCamera
                 if (await StartPreviewFromPathAsync())
                 {
                     savedStartVCamEnabled = true; // applied by EndBusy()
-                    Settings.Current.RtspURL = new Uri(pathTextBox.Text);
-                    Settings.Current.Save();
+                    RememberSuccessfulUrl(pathTextBox.Text);
                 }
             }
             catch (Exception ex)
@@ -503,6 +502,7 @@ namespace RTVirtualCamera
                 System.Diagnostics.Debug.WriteLine("FFmpeg producer failed to start");
 
             virtualCamera = result.Camera;
+            RememberSuccessfulUrl(config.RtspUrl);
             SetPreviewStatus(AppStrings.Get("Preview_VCamStarted"));
 
             isVCamRunning = true;
@@ -833,6 +833,50 @@ namespace RTVirtualCamera
 
         }
 
+        // Fills the source ComboBox with the persisted URL history (most recent first) and
+        // sets `current` as the shown text. AutoCompleteSource is ListItems, so the type-ahead
+        // draws from these same items — no separate collection to keep in sync.
+        private void PopulateUrlHistory(string current)
+        {
+            pathTextBox.BeginUpdate();
+            try
+            {
+                pathTextBox.Items.Clear();
+                foreach (string url in Settings.Current.RecentUrls)
+                    pathTextBox.Items.Add(url);
+            }
+            finally
+            {
+                pathTextBox.EndUpdate();
+            }
+
+            pathTextBox.Text = current;
+        }
+
+        // Records a source that just connected successfully: moves it to the front of the
+        // history, updates the single "last used" URL, persists, and refreshes the dropdown.
+        private void RememberSuccessfulUrl(string url)
+        {
+            if (string.IsNullOrWhiteSpace(url))
+                return;
+
+            Settings.Current.AddRecentUrl(url);
+            try { Settings.Current.RtspURL = new Uri(url); }
+            catch { /* not a valid Uri (e.g. odd local path) — keep the previous last-used */ }
+            Settings.Current.Save();
+
+            PopulateUrlHistory(url);
+        }
+
+        // File → Clear address history: empties the persisted URL list and the dropdown,
+        // keeping whatever is currently typed. RtspURL (autostart target) is left untouched.
+        private void clearHistoryToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            Settings.Current.RecentUrls.Clear();
+            Settings.Current.Save();
+            PopulateUrlHistory(pathTextBox.Text);
+        }
+
         private void MainForm_Load(object sender, EventArgs e)
         {
             Settings.Load();
@@ -842,7 +886,9 @@ namespace RTVirtualCamera
             // Localize the Guide menu item at runtime (all 4 languages via AppStrings);
             // the other menu items come from the form's own satellite resx.
             guideToolStripMenuItem.Text = AppStrings.Get("Menu_Guide");
-            this.pathTextBox.Text = Settings.Current.RtspURL?.ToString() ?? "rtsp://example.io:1234/webcam";
+            clearHistoryToolStripMenuItem.Text = AppStrings.Get("Menu_ClearHistory");
+            string lastUrl = Settings.Current.RtspURL?.ToString() ?? "rtsp://example.io:1234/webcam";
+            PopulateUrlHistory(lastUrl);
             // Autostart is handled in MainForm_Shown (after the window is visible) on a
             // background thread, so an unreachable source never blocks the UI thread.
         }

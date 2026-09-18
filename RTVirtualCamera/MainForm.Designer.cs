@@ -35,6 +35,8 @@ namespace RTVirtualCamera
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(MainForm));
             menuStrip1 = new MenuStrip();
             fileToolStripMenuItem = new ToolStripMenuItem();
+            clearHistoryToolStripMenuItem = new ToolStripMenuItem();
+            fileMenuSeparator = new ToolStripSeparator();
             exitToolStripMenuItem = new ToolStripMenuItem();
             settingsToolStripMenuItem = new ToolStripMenuItem();
             guideToolStripMenuItem = new ToolStripMenuItem();
@@ -45,7 +47,7 @@ namespace RTVirtualCamera
             streamProp_lbl = new Label();
             label2 = new Label();
             pathLabel = new Label();
-            pathTextBox = new TextBox();
+            pathTextBox = new ComboBox();
             playButton = new Button();
             startVCamButton = new Button();
             tableLayoutPanel1 = new TableLayoutPanel();
@@ -59,52 +61,6 @@ namespace RTVirtualCamera
             statsList = new ListView();
             statsPropCol = new ColumnHeader();
             statsValueCol = new ColumnHeader();
-            ListViewItem lvContainer = new ListViewItem(new string[] { "Contenitore", "—" });
-            lvContainer.Name = "container";
-            ListViewItem lvTransport = new ListViewItem(new string[] { "Trasporto", "—" });
-            lvTransport.Name = "transport";
-            ListViewItem lvCodec = new ListViewItem(new string[] { "Codec", "—" });
-            lvCodec.Name = "codec";
-            ListViewItem lvPixfmt = new ListViewItem(new string[] { "Formato pixel", "—" });
-            lvPixfmt.Name = "pixfmt";
-            ListViewItem lvResolution = new ListViewItem(new string[] { "Risoluzione", "—" });
-            lvResolution.Name = "resolution";
-            ListViewItem lvFps = new ListViewItem(new string[] { "Frame rate", "—" });
-            lvFps.Name = "fps";
-            ListViewItem lvBitrate = new ListViewItem(new string[] { "Bitrate", "—" });
-            lvBitrate.Name = "bitrate";
-            ListViewItem lvCfgTransport = new ListViewItem(new string[] { "Preferenza trasporto", "—" });
-            lvCfgTransport.Name = "cfgTransport";
-            ListViewItem lvCfgHw = new ListViewItem(new string[] { "Decodifica HW", "—" });
-            lvCfgHw.Name = "cfgHw";
-            ListViewItem lvCfgTimeout = new ListViewItem(new string[] { "Timeout socket", "—" });
-            lvCfgTimeout.Name = "cfgTimeout";
-            ListViewItem lvCfgReorder = new ListViewItem(new string[] { "Reorder RTP", "—" });
-            lvCfgReorder.Name = "cfgReorder";
-            ListViewItem lvCfgBuffer = new ListViewItem(new string[] { "Buffer UDP", "—" });
-            lvCfgBuffer.Name = "cfgBuffer";
-            ListViewItem lvCfgMaxDelay = new ListViewItem(new string[] { "Max delay", "—" });
-            lvCfgMaxDelay.Name = "cfgMaxDelay";
-            ListViewItem lvCfgLatency = new ListViewItem(new string[] { "Cap latenza", "—" });
-            lvCfgLatency.Name = "cfgLatency";
-            ListViewItem lvState = new ListViewItem(new string[] { "Stato", "—" });
-            lvState.Name = "state";
-            ListViewItem lvEngine = new ListViewItem(new string[] { "Motore", "—" });
-            lvEngine.Name = "engine";
-            ListViewItem lvDecode = new ListViewItem(new string[] { "Decodifica", "—" });
-            lvDecode.Name = "decode";
-            ListViewItem lvRx = new ListViewItem(new string[] { "RX (fps)", "—" });
-            lvRx.Name = "rx";
-            ListViewItem lvRender = new ListViewItem(new string[] { "Render (fps)", "—" });
-            lvRender.Name = "render";
-            ListViewItem lvDup = new ListViewItem(new string[] { "Duplicati (fps)", "—" });
-            lvDup.Name = "dup";
-            ListViewItem lvDrop = new ListViewItem(new string[] { "Persi (fps)", "—" });
-            lvDrop.Name = "drop";
-            ListViewItem lvProc = new ListViewItem(new string[] { "Elaborazione (ms)", "—" });
-            lvProc.Name = "proc";
-            ListViewItem lvDrift = new ListViewItem(new string[] { "Drift (ms)", "—" });
-            lvDrift.Name = "drift";
             menuStrip1.SuspendLayout();
             videoPanel.SuspendLayout();
             panel1.SuspendLayout();
@@ -122,8 +78,19 @@ namespace RTVirtualCamera
             // fileToolStripMenuItem
             // 
             resources.ApplyResources(fileToolStripMenuItem, "fileToolStripMenuItem");
-            fileToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { exitToolStripMenuItem });
+            fileToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] { clearHistoryToolStripMenuItem, fileMenuSeparator, exitToolStripMenuItem });
             fileToolStripMenuItem.Name = "fileToolStripMenuItem";
+            //
+            // clearHistoryToolStripMenuItem
+            //
+            resources.ApplyResources(clearHistoryToolStripMenuItem, "clearHistoryToolStripMenuItem");
+            clearHistoryToolStripMenuItem.Name = "clearHistoryToolStripMenuItem";
+            clearHistoryToolStripMenuItem.Click += clearHistoryToolStripMenuItem_Click;
+            //
+            // fileMenuSeparator
+            //
+            resources.ApplyResources(fileMenuSeparator, "fileMenuSeparator");
+            fileMenuSeparator.Name = "fileMenuSeparator";
             // 
             // exitToolStripMenuItem
             // 
@@ -136,13 +103,13 @@ namespace RTVirtualCamera
             resources.ApplyResources(settingsToolStripMenuItem, "settingsToolStripMenuItem");
             settingsToolStripMenuItem.Name = "settingsToolStripMenuItem";
             settingsToolStripMenuItem.Click += settingsToolStripMenuItem_Click;
-            //
+            // 
             // guideToolStripMenuItem
-            //
+            // 
+            resources.ApplyResources(guideToolStripMenuItem, "guideToolStripMenuItem");
             guideToolStripMenuItem.Name = "guideToolStripMenuItem";
-            guideToolStripMenuItem.Text = "Guide";
             guideToolStripMenuItem.Click += guideToolStripMenuItem_Click;
-            //
+            // 
             // aboutToolStripMenuItem
             // 
             resources.ApplyResources(aboutToolStripMenuItem, "aboutToolStripMenuItem");
@@ -193,6 +160,13 @@ namespace RTVirtualCamera
             // 
             resources.ApplyResources(pathTextBox, "pathTextBox");
             pathTextBox.Name = "pathTextBox";
+            pathTextBox.FormattingEnabled = true;
+            // Editable field + browsable history dropdown, with inline type-ahead over the
+            // stored URLs (like a browser address bar). Items are filled at runtime from
+            // Settings.RecentUrls (see MainForm.PopulateUrlHistory).
+            pathTextBox.DropDownStyle = ComboBoxStyle.DropDown;
+            pathTextBox.AutoCompleteMode = AutoCompleteMode.SuggestAppend;
+            pathTextBox.AutoCompleteSource = AutoCompleteSource.ListItems;
             // 
             // playButton
             // 
@@ -215,122 +189,82 @@ namespace RTVirtualCamera
             tableLayoutPanel1.Controls.Add(panel1, 0, 1);
             tableLayoutPanel1.Controls.Add(videoPanel, 0, 0);
             tableLayoutPanel1.Name = "tableLayoutPanel1";
-            //
+            // 
             // statsPanel
-            //
+            // 
+            resources.ApplyResources(statsPanel, "statsPanel");
             statsPanel.Controls.Add(statsLayout);
-            statsPanel.Dock = DockStyle.Right;
-            statsPanel.Location = new Point(575, 24);
             statsPanel.Name = "statsPanel";
-            statsPanel.Padding = new Padding(6, 4, 6, 6);
-            statsPanel.Size = new Size(340, 752);
-            statsPanel.TabIndex = 2;
-            //
+            // 
             // statsLayout
-            //
-            statsLayout.ColumnCount = 1;
-            statsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            // 
+            resources.ApplyResources(statsLayout, "statsLayout");
             statsLayout.Controls.Add(connHeader, 0, 0);
             statsLayout.Controls.Add(connList, 0, 1);
             statsLayout.Controls.Add(statsHeader, 0, 2);
             statsLayout.Controls.Add(statsList, 0, 3);
-            statsLayout.Dock = DockStyle.Fill;
-            statsLayout.Location = new Point(6, 4);
             statsLayout.Name = "statsLayout";
-            statsLayout.RowCount = 4;
-            statsLayout.RowStyles.Add(new RowStyle());
-            statsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
-            statsLayout.RowStyles.Add(new RowStyle());
-            statsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
-            statsLayout.Size = new Size(328, 744);
-            statsLayout.TabIndex = 0;
-            //
+            // 
             // connHeader
-            //
-            connHeader.AutoSize = true;
-            connHeader.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-            connHeader.Location = new Point(2, 8);
-            connHeader.Margin = new Padding(2, 8, 2, 2);
+            // 
+            resources.ApplyResources(connHeader, "connHeader");
             connHeader.Name = "connHeader";
-            connHeader.Size = new Size(140, 15);
-            connHeader.TabIndex = 0;
-            connHeader.Text = "Connessione (FFmpeg)";
-            //
+            // 
             // connList
-            //
+            // 
+            resources.ApplyResources(connList, "connList");
             connList.Columns.AddRange(new ColumnHeader[] { connPropCol, connValueCol });
-            connList.Dock = DockStyle.Fill;
             connList.FullRowSelect = true;
             connList.GridLines = true;
             connList.HeaderStyle = ColumnHeaderStyle.Nonclickable;
-            connList.Items.AddRange(new ListViewItem[] { lvContainer, lvTransport, lvCodec, lvPixfmt, lvResolution, lvFps, lvBitrate, lvCfgTransport, lvCfgHw, lvCfgTimeout, lvCfgReorder, lvCfgBuffer, lvCfgMaxDelay, lvCfgLatency });
-            connList.Location = new Point(3, 28);
+            connList.Items.AddRange(new ListViewItem[] { (ListViewItem)resources.GetObject("connList.Items"), (ListViewItem)resources.GetObject("connList.Items1"), (ListViewItem)resources.GetObject("connList.Items2"), (ListViewItem)resources.GetObject("connList.Items3"), (ListViewItem)resources.GetObject("connList.Items4"), (ListViewItem)resources.GetObject("connList.Items5"), (ListViewItem)resources.GetObject("connList.Items6"), (ListViewItem)resources.GetObject("connList.Items7"), (ListViewItem)resources.GetObject("connList.Items8"), (ListViewItem)resources.GetObject("connList.Items9"), (ListViewItem)resources.GetObject("connList.Items10"), (ListViewItem)resources.GetObject("connList.Items11"), (ListViewItem)resources.GetObject("connList.Items12"), (ListViewItem)resources.GetObject("connList.Items13") });
             connList.MultiSelect = false;
             connList.Name = "connList";
-            connList.Size = new Size(322, 340);
-            connList.TabIndex = 1;
             connList.UseCompatibleStateImageBehavior = false;
             connList.View = View.Details;
-            //
+            // 
             // connPropCol
-            //
-            connPropCol.Text = "Proprietà";
-            connPropCol.Width = 130;
-            //
+            // 
+            resources.ApplyResources(connPropCol, "connPropCol");
+            // 
             // connValueCol
-            //
-            connValueCol.Text = "Valore";
-            connValueCol.Width = 178;
-            //
+            // 
+            resources.ApplyResources(connValueCol, "connValueCol");
+            // 
             // statsHeader
-            //
-            statsHeader.AutoSize = true;
-            statsHeader.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-            statsHeader.Location = new Point(2, 379);
-            statsHeader.Margin = new Padding(2, 8, 2, 2);
+            // 
+            resources.ApplyResources(statsHeader, "statsHeader");
             statsHeader.Name = "statsHeader";
-            statsHeader.Size = new Size(96, 15);
-            statsHeader.TabIndex = 2;
-            statsHeader.Text = "Statistiche live";
-            //
+            // 
             // statsList
-            //
+            // 
+            resources.ApplyResources(statsList, "statsList");
             statsList.Columns.AddRange(new ColumnHeader[] { statsPropCol, statsValueCol });
-            statsList.Dock = DockStyle.Fill;
             statsList.FullRowSelect = true;
             statsList.GridLines = true;
             statsList.HeaderStyle = ColumnHeaderStyle.Nonclickable;
-            statsList.Items.AddRange(new ListViewItem[] { lvState, lvEngine, lvDecode, lvRx, lvRender, lvDup, lvDrop, lvProc, lvDrift });
-            statsList.Location = new Point(3, 399);
+            statsList.Items.AddRange(new ListViewItem[] { (ListViewItem)resources.GetObject("statsList.Items"), (ListViewItem)resources.GetObject("statsList.Items1"), (ListViewItem)resources.GetObject("statsList.Items2"), (ListViewItem)resources.GetObject("statsList.Items3"), (ListViewItem)resources.GetObject("statsList.Items4"), (ListViewItem)resources.GetObject("statsList.Items5"), (ListViewItem)resources.GetObject("statsList.Items6"), (ListViewItem)resources.GetObject("statsList.Items7"), (ListViewItem)resources.GetObject("statsList.Items8") });
             statsList.MultiSelect = false;
             statsList.Name = "statsList";
-            statsList.Size = new Size(322, 342);
-            statsList.TabIndex = 3;
             statsList.UseCompatibleStateImageBehavior = false;
             statsList.View = View.Details;
-            //
+            // 
             // statsPropCol
-            //
-            statsPropCol.Text = "Metrica";
-            statsPropCol.Width = 130;
-            //
+            // 
+            resources.ApplyResources(statsPropCol, "statsPropCol");
+            // 
             // statsValueCol
-            //
-            statsValueCol.Text = "Valore";
-            statsValueCol.Width = 178;
-            //
+            // 
+            resources.ApplyResources(statsValueCol, "statsValueCol");
+            // 
             // MainForm
-            //
+            // 
             resources.ApplyResources(this, "$this");
             AutoScaleMode = AutoScaleMode.Font;
-            // Dock priority is by ascending child index: menuStrip (added last, top,
-            // full width) > statsPanel (right sidebar, below the menu) > tableLayoutPanel1
-            // (added first, fills the remaining area). Keep this add order.
             Controls.Add(tableLayoutPanel1);
             Controls.Add(statsPanel);
             Controls.Add(menuStrip1);
             MainMenuStrip = menuStrip1;
-            MinimumSize = new Size(940, 560);
             Name = "MainForm";
             Load += MainForm_Load;
             menuStrip1.ResumeLayout(false);
@@ -339,9 +273,9 @@ namespace RTVirtualCamera
             panel1.ResumeLayout(false);
             panel1.PerformLayout();
             tableLayoutPanel1.ResumeLayout(false);
+            statsPanel.ResumeLayout(false);
             statsLayout.ResumeLayout(false);
             statsLayout.PerformLayout();
-            statsPanel.ResumeLayout(false);
             ResumeLayout(false);
             PerformLayout();
 
@@ -354,13 +288,15 @@ namespace RTVirtualCamera
         private ToolStripMenuItem guideToolStripMenuItem;
         private ToolStripMenuItem aboutToolStripMenuItem;
         private ToolStripMenuItem exitToolStripMenuItem;
+        private ToolStripMenuItem clearHistoryToolStripMenuItem;
+        private ToolStripSeparator fileMenuSeparator;
         private Panel videoPanel;
         private Label previewStatusLabel;
         private Panel panel1;
         private Label streamProp_lbl;
         private Label label2;
         private Label pathLabel;
-        private TextBox pathTextBox;
+        private ComboBox pathTextBox;
         private Button playButton;
         private Button startVCamButton;
         private TableLayoutPanel tableLayoutPanel1;

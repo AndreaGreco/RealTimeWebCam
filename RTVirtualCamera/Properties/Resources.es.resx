@@ -337,6 +337,9 @@ Licencia MIT — © Simon Mourier, Andrea Greco.</value>
   <data name="Menu_Guide" xml:space="preserve">
     <value>Guía</value>
   </data>
+  <data name="Menu_ClearHistory" xml:space="preserve">
+    <value>Borrar historial de direcciones</value>
+  </data>
   <data name="Guide_Title" xml:space="preserve">
     <value>Guía de opciones del motor</value>
   </data>
