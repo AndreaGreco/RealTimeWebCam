@@ -14,14 +14,10 @@
 
 </div>
 
-<!-- TODO screenshot: add docs/images/screenshot-main.png (main window with live preview
-     and the diagnostics panels) and docs/images/demo.gif (app → RTSP connect → camera
-     picked in Zoom), then replace this comment with:
-
 <p align="center">
-  <img src="docs/images/demo.gif" alt="RealTimeWebCam in action" width="720">
+  <video src="https://github.com/user-attachments/assets/a57b0740-eda5-4500-aeb1-e71f141942c0"
+         controls autoplay loop muted playsinline width="720"></video>
 </p>
--->
 
 ---
 
