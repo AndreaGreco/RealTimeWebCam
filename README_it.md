@@ -14,7 +14,10 @@
 
 </div>
 
-<!-- TODO screenshot: vedi la nota equivalente in README.md -->
+<p align="center">
+  <video src="https://github.com/user-attachments/assets/a57b0740-eda5-4500-aeb1-e71f141942c0"
+         controls autoplay loop muted playsinline width="720"></video>
+</p>
 
 ---
 
