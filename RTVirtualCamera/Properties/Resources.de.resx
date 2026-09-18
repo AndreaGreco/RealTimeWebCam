@@ -123,6 +123,9 @@
   <data name="Button_StartPreview" xml:space="preserve">
     <value>Vorschau starten</value>
   </data>
+  <data name="Button_StopPreview" xml:space="preserve">
+    <value>Vorschau stoppen</value>
+  </data>
   <data name="Button_Browse" xml:space="preserve">
     <value>Durchsuchen</value>
   </data>

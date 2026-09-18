@@ -14,6 +14,10 @@ namespace RTVirtualCamera
         private VideoPlayerWrapper videoPlayer;
         private VirtualCameraWrapper virtualCamera;
         private bool isVCamRunning = false;
+        // True while the preview decode is live on videoPanel. Drives the preview button's
+        // toggle label (Start/Stop Preview); mutually exclusive with isVCamRunning because
+        // the preview and the virtual-camera producer share the single RTSP decode core.
+        private bool isPreviewRunning = false;
         private StreamInfo streamInfo;
 
         // Live diagnostics timer for the side panel. The panel itself (statsPanel with
@@ -176,17 +180,31 @@ namespace RTVirtualCamera
             startVCamButton.Enabled = false;
         }
 
-        // Leaves a busy transition. playButton is always re-enabled; startVCamButton is
-        // restored to whatever the handler left in savedStartVCamEnabled (a successful
-        // start/stop sets it to true before this runs).
+        // Leaves a busy transition. startVCamButton is restored to whatever the handler left
+        // in savedStartVCamEnabled (a successful start/stop sets it to true before this runs);
+        // the preview button's label and enabled state are reconciled from the current
+        // preview/vcam state by RefreshActionButtons.
         private void EndBusy()
         {
             if (IsDisposed)
                 return;
             isBusy = false;
             UseWaitCursor = false;
-            playButton.Enabled = true;
             startVCamButton.Enabled = savedStartVCamEnabled;
+            RefreshActionButtons();
+        }
+
+        // Reconciles the preview button with the resting state after a transition. The button
+        // is a toggle: its label is Start/Stop Preview depending on isPreviewRunning, and it is
+        // disabled entirely while the virtual camera is running — the producer owns the single
+        // RTSP decode core, so a preview can never run alongside it. Not called while isBusy;
+        // BeginBusy/EndBusy own the buttons during a transition.
+        private void RefreshActionButtons()
+        {
+            playButton.Text = isPreviewRunning
+                ? AppStrings.Get("Button_StopPreview")
+                : AppStrings.Get("Button_StartPreview");
+            playButton.Enabled = !isVCamRunning;
         }
 
         // Shows the modal wait dialog while `work` runs on its worker thread, and returns once
@@ -304,6 +322,9 @@ namespace RTVirtualCamera
             if (startVCamButton != null)
                 startVCamButton.Text = isVCamRunning ? AppStrings.Get("Button_StopVCam") : AppStrings.Get("Button_StartVCam");
 
+            if (playButton != null)
+                playButton.Text = isPreviewRunning ? AppStrings.Get("Button_StopPreview") : AppStrings.Get("Button_StartPreview");
+
             if (previewStatusLabel != null && string.IsNullOrWhiteSpace(previewStatusLabel.Text))
                 previewStatusLabel.Text = AppStrings.Get("Preview_Inactive");
         }
@@ -351,6 +372,23 @@ namespace RTVirtualCamera
 
         private async void PlayButton_Click(object sender, EventArgs e)
         {
+            // Toggle: a running preview is stopped (and the panel goes black); otherwise the
+            // source is validated and the preview started. The button is disabled while the
+            // virtual camera runs, so this handler never fires in that state.
+            if (isPreviewRunning)
+            {
+                BeginBusy();
+                try
+                {
+                    await StopPreviewAsync();
+                }
+                finally
+                {
+                    EndBusy();
+                }
+                return;
+            }
+
             if (string.IsNullOrWhiteSpace(pathTextBox.Text))
             {
                 ShowFriendlyError(AppStrings.Get("Source_Missing_Title"), AppStrings.Get("Source_SelectPrompt"));
@@ -506,6 +544,7 @@ namespace RTVirtualCamera
             SetPreviewStatus(AppStrings.Get("Preview_VCamStarted"));
 
             isVCamRunning = true;
+            isPreviewRunning = false; // the worker stopped the preview when the producer started
             startVCamButton.Text = AppStrings.Get("Button_StopVCam");
             startVCamButton.BackColor = Color.LightCoral;
             savedStartVCamEnabled = true; // applied by EndBusy()
@@ -547,6 +586,7 @@ namespace RTVirtualCamera
             }
             else
             {
+                isPreviewRunning = false;
                 SetPreviewStatus(AppStrings.Get("Preview_Inactive"));
             }
 
@@ -630,6 +670,7 @@ namespace RTVirtualCamera
 
             if (result.Stage == PreviewStartStage.InitFailed)
             {
+                isPreviewRunning = false;
                 ShowFriendlyError(
                     AppStrings.Get("Preview_OpenFail_Title"),
                     AppStrings.Get("Preview_OpenFail_Message"),
@@ -639,6 +680,7 @@ namespace RTVirtualCamera
 
             if (result.Stage == PreviewStartStage.PlayFailed)
             {
+                isPreviewRunning = false;
                 ShowFriendlyError(
                     AppStrings.Get("Preview_PlayFail_Title"),
                     AppStrings.Get("Preview_PlayFail_Message"),
@@ -647,7 +689,26 @@ namespace RTVirtualCamera
             }
 
             ApplyStreamInfo(result.Streams);
+            isPreviewRunning = true;
             return true;
+        }
+
+        // Stops a running preview (invoked by the preview button's toggle). The decode thread
+        // join runs on a worker thread; afterwards the panel is forced black with the "preview
+        // not active" status so no leftover frame lingers on the GDI surface.
+        private async Task StopPreviewAsync()
+        {
+            Task stopTask = Task.Run(delegate ()
+            {
+                try { videoPlayer.Stop(); }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine("Error stopping preview: " + ex.Message); }
+            });
+
+            RunWaitDialog(AppStrings.Get("Wait_Stopping"), 0, stopTask);
+            await stopTask;
+
+            isPreviewRunning = false;
+            SetPreviewStatus(AppStrings.Get("Preview_Inactive"));
         }
 
         private void SetPreviewStatus(string message)

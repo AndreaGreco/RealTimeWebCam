@@ -123,6 +123,9 @@
   <data name="Button_StartPreview" xml:space="preserve">
     <value>Avvia anteprima</value>
   </data>
+  <data name="Button_StopPreview" xml:space="preserve">
+    <value>Ferma anteprima</value>
+  </data>
   <data name="Button_Browse" xml:space="preserve">
     <value>Sfoglia</value>
   </data>
