@@ -73,65 +73,11 @@ Per disinstallare: *App e funzionalità* di Windows, oppure ri-esegui l'MSI.
 
 ## Configurare la sorgente RTSP
 
-Se la tua telecamera IP espone già RTSP, ti basta il suo URL (es. `rtsp://192.168.1.10:554/stream`). Se invece vuoi trasformare una **webcam USB** (es. su un mini-PC Linux/Raspberry) in una sorgente RTSP, lo schema collaudato è **MediaMTX + FFmpeg** via Docker.
+Se la tua telecamera parla già RTSP — la maggior parte delle telecamere IP e degli NVR lo fa — ti basta questo: trova l'URL nel manuale o nella web UI della telecamera (es. `rtsp://192.168.1.10:554/stream`) e incollalo nell'app. Tutto qui, passa a [Usare l'applicazione](#usare-lapplicazione).
 
-> 💡 **Codifica a bassa latenza alla sorgente.** L'app riceve e decodifica lo stream con **FFmpeg** nel proprio processo, quindi riassembla i frame in modo robusto — il vecchio vincolo di forzare un solo slice H.264 per frame **non serve più** (gli stream multi-slice ora si decodificano correttamente, esattamente come faceva da sempre `ffplay`). Ciò che conta ancora per un'immagine in tempo reale è codificare senza buffering: `-tune zerolatency`, un profilo baseline (niente B-frame) e un keyframe circa ogni secondo. La ricetta qui sotto fa già tutto questo.
+> 💡 **Consiglio di tuning.** Se la web UI della telecamera permette di configurare l'encoder video, alcune impostazioni fanno una vera differenza per un'immagine fluida e a bassa latenza: attiva la codifica **zero-latency / low-delay**, usa un **profilo baseline** (niente B-frame), tieni corto il **GOP / intervallo dei keyframe** (circa 1 secondo) e trasmetti al framerate reale della telecamera, non a uno "gonfiato" via upsampling. Sul lato ricezione, le **Impostazioni** dell'app permettono di regolare il trasporto RTSP (Auto/UDP/TCP), la decodifica hardware e il cap di latenza — forza **TCP** se il pannello di connessione mostra che la sorgente perde frame.
 
-### docker-compose
-
-```yaml
-services:
-  rtsp-server:
-    image: bluenviron/mediamtx
-    restart: unless-stopped
-    ports:
-      - "8554:8554"   # RTSP
-      - "1935:1935"   # RTMP (opzionale)
-      - "8888:8888"   # HLS (opzionale)
-    environment:
-      - MTX_PROTOCOLS=tcp
-
-  webcam:
-    image: linuxserver/ffmpeg:latest
-    restart: unless-stopped
-    depends_on:
-      - rtsp-server
-    devices:
-      - /dev/video0:/dev/video0
-    command: >-
-      -fflags nobuffer -flags low_delay -probesize 32 -analyzeduration 0
-      -f v4l2 -input_format mjpeg -framerate 30 -video_size 1280x720
-      -thread_queue_size 512 -i /dev/video0
-      -c:v libx264 -preset ultrafast -tune zerolatency
-      -x264-params sliced-threads=0
-      -profile:v baseline -pix_fmt yuv420p
-      -g 30 -sc_threshold 0
-      -crf 23 -maxrate 6000k -bufsize 2000k
-      -an
-      -f rtsp -rtsp_transport tcp
-      rtsp://rtsp-server:8554/webcam
-```
-
-L'URL da mettere nell'app sarà `rtsp://<IP-del-server>:8554/webcam`.
-
-### Regole d'oro per la bassa latenza
-
-- **`-tune zerolatency` + `-profile:v baseline`** — niente B-frame né lookahead.
-- **Un solo framerate, onesto.** Niente upsampling `-vf fps=N` da una cattura a framerate diverso: inventa timestamp sintetici e aggiunge jitter. Cattura e trasmetti allo stesso rate reale (se la webcam fa solo 15 fps, trasmetti 15).
-- **`-g 30`** — keyframe ogni secondo (recupero rapido alla connessione e dopo perdite di pacchetti).
-- **`-x264-params sliced-threads=0`** — non più necessario (FFmpeg riassembla correttamente i frame multi-slice); si può lasciare, è innocuo.
-- **Trasporto.** `MTX_PROTOCOLS=tcp` su LAN è solidissimo. L'app stessa usa di default **UDP con fallback automatico a TCP** e permette di forzare solo UDP o solo TCP in *Impostazioni → Rete* — il pannello di connessione mostra poi quale trasporto sta effettivamente trasportando i frame.
-
-### Verifica
-
-Sul server, prima di passare a Windows:
-
-```bash
-ffplay -fflags nobuffer -flags low_delay -framedrop -rtsp_transport tcp \
-       rtsp://localhost:8554/webcam
-```
-
-Deve essere praticamente in tempo reale e riportare il framerate atteso (es. `30 fps`).
+Non hai una telecamera RTSP e vuoi usare una semplice webcam USB? È un setup separato, più avanzato — vedi [**Creare una sorgente RTSP da una webcam USB**](DEVELOPMENT.md#create-an-rtsp-source-from-a-usb-webcam) nella guida per sviluppatori.
 
 ---
 
