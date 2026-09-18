@@ -7,6 +7,17 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.0] - 2026-09-18
+
+Responsiveness and UX release: the window no longer freezes while connecting or starting/stopping the camera, the source field remembers where you have connected before, and the preview finally has a proper on/off control.
+
+### Added
+- **Address-bar history on the source field.** The source input is now an editable ComboBox that behaves like a browser address bar: every URL (or local path) that connects successfully is moved to the front of a persisted, de-duplicated, capped history (`Settings.RecentUrls`, max 15) and offered as a dropdown with inline type-ahead. The single "last used" autostart target (`RtspURL`) is unchanged. A new **File → Clear address history** menu item empties the list (localized IT/EN/ES/DE).
+
+### Changed
+- **All start/stop transitions run off the UI thread.** The blocking native work — RTSP probe, preview open, virtual-camera register/start/stop, and the producer decode-thread joins — now runs on worker threads via `async`/`await`, so the window stays responsive (and keeps repainting) throughout. A modal `WaitDialog` pumps a nested message loop with an optional countdown while each transition runs, and a `BeginBusy`/`EndBusy` guard blocks re-entrancy and pauses the stats timer so a worker thread and the UI thread never touch the same native object at once. Replaces the previous fire-and-forget autostart worker and the synchronous, UI-blocking button handlers.
+- **The preview button is now a state-aware toggle.** It reflects and drives a single `isPreviewRunning` state: the label switches between *Start Preview* / *Stop Preview*; clicking it while a preview is live stops the decode and repaints the panel black ("preview not active") so no leftover GDI frame lingers; and it is disabled entirely while the virtual camera is running (the producer owns the single RTSP decode core, so a preview cannot run alongside it). `RefreshActionButtons` reconciles the button's label and enabled-state after every transition.
+
 ## [1.1.0] - 2026-07-23
 
 Reliability, tunability and preview-performance release. Makes a high-bitrate RTSP source (e.g. a 1080p60 stream) hold its frame rate without the packet-loss corruption ("green bands") that aggressive low-latency UDP defaults caused, and surfaces what the engine is actually doing.
@@ -112,6 +123,7 @@ First stable release. The receive pipeline is now a single, tunable FFmpeg user-
 - `PAUSED→RUNNING` transition (`SetStreamState`) returning `E_POINTER`.
 - Memory leak on Stop/Start cycle.
 
+[1.2.0]: https://github.com/andrea-greco/RealTimeWebCam/compare/1.1.0...1.2.0
 [1.1.0]: https://github.com/andrea-greco/RealTimeWebCam/compare/1.0.1...1.1.0
 [1.0.1]: https://github.com/andrea-greco/RealTimeWebCam/compare/1.0.0...1.0.1
 [1.0.0]: https://github.com/andrea-greco/RealTimeWebCam/compare/0.2.0...1.0.0
