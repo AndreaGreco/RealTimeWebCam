@@ -388,4 +388,22 @@ MIT-Lizenz — © Simon Mourier, Andrea Greco.</value>
   <data name="OptHelp_latencycap_Body" xml:space="preserve">
     <value>Dies ist unsere eigene Resync-zu-Live-Absicherung, keine FFmpeg-Option. Liegt ein dekodiertes Bild mehr als so viele Millisekunden hinter der Echtzeit (langsamer Dekoder oder eine schubweise Quelle, die einen Rückstand aufbaut), springt die Engine zum nächsten Keyframe, um aufzuholen. Niedriger hält die Latenz knapp, verursacht aber mehr sichtbare Sprünge; höher ist flüssiger, aber träger.</value>
   </data>
+  <data name="Wait_Title" xml:space="preserve">
+    <value>Bitte warten</value>
+  </data>
+  <data name="Wait_Connecting" xml:space="preserve">
+    <value>Verbindung zur Quelle…</value>
+  </data>
+  <data name="Wait_Opening" xml:space="preserve">
+    <value>Vorschau wird geöffnet…</value>
+  </data>
+  <data name="Wait_Starting" xml:space="preserve">
+    <value>Virtuelle Kamera wird gestartet…</value>
+  </data>
+  <data name="Wait_Stopping" xml:space="preserve">
+    <value>Virtuelle Kamera wird gestoppt…</value>
+  </data>
+  <data name="Wait_TimeoutIn" xml:space="preserve">
+    <value>Timeout in {0} s</value>
+  </data>
 </root>

@@ -397,4 +397,22 @@ MIT License — © Simon Mourier, Andrea Greco.</value>
   <data name="OptHelp_latencycap_Body" xml:space="preserve">
     <value>This is our own resync-to-live guard, not an FFmpeg option. If a decoded frame is more than this many milliseconds behind real time (a slow decoder, or a bursty source building a backlog), the engine drops to the next keyframe to catch up. Lower keeps latency tight but causes more visible jumps; higher is smoother but laggier.</value>
   </data>
+  <data name="Wait_Title" xml:space="preserve">
+    <value>Please wait</value>
+  </data>
+  <data name="Wait_Connecting" xml:space="preserve">
+    <value>Connecting to the source…</value>
+  </data>
+  <data name="Wait_Opening" xml:space="preserve">
+    <value>Opening the preview…</value>
+  </data>
+  <data name="Wait_Starting" xml:space="preserve">
+    <value>Starting the virtual camera…</value>
+  </data>
+  <data name="Wait_Stopping" xml:space="preserve">
+    <value>Stopping the virtual camera…</value>
+  </data>
+  <data name="Wait_TimeoutIn" xml:space="preserve">
+    <value>Timeout in {0} s</value>
+  </data>
 </root>

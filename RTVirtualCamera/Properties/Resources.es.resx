@@ -388,4 +388,22 @@ Licencia MIT — © Simon Mourier, Andrea Greco.</value>
   <data name="OptHelp_latencycap_Body" xml:space="preserve">
     <value>Es nuestra propia protección de resincronización al directo, no una opción de FFmpeg. Si un fotograma decodificado se retrasa más de estos milisegundos respecto al tiempo real (un decodificador lento o una fuente a ráfagas que acumula retraso), el motor salta al siguiente fotograma clave para ponerse al día. Más bajo mantiene la latencia ajustada pero causa más saltos visibles; más alto es más fluido pero con más retardo.</value>
   </data>
+  <data name="Wait_Title" xml:space="preserve">
+    <value>Espere</value>
+  </data>
+  <data name="Wait_Connecting" xml:space="preserve">
+    <value>Conectando con la fuente…</value>
+  </data>
+  <data name="Wait_Opening" xml:space="preserve">
+    <value>Abriendo la vista previa…</value>
+  </data>
+  <data name="Wait_Starting" xml:space="preserve">
+    <value>Iniciando la cámara virtual…</value>
+  </data>
+  <data name="Wait_Stopping" xml:space="preserve">
+    <value>Deteniendo la cámara virtual…</value>
+  </data>
+  <data name="Wait_TimeoutIn" xml:space="preserve">
+    <value>Tiempo de espera en {0} s</value>
+  </data>
 </root>

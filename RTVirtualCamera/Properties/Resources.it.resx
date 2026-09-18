@@ -397,4 +397,22 @@ Licenza MIT — © Simon Mourier, Andrea Greco.</value>
   <data name="OptHelp_latencycap_Body" xml:space="preserve">
     <value>È la nostra protezione di risincronizzazione al live, non un'opzione FFmpeg. Se un frame decodificato è indietro di più di questi millisecondi rispetto al tempo reale (decoder lento o sorgente a raffiche che accumula ritardo), il motore salta al keyframe successivo per recuperare. Più basso mantiene la latenza contenuta ma causa più salti visibili; più alto è più fluido ma più lento.</value>
   </data>
+  <data name="Wait_Title" xml:space="preserve">
+    <value>Attendere</value>
+  </data>
+  <data name="Wait_Connecting" xml:space="preserve">
+    <value>Connessione alla sorgente…</value>
+  </data>
+  <data name="Wait_Opening" xml:space="preserve">
+    <value>Apertura dell'anteprima…</value>
+  </data>
+  <data name="Wait_Starting" xml:space="preserve">
+    <value>Avvio della Virtual Camera…</value>
+  </data>
+  <data name="Wait_Stopping" xml:space="preserve">
+    <value>Arresto della Virtual Camera…</value>
+  </data>
+  <data name="Wait_TimeoutIn" xml:space="preserve">
+    <value>Timeout tra {0} s</value>
+  </data>
 </root>

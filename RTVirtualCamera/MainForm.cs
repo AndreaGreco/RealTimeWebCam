@@ -21,6 +21,18 @@ namespace RTVirtualCamera
         // in the Windows Forms designer; this timer just refreshes the values.
         private System.Windows.Forms.Timer statsTimer;
 
+        // True while an async start/stop transition is running. All the blocking native
+        // work (probe, RTSP open, Frame Server start/stop, thread joins) now runs on a
+        // worker thread so the UI thread stays responsive; this flag serves two purposes:
+        //   - re-entrancy guard: the Play / Start-VCam buttons are disabled while it is set;
+        //   - it pauses StatsTimer_Tick so the timer never reads a videoPlayer / virtualCamera
+        //     object that a worker thread is concurrently tearing down or setting up.
+        private bool isBusy;
+
+        // startVCamButton's enabled state captured at BeginBusy() and restored by EndBusy(),
+        // so a transient disable-while-busy does not lose the button's real availability.
+        private bool savedStartVCamEnabled;
+
         private sealed class SourceProbeResult
         {
             public bool Success { get; set; }
@@ -153,8 +165,54 @@ namespace RTVirtualCamera
             }
         }
 
+        // Enters a busy transition: disables the action buttons and pauses the stats timer
+        // work so no worker thread and the UI thread touch the same native object at once.
+        private void BeginBusy()
+        {
+            isBusy = true;
+            UseWaitCursor = true;
+            savedStartVCamEnabled = startVCamButton.Enabled;
+            playButton.Enabled = false;
+            startVCamButton.Enabled = false;
+        }
+
+        // Leaves a busy transition. playButton is always re-enabled; startVCamButton is
+        // restored to whatever the handler left in savedStartVCamEnabled (a successful
+        // start/stop sets it to true before this runs).
+        private void EndBusy()
+        {
+            if (IsDisposed)
+                return;
+            isBusy = false;
+            UseWaitCursor = false;
+            playButton.Enabled = true;
+            startVCamButton.Enabled = savedStartVCamEnabled;
+        }
+
+        // Shows the modal wait dialog while `work` runs on its worker thread, and returns once
+        // the work finishes. ShowDialog() pumps a nested message loop, so the UI stays live (and
+        // the dialog's countdown animates) while this line blocks the calling async method.
+        // With countdownSeconds > 0 the dialog counts down and returns true if it elapses before
+        // the work completes (a timeout the caller must honour); otherwise it returns false.
+        private bool RunWaitDialog(string message, int countdownSeconds, Task work)
+        {
+            if (work.IsCompleted)
+                return false;
+
+            using (WaitDialog dlg = new WaitDialog(message, countdownSeconds, work))
+            {
+                dlg.ShowDialog(this);
+                return dlg.TimedOut;
+            }
+        }
+
         private void StatsTimer_Tick(object sender, EventArgs e)
         {
+            // While a start/stop transition is running the native objects may be mid-teardown
+            // on a worker thread — skip this tick rather than race it.
+            if (isBusy)
+                return;
+
             // Suspend drawing on both tables while we rewrite their cells, so the whole
             // tick produces a single repaint instead of one per changed cell (flicker).
             connList.BeginUpdate();
@@ -291,34 +349,34 @@ namespace RTVirtualCamera
             }
         }
 
-        private void PlayButton_Click(object sender, EventArgs e)
+        private async void PlayButton_Click(object sender, EventArgs e)
         {
+            if (string.IsNullOrWhiteSpace(pathTextBox.Text))
+            {
+                ShowFriendlyError(AppStrings.Get("Source_Missing_Title"), AppStrings.Get("Source_SelectPrompt"));
+                return;
+            }
+
+            BeginBusy();
             try
             {
-                if (!string.IsNullOrWhiteSpace(pathTextBox.Text))
+                // The probe and the RTSP open both run on a worker thread (see the async
+                // helpers), so this handler awaits without ever blocking the UI thread.
+                SourceProbeResult probe = await ProbeSourceWithTimeoutAsync(pathTextBox.Text);
+                if (!probe.Success)
                 {
-                    UseWaitCursor = true;
-
-                    SourceProbeResult probe = ProbeSourceWithTimeout(pathTextBox.Text);
-                    if (!probe.Success)
-                    {
-                        ShowFriendlyError(AppStrings.Get("Source_Unavailable_Title"), probe.UserMessage, probe.TechnicalDetails);
-                        return;
-                    }
-
-                    ApplyStreamInfo(probe.Streams);
-                    ApplyConnectionInfo(probe);
-
-                    if (StartPreviewFromPath())
-                    {
-                        startVCamButton.Enabled = true;
-                        Settings.Current.RtspURL = new Uri(pathTextBox.Text);
-                        Settings.Current.Save();
-                    }
+                    ShowFriendlyError(AppStrings.Get("Source_Unavailable_Title"), probe.UserMessage, probe.TechnicalDetails);
+                    return;
                 }
-                else
+
+                ApplyStreamInfo(probe.Streams);
+                ApplyConnectionInfo(probe);
+
+                if (await StartPreviewFromPathAsync())
                 {
-                    ShowFriendlyError(AppStrings.Get("Source_Missing_Title"), AppStrings.Get("Source_SelectPrompt"));
+                    savedStartVCamEnabled = true; // applied by EndBusy()
+                    Settings.Current.RtspURL = new Uri(pathTextBox.Text);
+                    Settings.Current.Save();
                 }
             }
             catch (Exception ex)
@@ -327,134 +385,28 @@ namespace RTVirtualCamera
             }
             finally
             {
-                UseWaitCursor = false;
+                EndBusy();
             }
         }
 
-        private void StartVCamButton_Click(object sender, EventArgs e)
+        private async void StartVCamButton_Click(object sender, EventArgs e)
         {
+            BeginBusy();
             try
             {
                 if (!isVCamRunning)
-                {
-                    UseWaitCursor = true;
-
-                    SourceProbeResult probe = ProbeSourceWithTimeout(pathTextBox.Text);
-                    if (!probe.Success)
-                    {
-                        ShowFriendlyError(AppStrings.Get("Source_Unavailable_Title"), probe.UserMessage, probe.TechnicalDetails);
-                        return;
-                    }
-
-                    ApplyStreamInfo(probe.Streams);
-                    ApplyConnectionInfo(probe);
-
-                    virtualCamera = new VirtualCameraWrapper();
-                    virtualCamera.SetCameraName("RTSP Virtual Camera");
-
-                    VCamConfig config = new VCamConfig();
-                    config.RtspUrl = pathTextBox.Text ?? string.Empty;
-                    config.Width = streamInfo.width;
-                    config.Height = streamInfo.height;
-                    config.FpsNum = streamInfo.fpsNum;
-                    config.FpsDen = streamInfo.fpsDen;
-                    config.Format = streamInfo.subtype;
-                    config.Overlay = Settings.Current.FrameCounterOverlay ? 1u : 0u;
-                    virtualCamera.SetConfig(config);
-
-                    if (virtualCamera.Register())
-                    {
-                        System.Diagnostics.Debug.WriteLine("Virtual camera registered");
-
-                        if (virtualCamera.Start())
-                        {
-                            // The Frame Server never opens the RTSP source itself — the app
-                            // decodes with FFmpeg and streams frames to it. Start the
-                            // user-space producer now that the camera is running.
-                            if (!virtualCamera.StartFfmpegProducer(
-                                    config.RtspUrl, config.Width, config.Height, config.FpsNum, config.FpsDen))
-                                System.Diagnostics.Debug.WriteLine("FFmpeg producer failed to start");
-
-                            StopPreview();
-                            SetPreviewStatus(AppStrings.Get("Preview_VCamStarted"));
-
-                            isVCamRunning = true;
-                            startVCamButton.Text = AppStrings.Get("Button_StopVCam");
-                            startVCamButton.BackColor = Color.LightCoral;
-                        }
-                        else
-                        {
-                            ShowFriendlyError(
-                                AppStrings.Get("VirtualCamera_StartFail_Title"),
-                                AppStrings.Get("VirtualCamera_StartFail_Message"),
-                                AppStrings.Get("VirtualCamera_StartFail_Details"));
-                            if (virtualCamera != null)
-                            {
-                                virtualCamera.Dispose();
-                                virtualCamera = null;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        ShowFriendlyError(
-                            AppStrings.Get("VirtualCamera_RegisterFail_Title"),
-                            AppStrings.Get("VirtualCamera_RegisterFail_Message"),
-                            AppStrings.Get("VirtualCamera_RegisterFail_Details"));
-                        if (virtualCamera != null)
-                        {
-                            virtualCamera.Dispose();
-                            virtualCamera = null;
-                        }
-                    }
-                }
+                    await StartVirtualCameraAsync();
                 else
-                {
-                    if (virtualCamera != null)
-                    {
-                        try
-                        {
-                            StopPreview();
-                        }
-                        catch (Exception ex)
-                        {
-                            System.Diagnostics.Debug.WriteLine("Error stopping preview: " + ex.Message);
-                        }
-
-                        virtualCamera.StopFfmpegProducer(); // no-op unless the FFmpeg engine was running
-                        virtualCamera.Stop();
-                        virtualCamera.Unregister();
-                        virtualCamera.Dispose();
-                        virtualCamera = null;
-                    }
-
-                    if (!string.IsNullOrEmpty(pathTextBox.Text))
-                    {
-                        previewStatusLabel.Visible = false;
-                        StartPreviewFromPath();
-                    }
-                    else
-                    {
-                        SetPreviewStatus(AppStrings.Get("Preview_Inactive"));
-                    }
-
-                    isVCamRunning = false;
-                    startVCamButton.Text = AppStrings.Get("Button_StartVCam");
-                    startVCamButton.BackColor = Color.LightGreen;
-
-                    System.Diagnostics.Debug.WriteLine("Virtual camera stopped");
-                    MessageBox.Show(AppStrings.Get("VirtualCamera_Stopped"), AppStrings.Get("Info_Title"), MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }
+                    await StopVirtualCameraAsync();
             }
             catch (Exception ex)
             {
                 ShowFriendlyError(AppStrings.Get("VirtualCamera_Error_Title"), AppStrings.Get("VirtualCamera_Error_Message"), ex.Message);
 
-                if (virtualCamera != null)
-                {
-                    virtualCamera.Dispose();
-                    virtualCamera = null;
-                }
+                // Tear the camera down off the UI thread; the object may already be null.
+                VirtualCameraWrapper failed = virtualCamera;
+                virtualCamera = null;
+                await DisposeCameraAsync(failed);
 
                 isVCamRunning = false;
                 startVCamButton.Text = AppStrings.Get("Button_StartVCam");
@@ -462,8 +414,153 @@ namespace RTVirtualCamera
             }
             finally
             {
-                UseWaitCursor = false;
+                EndBusy();
             }
+        }
+
+        // Result of the off-thread virtual-camera start sequence.
+        private enum VCamStartOutcome { Started, RegisterFailed, StartFailed }
+
+        private sealed class VCamStartResult
+        {
+            public VCamStartOutcome Outcome;
+            public VirtualCameraWrapper Camera; // created on the worker thread; owned by the caller
+            public bool ProducerStarted;
+        }
+
+        // Starts the virtual camera. All the blocking native work — creating the MF virtual
+        // camera, Register(), Start() (the Frame Server loads the DLL cross-process), and the
+        // FFmpeg producer opening the RTSP source — runs on a worker thread. The camera object
+        // is created and driven entirely on that one worker thread (consistent apartment); it is
+        // only handed back to the UI thread as a field once fully started.
+        private async Task StartVirtualCameraAsync()
+        {
+            SourceProbeResult probe = await ProbeSourceWithTimeoutAsync(pathTextBox.Text);
+            if (!probe.Success)
+            {
+                ShowFriendlyError(AppStrings.Get("Source_Unavailable_Title"), probe.UserMessage, probe.TechnicalDetails);
+                return;
+            }
+
+            ApplyStreamInfo(probe.Streams);
+            ApplyConnectionInfo(probe);
+
+            VCamConfig config = new VCamConfig();
+            config.RtspUrl = pathTextBox.Text ?? string.Empty;
+            config.Width = streamInfo.width;
+            config.Height = streamInfo.height;
+            config.FpsNum = streamInfo.fpsNum;
+            config.FpsDen = streamInfo.fpsDen;
+            config.Format = streamInfo.subtype;
+            config.Overlay = Settings.Current.FrameCounterOverlay ? 1u : 0u;
+
+            Task<VCamStartResult> startTask = Task.Run(delegate ()
+            {
+                VirtualCameraWrapper cam = new VirtualCameraWrapper();
+                cam.SetCameraName("RTSP Virtual Camera");
+                cam.SetConfig(config);
+
+                if (!cam.Register())
+                    return new VCamStartResult { Outcome = VCamStartOutcome.RegisterFailed, Camera = cam };
+
+                if (!cam.Start())
+                    return new VCamStartResult { Outcome = VCamStartOutcome.StartFailed, Camera = cam };
+
+                // The Frame Server never opens the RTSP source itself — the app decodes with
+                // FFmpeg and streams frames to it. Start the user-space producer now that the
+                // camera is running, then stop the preview (they share the single decode core).
+                bool producer = cam.StartFfmpegProducer(
+                    config.RtspUrl, config.Width, config.Height, config.FpsNum, config.FpsDen);
+                videoPlayer.Stop();
+
+                return new VCamStartResult { Outcome = VCamStartOutcome.Started, Camera = cam, ProducerStarted = producer };
+            });
+
+            RunWaitDialog(AppStrings.Get("Wait_Starting"), 0, startTask);
+            VCamStartResult result = await startTask;
+
+            switch (result.Outcome)
+            {
+                case VCamStartOutcome.RegisterFailed:
+                    ShowFriendlyError(
+                        AppStrings.Get("VirtualCamera_RegisterFail_Title"),
+                        AppStrings.Get("VirtualCamera_RegisterFail_Message"),
+                        AppStrings.Get("VirtualCamera_RegisterFail_Details"));
+                    await DisposeCameraAsync(result.Camera);
+                    return;
+
+                case VCamStartOutcome.StartFailed:
+                    ShowFriendlyError(
+                        AppStrings.Get("VirtualCamera_StartFail_Title"),
+                        AppStrings.Get("VirtualCamera_StartFail_Message"),
+                        AppStrings.Get("VirtualCamera_StartFail_Details"));
+                    await DisposeCameraAsync(result.Camera);
+                    return;
+            }
+
+            System.Diagnostics.Debug.WriteLine("Virtual camera registered and started");
+            if (!result.ProducerStarted)
+                System.Diagnostics.Debug.WriteLine("FFmpeg producer failed to start");
+
+            virtualCamera = result.Camera;
+            SetPreviewStatus(AppStrings.Get("Preview_VCamStarted"));
+
+            isVCamRunning = true;
+            startVCamButton.Text = AppStrings.Get("Button_StopVCam");
+            startVCamButton.BackColor = Color.LightCoral;
+            savedStartVCamEnabled = true; // applied by EndBusy()
+        }
+
+        // Stops the virtual camera. The producer thread join, the Frame Server teardown, and
+        // the preview restart all run on a worker thread so the UI stays responsive.
+        private async Task StopVirtualCameraAsync()
+        {
+            VirtualCameraWrapper cam = virtualCamera;
+            virtualCamera = null;
+
+            Task stopTask = Task.Run(delegate ()
+            {
+                try { videoPlayer.Stop(); }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine("Error stopping preview: " + ex.Message); }
+
+                if (cam != null)
+                {
+                    cam.StopFfmpegProducer(); // no-op unless the FFmpeg engine was running
+                    cam.Stop();
+                    cam.Unregister();
+                    cam.Dispose();
+                }
+            });
+
+            RunWaitDialog(AppStrings.Get("Wait_Stopping"), 0, stopTask);
+            await stopTask;
+
+            isVCamRunning = false;
+            startVCamButton.Text = AppStrings.Get("Button_StartVCam");
+            startVCamButton.BackColor = Color.LightGreen;
+            savedStartVCamEnabled = true; // applied by EndBusy()
+
+            if (!string.IsNullOrEmpty(pathTextBox.Text))
+            {
+                previewStatusLabel.Visible = false;
+                await StartPreviewFromPathAsync();
+            }
+            else
+            {
+                SetPreviewStatus(AppStrings.Get("Preview_Inactive"));
+            }
+
+            System.Diagnostics.Debug.WriteLine("Virtual camera stopped");
+            MessageBox.Show(AppStrings.Get("VirtualCamera_Stopped"), AppStrings.Get("Info_Title"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        // Disposes a virtual-camera instance off the UI thread (Dispose joins the producer
+        // decode thread and tears down the cross-process Frame Server session — both blocking).
+        private static Task DisposeCameraAsync(VirtualCameraWrapper camera)
+        {
+            if (camera == null)
+                return Task.CompletedTask;
+            return Task.Run(delegate () { camera.Dispose(); });
         }
 
         protected override void OnFormClosed(FormClosedEventArgs e)
@@ -497,14 +594,41 @@ namespace RTVirtualCamera
             base.OnFormClosed(e);
         }
 
-        private bool StartPreviewFromPath()
+        // Outcome of the off-thread preview open sequence (Stop / SetVideoPath / Initialize /
+        // Play all block on RTSP I/O, so they run on a worker thread).
+        private enum PreviewStartStage { Ok, InitFailed, PlayFailed }
+
+        private sealed class PreviewStartResult
         {
-            videoPlayer.Stop();
-            videoPlayer.SetVideoPath(pathTextBox.Text);
+            public PreviewStartStage Stage;
+            public StreamInfo[] Streams;
+        }
+
+        private async Task<bool> StartPreviewFromPathAsync()
+        {
+            string path = pathTextBox.Text;
             previewStatusLabel.Visible = false;
 
-            bool init = videoPlayer.Initialize();
-            if (!init)
+            Task<PreviewStartResult> openTask = Task.Run(delegate ()
+            {
+                videoPlayer.Stop();
+                videoPlayer.SetVideoPath(path);
+
+                if (!videoPlayer.Initialize())
+                    return new PreviewStartResult { Stage = PreviewStartStage.InitFailed };
+
+                // Read stream info after Initialize but before Play, matching the original order.
+                StreamInfo[] infos = videoPlayer.GetStreamInfos();
+                if (!videoPlayer.Play())
+                    return new PreviewStartResult { Stage = PreviewStartStage.PlayFailed, Streams = infos };
+
+                return new PreviewStartResult { Stage = PreviewStartStage.Ok, Streams = infos };
+            });
+
+            RunWaitDialog(AppStrings.Get("Wait_Opening"), 0, openTask);
+            PreviewStartResult result = await openTask;
+
+            if (result.Stage == PreviewStartStage.InitFailed)
             {
                 ShowFriendlyError(
                     AppStrings.Get("Preview_OpenFail_Title"),
@@ -513,8 +637,7 @@ namespace RTVirtualCamera
                 return false;
             }
 
-            StreamInfo[] infos = videoPlayer.GetStreamInfos();
-            if (!videoPlayer.Play())
+            if (result.Stage == PreviewStartStage.PlayFailed)
             {
                 ShowFriendlyError(
                     AppStrings.Get("Preview_PlayFail_Title"),
@@ -523,17 +646,18 @@ namespace RTVirtualCamera
                 return false;
             }
 
-            ApplyStreamInfo(infos);
+            ApplyStreamInfo(result.Streams);
             return true;
-        }
-
-        private void StopPreview()
-        {
-            videoPlayer.Stop();
         }
 
         private void SetPreviewStatus(string message)
         {
+            // The FFmpeg preview blits frames straight onto videoPanel's HWND via GDI; once it
+            // stops, the last decoded frame stays on the surface. Force the panel to repaint its
+            // black background so no leftover preview image shows behind the status text.
+            videoPanel.Invalidate();
+            videoPanel.Update();
+
             previewStatusLabel.Text = message;
             previewStatusLabel.Visible = true;
             previewStatusLabel.BringToFront();
@@ -550,7 +674,7 @@ namespace RTVirtualCamera
             streamProp_lbl.Text = string.Format(AppStrings.Get("Resolution_Format"), streamInfo.width, streamInfo.height, streamInfo.getFSP());
         }
 
-        private SourceProbeResult ProbeSourceWithTimeout(string path)
+        private async Task<SourceProbeResult> ProbeSourceWithTimeoutAsync(string path)
         {
             string validationError = ValidateSourcePath(path);
             if (!string.IsNullOrEmpty(validationError))
@@ -558,12 +682,16 @@ namespace RTVirtualCamera
                 return FailProbe(validationError, AppStrings.Get("Probe_Validation_Details"));
             }
 
-            IntPtr previewHandle = videoPanel.Handle;
-            Task<SourceProbeResult> probeTask = Task.Factory.StartNew(
-                delegate { return ProbeSource(path, previewHandle); },
-                TaskCreationOptions.LongRunning);
+            IntPtr previewHandle = videoPanel.Handle; // must be read on the UI thread
 
-            if (!probeTask.Wait(ProbeTimeoutMs))
+            Task<SourceProbeResult> probeTask = Task.Run(delegate () { return ProbeSource(path, previewHandle); });
+
+            // Show the modal wait dialog with an 8 s countdown while the probe runs on its
+            // worker. It closes the moment the probe finishes; if the countdown elapses first it
+            // reports a timeout and we abandon the probe (which disposes its own `using`
+            // VideoPlayerWrapper when it eventually returns, so this is safe).
+            bool timedOut = RunWaitDialog(AppStrings.Get("Wait_Connecting"), ProbeTimeoutMs / 1000, probeTask);
+            if (timedOut)
             {
                 return FailProbe(
                     AppStrings.Get("Probe_Timeout_Message"),
@@ -572,12 +700,7 @@ namespace RTVirtualCamera
 
             try
             {
-                return probeTask.Result;
-            }
-            catch (AggregateException ex)
-            {
-                Exception inner = ex.Flatten().InnerException ?? ex;
-                return MapProbeException(inner);
+                return await probeTask;
             }
             catch (Exception ex)
             {
@@ -724,10 +847,11 @@ namespace RTVirtualCamera
             // background thread, so an unreachable source never blocks the UI thread.
         }
 
-        // Runs after the window is first shown. If autostart is configured, probe the
-        // source on a background thread and only touch the UI via BeginInvoke. No
-        // async/await — a single fire-and-forget worker keeps the UI thread free.
-        private void MainForm_Shown(object sender, EventArgs e)
+        // Runs after the window is first shown. If autostart is configured, probe the source
+        // and start the preview through the same async helpers the buttons use — the blocking
+        // native work runs on worker threads and the awaits marshal back to the UI thread, so
+        // an unreachable source never blocks the UI thread.
+        private async void MainForm_Shown(object sender, EventArgs e)
         {
             if (Settings.Current.RtspURL == null || !Settings.Current.AutoStart)
                 return;
@@ -736,40 +860,30 @@ namespace RTVirtualCamera
             if (string.IsNullOrWhiteSpace(path))
                 return;
 
-            IntPtr previewHandle = videoPanel.Handle; // must be read on the UI thread
-
-            System.Threading.Thread worker = new System.Threading.Thread(delegate ()
+            BeginBusy();
+            try
             {
-                SourceProbeResult probe = ProbeSource(path, previewHandle);
-
-                if (IsDisposed || !IsHandleCreated)
+                SourceProbeResult probe = await ProbeSourceWithTimeoutAsync(path);
+                if (!probe.Success)
+                {
+                    SetPreviewStatus(AppStrings.Get("Preview_Inactive"));
+                    ShowFriendlyError(AppStrings.Get("Source_Unavailable_Title"), probe.UserMessage, probe.TechnicalDetails);
                     return;
-
-                try
-                {
-                    BeginInvoke((Action)delegate ()
-                    {
-                        if (!probe.Success)
-                        {
-                            SetPreviewStatus(AppStrings.Get("Preview_Inactive"));
-                            ShowFriendlyError(AppStrings.Get("Source_Unavailable_Title"), probe.UserMessage, probe.TechnicalDetails);
-                            return;
-                        }
-
-                        ApplyStreamInfo(probe.Streams);
-                        ApplyConnectionInfo(probe);
-                        if (StartPreviewFromPath())
-                            startVCamButton.Enabled = true;
-                    });
                 }
-                catch (InvalidOperationException)
-                {
-                    // Window was closed between the IsHandleCreated check and BeginInvoke — ignore.
-                }
-            });
-            worker.IsBackground = true;
-            worker.Name = "AutostartProbe";
-            worker.Start();
+
+                ApplyStreamInfo(probe.Streams);
+                ApplyConnectionInfo(probe);
+                if (await StartPreviewFromPathAsync())
+                    savedStartVCamEnabled = true; // applied by EndBusy()
+            }
+            catch (Exception ex)
+            {
+                ShowFriendlyError(AppStrings.Get("Preview_Error_Title"), AppStrings.Get("Preview_Error_Start"), ex.Message);
+            }
+            finally
+            {
+                EndBusy();
+            }
         }
 
         private void exitToolStripMenuItem_Click(object sender, EventArgs e)
