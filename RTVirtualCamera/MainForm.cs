@@ -995,10 +995,11 @@ namespace RTVirtualCamera
             // background thread, so an unreachable source never blocks the UI thread.
         }
 
-        // Runs after the window is first shown. If autostart is configured, probe the source
-        // and start the preview through the same async helpers the buttons use — the blocking
-        // native work runs on worker threads and the awaits marshal back to the UI thread, so
-        // an unreachable source never blocks the UI thread.
+        // Runs after the window is first shown. With AutoStart configured, launch straight into
+        // the virtual camera (probe → register → start → FFmpeg producer) so the user only has
+        // to open the app and the whole pipeline comes up — the same path as clicking Start VCam.
+        // All the blocking native work runs on worker threads and the awaits marshal back to the
+        // UI thread, so an unreachable source never blocks the UI thread.
         private async void MainForm_Shown(object sender, EventArgs e)
         {
             if (Settings.Current.RtspURL == null || !Settings.Current.AutoStart)
@@ -1011,22 +1012,23 @@ namespace RTVirtualCamera
             BeginBusy();
             try
             {
-                SourceProbeResult probe = await ProbeSourceWithTimeoutAsync(path);
-                if (!probe.Success)
-                {
-                    SetPreviewStatus(AppStrings.Get("Preview_Inactive"));
-                    ShowFriendlyError(AppStrings.Get("Source_Unavailable_Title"), probe.UserMessage, probe.TechnicalDetails);
-                    return;
-                }
-
-                ApplyStreamInfo(probe.Streams);
-                ApplyConnectionInfo(probe);
-                if (await StartPreviewFromPathAsync())
-                    savedStartVCamEnabled = true; // applied by EndBusy()
+                // StartVirtualCameraAsync probes the source itself and shows a friendly error
+                // (and tears down) on probe/register/start failure; this catch is the last-resort
+                // guard for anything unexpected, mirroring StartVCamButton_Click.
+                await StartVirtualCameraAsync();
             }
             catch (Exception ex)
             {
-                ShowFriendlyError(AppStrings.Get("Preview_Error_Title"), AppStrings.Get("Preview_Error_Start"), ex.Message);
+                ShowFriendlyError(AppStrings.Get("VirtualCamera_Error_Title"), AppStrings.Get("VirtualCamera_Error_Message"), ex.Message);
+
+                VirtualCameraWrapper failed = virtualCamera;
+                virtualCamera = null;
+                await DisposeCameraAsync(failed);
+
+                isVCamRunning = false;
+                isPreviewRunning = false;
+                startVCamButton.Text = AppStrings.Get("Button_StartVCam");
+                startVCamButton.BackColor = Color.LightGreen;
             }
             finally
             {

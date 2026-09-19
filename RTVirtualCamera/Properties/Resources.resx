@@ -154,7 +154,7 @@
     <value>General</value>
   </data>
   <data name="Settings_AutoStart" xml:space="preserve">
-    <value>Automatically start the stream on launch</value>
+    <value>Automatically start the virtual camera on launch</value>
   </data>
   <data name="Settings_EngineSection" xml:space="preserve">
     <value>Receive engine</value>

@@ -154,7 +154,7 @@
     <value>General</value>
   </data>
   <data name="Settings_AutoStart" xml:space="preserve">
-    <value>Iniciar automáticamente el flujo al arrancar</value>
+    <value>Iniciar automáticamente la cámara virtual al arrancar</value>
   </data>
   <data name="Source_Missing_Title" xml:space="preserve">
     <value>Falta la fuente</value>
