@@ -454,4 +454,73 @@ Licenza MIT — © Simon Mourier, Andrea Greco.</value>
   <data name="Label_Properties" xml:space="preserve">
     <value>Proprietà:</value>
   </data>
+  <data name="Row_container" xml:space="preserve">
+    <value>Contenitore</value>
+  </data>
+  <data name="Row_transport" xml:space="preserve">
+    <value>Trasporto</value>
+  </data>
+  <data name="Row_codec" xml:space="preserve">
+    <value>Codec</value>
+  </data>
+  <data name="Row_pixfmt" xml:space="preserve">
+    <value>Formato pixel</value>
+  </data>
+  <data name="Row_resolution" xml:space="preserve">
+    <value>Risoluzione</value>
+  </data>
+  <data name="Row_fps" xml:space="preserve">
+    <value>Frame rate</value>
+  </data>
+  <data name="Row_bitrate" xml:space="preserve">
+    <value>Bitrate</value>
+  </data>
+  <data name="Row_cfgTransport" xml:space="preserve">
+    <value>Preferenza trasporto</value>
+  </data>
+  <data name="Row_cfgHw" xml:space="preserve">
+    <value>Decodifica HW</value>
+  </data>
+  <data name="Row_cfgTimeout" xml:space="preserve">
+    <value>Timeout socket</value>
+  </data>
+  <data name="Row_cfgReorder" xml:space="preserve">
+    <value>Reorder RTP</value>
+  </data>
+  <data name="Row_cfgBuffer" xml:space="preserve">
+    <value>Buffer UDP</value>
+  </data>
+  <data name="Row_cfgMaxDelay" xml:space="preserve">
+    <value>Max delay</value>
+  </data>
+  <data name="Row_cfgLatency" xml:space="preserve">
+    <value>Cap latenza</value>
+  </data>
+  <data name="Row_state" xml:space="preserve">
+    <value>Stato</value>
+  </data>
+  <data name="Row_engine" xml:space="preserve">
+    <value>Motore</value>
+  </data>
+  <data name="Row_decode" xml:space="preserve">
+    <value>Decodifica</value>
+  </data>
+  <data name="Row_rx" xml:space="preserve">
+    <value>RX (fps)</value>
+  </data>
+  <data name="Row_render" xml:space="preserve">
+    <value>Render (fps)</value>
+  </data>
+  <data name="Row_dup" xml:space="preserve">
+    <value>Duplicati (fps)</value>
+  </data>
+  <data name="Row_drop" xml:space="preserve">
+    <value>Persi (fps)</value>
+  </data>
+  <data name="Row_proc" xml:space="preserve">
+    <value>Elaborazione (ms)</value>
+  </data>
+  <data name="Row_drift" xml:space="preserve">
+    <value>Drift (ms)</value>
+  </data>
 </root>

@@ -351,6 +351,25 @@ namespace RTVirtualCamera
             connValueCol.Text = AppStrings.Get("Col_Value");
             statsPropCol.Text = AppStrings.Get("Col_Metric");
             statsValueCol.Text = AppStrings.Get("Col_Value");
+
+            // Diagnostics row labels. These rows are deserialized from the .resx without their
+            // Name (the designer drops ListViewItem.Name on serialization) — and Name is the key
+            // SetRow uses to find a row, so without this the tables never populate. Set both the
+            // lookup Name and the localized label here, in the fixed designer item order.
+            ApplyRowLabels(connList, new[] { "container", "transport", "codec", "pixfmt", "resolution", "fps", "bitrate", "cfgTransport", "cfgHw", "cfgTimeout", "cfgReorder", "cfgBuffer", "cfgMaxDelay", "cfgLatency" });
+            ApplyRowLabels(statsList, new[] { "state", "engine", "decode", "rx", "render", "dup", "drop", "proc", "drift" });
+        }
+
+        // Assigns each ListView row its lookup Name (used by SetRow's Items.Find) and its
+        // localized label (SubItems[0]) from AppStrings, matching rows to keys by index.
+        private static void ApplyRowLabels(ListView lv, string[] keys)
+        {
+            for (int i = 0; i < keys.Length && i < lv.Items.Count; i++)
+            {
+                ListViewItem item = lv.Items[i];
+                item.Name = keys[i];
+                item.Text = AppStrings.Get("Row_" + keys[i]);
+            }
         }
 
         private void VideoPanel_Resize(object sender, EventArgs e)
