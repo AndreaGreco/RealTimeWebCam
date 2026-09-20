@@ -117,6 +117,16 @@ public:
 	// Measured received video bitrate in bits/s (0 until measured / disconnected).
 	long long getBitrateBps() const { return (long long)_source.BitrateBps(); }
 
+	// Live connection state (see FfmpegRtspSource::State and friends); the optional
+	// outputs receive the attempt / disconnect counters and the last AVERROR code.
+	int getConnectionState(uint32_t* attemptOut, uint32_t* disconnectsOut, int* lastErrorOut) const
+	{
+		if (attemptOut)     *attemptOut     = _source.ConnectAttempt();
+		if (disconnectsOut) *disconnectsOut = _source.Disconnects();
+		if (lastErrorOut)   *lastErrorOut   = _source.LastError();
+		return (int)_source.State();
+	}
+
 private:
 	// Sink callback (decode thread): pack the NV12 frame into the staging buffer and
 	// wake the render thread. Cheap (a memcpy) — no convert/blit here.

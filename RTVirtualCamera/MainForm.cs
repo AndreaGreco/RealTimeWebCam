@@ -11,6 +11,17 @@ namespace RTVirtualCamera
     {
         private const int ProbeTimeoutMs = 8000;
 
+        // Hard caps (seconds) on the modal wait dialogs. Every wait the user sees has a
+        // countdown and a timeout: if the worker is still busy when it elapses, the dialog
+        // closes, the user is told, and the UI stays usable — the work itself keeps running
+        // on its worker thread (native joins can't be aborted) and is tidied up when it ends.
+        // Sized to the engine's own bounds: open = probe + RTSP open (each ≤ a few socket
+        // timeouts), stop = decode-thread join (≤ one socket timeout thanks to the watchdog)
+        // plus the Frame Server teardown.
+        private const int OpenTimeoutSec = 30;
+        private const int StartTimeoutSec = 30;
+        private const int StopTimeoutSec = 20;
+
         private VideoPlayerWrapper videoPlayer;
         private VirtualCameraWrapper virtualCamera;
         private bool isVCamRunning = false;
@@ -257,6 +268,10 @@ namespace RTVirtualCamera
                 // Reflect the engine settings currently in use.
                 UpdateSettingsRows();
 
+                // Connection-loss / retry feedback (overlay on the video panel + the
+                // "state" row). Computed first so it can override the state row below.
+                string connStateRow = UpdateConnectionStatus();
+
                 if (isVCamRunning)
                 {
                     FrameServerRates fr;
@@ -300,6 +315,11 @@ namespace RTVirtualCamera
                         SetRow(statsList, "state", AppStrings.Get("Stats_State_Inactive"));
                     }
                 }
+
+                // While the engine is (re)connecting, the state row says so — that beats
+                // "camera active"/"stale" derived from counters that are simply frozen.
+                if (connStateRow != null)
+                    SetRow(statsList, "state", connStateRow);
             }
             catch
             {
@@ -310,6 +330,78 @@ namespace RTVirtualCamera
                 // Pair every BeginUpdate with EndUpdate (repaints once, in reverse order).
                 statsList.EndUpdate();
                 connList.EndUpdate();
+            }
+        }
+
+        // Last connection state / attempt reflected in the panel overlay, so the overlay
+        // (which invalidates the panel) is rewritten only when something actually changed.
+        private EngineConnectionState shownConnState = EngineConnectionState.Idle;
+        private uint shownConnAttempt;
+
+        // Polls the decode core (producer while the virtual camera runs, else the preview)
+        // and surfaces a connection loss to the user: an overlay on the video panel that
+        // reads "connection lost — retrying (attempt N)" until frames flow again, then the
+        // normal overlay is restored (VCam banner) or hidden (preview shows video again).
+        // Returns the text for the stats "state" row while not streaming, or null when the
+        // stream is healthy / nothing is running.
+        private string UpdateConnectionStatus()
+        {
+            EngineConnectionStatus cs;
+            if (isVCamRunning && virtualCamera != null)
+                cs = virtualCamera.GetConnectionStatus();
+            else if (isPreviewRunning && videoPlayer != null)
+                cs = videoPlayer.GetConnectionStatus();
+            else
+                cs = new EngineConnectionStatus(); // Idle
+
+            if (cs.State == shownConnState && cs.Attempt == shownConnAttempt)
+                return ConnectionStateRowText(cs);
+
+            EngineConnectionState previous = shownConnState;
+            shownConnState = cs.State;
+            shownConnAttempt = cs.Attempt;
+
+            switch (cs.State)
+            {
+                case EngineConnectionState.Reconnecting:
+                    SetPreviewStatus(string.Format(AppStrings.Get("Conn_Lost_Retrying"), cs.Attempt));
+                    break;
+
+                case EngineConnectionState.Connecting:
+                    // The very first attempt is covered by the start wait dialog; only
+                    // announce it once the engine is visibly retrying.
+                    if (cs.Attempt > 1)
+                        SetPreviewStatus(string.Format(AppStrings.Get("Conn_Connecting_Attempt"), cs.Attempt));
+                    break;
+
+                case EngineConnectionState.Streaming:
+                    // Back on line: restore what the panel showed before the loss.
+                    if (previous == EngineConnectionState.Reconnecting || previous == EngineConnectionState.Connecting)
+                    {
+                        if (isVCamRunning)
+                            SetPreviewStatus(AppStrings.Get("Preview_VCamStarted"));
+                        else
+                            previewStatusLabel.Visible = false;
+                    }
+                    break;
+
+                default:
+                    break; // Idle: the start/stop code owns the overlay
+            }
+
+            return ConnectionStateRowText(cs);
+        }
+
+        private static string ConnectionStateRowText(EngineConnectionStatus cs)
+        {
+            switch (cs.State)
+            {
+                case EngineConnectionState.Reconnecting:
+                    return string.Format(AppStrings.Get("Stats_State_Reconnecting"), cs.Attempt);
+                case EngineConnectionState.Connecting:
+                    return string.Format(AppStrings.Get("Stats_State_Connecting"), cs.Attempt);
+                default:
+                    return null;
             }
         }
 
@@ -556,7 +648,25 @@ namespace RTVirtualCamera
                 return new VCamStartResult { Outcome = VCamStartOutcome.Started, Camera = cam, ProducerStarted = producer };
             });
 
-            RunWaitDialog(AppStrings.Get("Wait_Starting"), 0, startTask);
+            if (RunWaitDialog(AppStrings.Get("Wait_Starting"), StartTimeoutSec, startTask))
+            {
+                // The start sequence is stuck (Frame Server not answering, RTSP open
+                // hanging). Give the UI back; whatever the worker eventually produces is
+                // torn down so a late success does not leave a ghost camera registered.
+                ShowFriendlyError(
+                    AppStrings.Get("Wait_Timeout_Title"),
+                    string.Format(AppStrings.Get("Wait_Timeout_Message"), StartTimeoutSec),
+                    AppStrings.Get("Wait_Timeout_Start_Details"));
+                _ = startTask.ContinueWith(delegate (Task<VCamStartResult> t)
+                {
+                    if (t.Status == TaskStatus.RanToCompletion && t.Result != null && t.Result.Camera != null)
+                    {
+                        try { t.Result.Camera.Dispose(); }
+                        catch (Exception ex) { System.Diagnostics.Debug.WriteLine("Late camera dispose failed: " + ex.Message); }
+                    }
+                });
+                return;
+            }
             VCamStartResult result = await startTask;
 
             switch (result.Outcome)
@@ -614,13 +724,28 @@ namespace RTVirtualCamera
                 }
             });
 
-            RunWaitDialog(AppStrings.Get("Wait_Stopping"), 0, stopTask);
-            await stopTask;
+            bool stopTimedOut = RunWaitDialog(AppStrings.Get("Wait_Stopping"), StopTimeoutSec, stopTask);
+            if (!stopTimedOut)
+                await stopTask;
 
             isVCamRunning = false;
             startVCamButton.Text = AppStrings.Get("Button_StartVCam");
             startVCamButton.BackColor = Color.LightGreen;
             savedStartVCamEnabled = true; // applied by EndBusy()
+
+            if (stopTimedOut)
+            {
+                // Teardown is stuck (Frame Server not releasing the session). The UI moves
+                // on as "stopped"; the worker finishes the teardown whenever it can. Don't
+                // restart the preview: it would race the still-running stop on videoPlayer.
+                isPreviewRunning = false;
+                SetPreviewStatus(AppStrings.Get("Preview_Inactive"));
+                ShowFriendlyError(
+                    AppStrings.Get("Wait_Timeout_Title"),
+                    string.Format(AppStrings.Get("Wait_Timeout_Message"), StopTimeoutSec),
+                    AppStrings.Get("Wait_Timeout_Stop_Details"));
+                return;
+            }
 
             if (!string.IsNullOrEmpty(pathTextBox.Text))
             {
@@ -708,7 +833,26 @@ namespace RTVirtualCamera
                 return new PreviewStartResult { Stage = PreviewStartStage.Ok, Streams = infos };
             });
 
-            RunWaitDialog(AppStrings.Get("Wait_Opening"), 0, openTask);
+            if (RunWaitDialog(AppStrings.Get("Wait_Opening"), OpenTimeoutSec, openTask))
+            {
+                // The open is stuck. Report it and, if the worker does eventually get the
+                // preview playing, stop it again — the UI already treats it as not running.
+                isPreviewRunning = false;
+                SetPreviewStatus(AppStrings.Get("Preview_Inactive"));
+                ShowFriendlyError(
+                    AppStrings.Get("Wait_Timeout_Title"),
+                    string.Format(AppStrings.Get("Wait_Timeout_Message"), OpenTimeoutSec),
+                    AppStrings.Get("Wait_Timeout_Open_Details"));
+                _ = openTask.ContinueWith(delegate (Task<PreviewStartResult> t)
+                {
+                    if (t.Status == TaskStatus.RanToCompletion && t.Result != null && t.Result.Stage == PreviewStartStage.Ok)
+                    {
+                        try { videoPlayer.Stop(); }
+                        catch (Exception ex) { System.Diagnostics.Debug.WriteLine("Late preview stop failed: " + ex.Message); }
+                    }
+                });
+                return false;
+            }
             PreviewStartResult result = await openTask;
 
             if (result.Stage == PreviewStartStage.InitFailed)
@@ -747,11 +891,20 @@ namespace RTVirtualCamera
                 catch (Exception ex) { System.Diagnostics.Debug.WriteLine("Error stopping preview: " + ex.Message); }
             });
 
-            RunWaitDialog(AppStrings.Get("Wait_Stopping"), 0, stopTask);
-            await stopTask;
+            bool timedOut = RunWaitDialog(AppStrings.Get("Wait_Stopping"), StopTimeoutSec, stopTask);
+            if (!timedOut)
+                await stopTask;
 
             isPreviewRunning = false;
             SetPreviewStatus(AppStrings.Get("Preview_Inactive"));
+
+            if (timedOut)
+            {
+                ShowFriendlyError(
+                    AppStrings.Get("Wait_Timeout_Title"),
+                    string.Format(AppStrings.Get("Wait_Timeout_Message"), StopTimeoutSec),
+                    AppStrings.Get("Wait_Timeout_Stop_Details"));
+            }
         }
 
         private void SetPreviewStatus(string message)

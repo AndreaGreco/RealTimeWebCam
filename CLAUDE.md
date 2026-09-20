@@ -210,7 +210,39 @@ accumulating unbounded latency — the failure mode that a previous MF-based pre
 The same `FfmpegRtspSource` core serves both the preview and the virtual-camera producer, each
 with its own `FrameSink`; they never run at the same time (the preview stops when the camera
 starts), so only one RTSP connection is open at a time. Reconnection is built into the decode
-loop: on a stream break it sleeps 1s and retries `avformat_open_input` until `Stop()`.
+loop: on a stream break it sleeps 1s (`kReconnectDelayMs`, interruptible) and retries
+`avformat_open_input` until `Stop()`.
+
+### Reconnection, watchdog and connection state (in `FfmpegRtspSource`)
+
+Every blocking libav call in the decode loop is bounded twice:
+
+- **libav side:** the RTSP demuxer option `timeout` (µs) = `SocketTimeoutMs`. **Not `stimeout`** —
+  that pre-5.0 name no longer exists in libav 8 and `av_dict_set` silently ignores unknown
+  options; with it, `rt->stimeout` stayed 0, the UDP poll loop never timed out and the TCP socket
+  was opened without `?timeout=`, so `av_read_frame` blocked forever when a camera vanished
+  without RST/FIN and the reconnect loop never ran (nor did the Auto UDP→TCP fallback).
+- **Our side (braces):** `InterruptCb` also fires when the watchdog deadline `_ioDeadlineTick` has
+  passed. `ArmWatchdog()` is called before `avformat_open_input` (3× socket timeout),
+  `avformat_find_stream_info` (2×) and every `av_read_frame` (1×); libav polls the callback every
+  ~100 ms inside all its network waits, so the bound holds regardless of option names. A read
+  aborted by the watchdog returns `AVERROR_EXIT` and is treated as a drop. There is also a
+  decoded-frame stall check (packets arriving but no decoded frame for 2× socket timeout ⇒ drop).
+  `Probe()` uses the same mechanism with its own deadline (2× socket timeout).
+
+Connection state is published for the UI (`ConnectionState`: `Idle`/`Connecting`/`Streaming`/
+`Reconnecting`, plus `ConnectAttempt()` — attempt number since frames last flowed, 0 while
+streaming — `Disconnects()` and `LastError()`), via `VCam_GetProducerConnectionState()` (producer)
+and `GetConnectionState(player)` (preview) → `EngineConnectionStatus` in C#.
+`MainForm.UpdateConnectionStatus()` (from `StatsTimer_Tick`) shows "connection lost — reconnecting
+(attempt N)" as the panel overlay and in the stats "state" row, and restores the normal overlay
+(VCam banner / hidden for the preview) once `Streaming` returns.
+
+**Wait dialogs always time out.** Every `RunWaitDialog` in `MainForm` passes a countdown
+(`OpenTimeoutSec`/`StartTimeoutSec`/`StopTimeoutSec`, `ProbeTimeoutMs`); on expiry the dialog
+closes, the user gets a `Wait_Timeout_*` message and the UI stays usable. The worker keeps
+running (native joins can't be aborted); a start/open that completes late is rolled back by a
+`ContinueWith`, a late stop is left to finish on its own (and the preview is not restarted).
 
 **User-tunable engine options.** The settings dialog (`SettingsForm`) exposes several
 process-wide FFmpeg options, persisted in `Settings` and pushed into the native engine via
@@ -224,7 +256,7 @@ dialog changes a value.
 |---|---|---|---|
 | `RtspTransport` | `SetTransportPreference` | `rtsp_transport` | Auto / UDP-only / TCP-only |
 | `HardwareDecode` | `SetHardwareDecodeEnabled` | (d3d11va device) | off ⇒ software decode |
-| `SocketTimeoutMs` | `SetSocketTimeoutMs` | `stimeout` (µs) | also bounds the UDP→TCP fallback wait |
+| `SocketTimeoutMs` | `SetSocketTimeoutMs` | `timeout` (µs) | also the read-watchdog period: bounds a silent connection, the UDP→TCP fallback wait, and the probe |
 | `ReorderQueueSize` | `SetReorderQueueSize` | `reorder_queue_size` | RTP jitter buffer depth (packets) |
 | `LatencyCapMs` | `SetMaxLagMs` | (own resync) | resync-to-live threshold |
 

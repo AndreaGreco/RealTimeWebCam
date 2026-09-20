@@ -137,6 +137,10 @@ namespace RTVirtualCamera
         [DllImport("RTCamNative.dll")]
         private static extern long GetPreviewBitrate(IntPtr player);
 
+        // Live connection state of the preview's decode core (EngineConnectionState) + counters.
+        [DllImport("RTCamNative.dll")]
+        private static extern int GetConnectionState(IntPtr player, out uint attempt, out uint disconnects, out int lastError);
+
         public uint LastWin32Error { get; private set; }
 
         public VideoPlayerWrapper()
@@ -243,6 +247,22 @@ namespace RTVirtualCamera
                 return 0;
 
             return GetPreviewBitrate(playerInstance);
+        }
+
+        /// <summary>Live connection state of the preview's decode core (Idle if disposed).</summary>
+        public EngineConnectionStatus GetConnectionStatus()
+        {
+            EngineConnectionStatus s = new EngineConnectionStatus();
+            if (disposed)
+                return s;
+
+            uint attempt, disconnects;
+            int lastError;
+            s.State = (EngineConnectionState)GetConnectionState(playerInstance, out attempt, out disconnects, out lastError);
+            s.Attempt = attempt;
+            s.Disconnects = disconnects;
+            s.LastError = lastError;
+            return s;
         }
 
         public void SetWindowHandle(IntPtr windowHandle)

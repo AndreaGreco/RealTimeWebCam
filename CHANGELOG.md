@@ -7,6 +7,21 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.1] - 2026-09-20
+
+Bugfix release: the virtual camera reconnects again after the RTSP source drops, the app tells you when it is retrying, and no wait dialog can block the window forever.
+
+### Fixed
+- **Reconnection after a lost RTSP connection never happened.** The engine set the RTSP socket timeout through the libav option `stimeout`, a pre-5.0 name that no longer exists in the FFmpeg 8 shipped by vcpkg; `av_dict_set` ignores unknown options silently, so the timeout stayed 0. With no timeout, the UDP poll loop never gave up and the TCP socket was opened without one, so when a camera vanished silently (power cut, cable pulled — no RST/FIN) `av_read_frame` blocked forever, the reconnect loop never ran and the virtual camera stayed on the "Camera IP non connessa" frame until the app was restarted. The Auto UDP→TCP fallback, which relied on the same timeout, never worked either. The option is now `timeout`, and the engine additionally arms its own watchdog through libav's `interrupt_callback` before every blocking call (open, stream-info, each read), so every wait is bounded by the configured socket timeout regardless of option names. A "packets arriving but nothing decoded" stall is also detected and treated as a drop.
+- **The build date/time is no longer printed on the synthetic "Camera IP non connessa" frame.** It was a redeploy check left over from development.
+
+### Added
+- **Connection-loss feedback in the app.** The decode core now publishes a connection state (`Idle` / `Connecting` / `Streaming` / `Reconnecting`) with the attempt number and disconnect count (`VCam_GetProducerConnectionState`, `GetConnectionState`). While the source is down the video panel shows *"Connection lost — reconnecting (attempt N)…"* and the Live-stats *State* row says *Reconnecting (attempt N)*; when frames flow again the normal banner is restored (virtual camera) or the overlay is hidden (preview). Localized IT/EN/ES/DE.
+
+### Changed
+- **Every wait dialog has a hard timeout.** The *Opening* / *Starting* / *Stopping* dialogs were indeterminate and could hold the window hostage if the Frame Server or the RTSP open hung. They now count down (30 s open/start, 20 s stop, 8 s probe as before); on expiry the dialog closes, a message explains what timed out and the UI stays usable. The worker finishes on its own: a start/open that completes late is rolled back, a late stop is simply left to finish.
+- The pause between reconnection attempts (1 s) is now interruptible, so *Stop* no longer waits for it.
+
 ## [1.2.0] - 2026-09-18
 
 Responsiveness and UX release: the window no longer freezes while connecting or starting/stopping the camera, the source field remembers where you have connected before, and the preview finally has a proper on/off control.
@@ -128,6 +143,7 @@ First stable release. The receive pipeline is now a single, tunable FFmpeg user-
 - `PAUSED→RUNNING` transition (`SetStreamState`) returning `E_POINTER`.
 - Memory leak on Stop/Start cycle.
 
+[1.2.1]: https://github.com/andrea-greco/RealTimeWebCam/compare/1.2.0...1.2.1
 [1.2.0]: https://github.com/andrea-greco/RealTimeWebCam/compare/1.1.0...1.2.0
 [1.1.0]: https://github.com/andrea-greco/RealTimeWebCam/compare/1.0.1...1.1.0
 [1.0.1]: https://github.com/andrea-greco/RealTimeWebCam/compare/1.0.0...1.0.1

@@ -96,6 +96,27 @@ namespace RTVirtualCamera
         Tcp = 2,  // force TCP only
     }
 
+    /// <summary>
+    /// Live connection state of the FFmpeg decode core (preview or producer). Values must
+    /// match the native ConnectionState enum in RTCamNative/FfmpegRtspSource.h.
+    /// </summary>
+    public enum EngineConnectionState
+    {
+        Idle = 0,         // not started / stopped
+        Connecting = 1,   // first connection of the session not established yet
+        Streaming = 2,    // frames are flowing
+        Reconnecting = 3, // connection lost after streaming; the engine is retrying
+    }
+
+    /// <summary>Snapshot of the decode core's connection state, polled by the UI timer.</summary>
+    public struct EngineConnectionStatus
+    {
+        public EngineConnectionState State;
+        public uint Attempt;      // connection attempt in progress since frames last flowed (0 while streaming)
+        public uint Disconnects;  // how many times an established stream broke this session
+        public int LastError;     // last AVERROR code (0 = none)
+    }
+
     public class VirtualCameraWrapper : IDisposable
     {
         [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
@@ -184,6 +205,10 @@ namespace RTVirtualCamera
         [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
         private static extern long VCam_GetFfmpegProducerBitrate();
 
+        // Live connection state of the producer (EngineConnectionState) + counters.
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
+        private static extern int VCam_GetProducerConnectionState(out uint attempt, out uint disconnects, out int lastError);
+
         /// <summary>
         /// Pushes all engine options from Settings.Current into RTCamNative. Static because
         /// the options are process-wide (they configure the shared decode core), not tied
@@ -225,6 +250,20 @@ namespace RTVirtualCamera
         {
             if (disposed) return 0;
             return VCam_GetFfmpegProducerBitrate();
+        }
+
+        /// <summary>Live connection state of the producer's decode core (Idle if disposed).</summary>
+        public EngineConnectionStatus GetConnectionStatus()
+        {
+            EngineConnectionStatus s = new EngineConnectionStatus();
+            if (disposed) return s;
+            uint attempt, disconnects;
+            int lastError;
+            s.State = (EngineConnectionState)VCam_GetProducerConnectionState(out attempt, out disconnects, out lastError);
+            s.Attempt = attempt;
+            s.Disconnects = disconnects;
+            s.LastError = lastError;
+            return s;
         }
 
         private IntPtr vcamHandle;

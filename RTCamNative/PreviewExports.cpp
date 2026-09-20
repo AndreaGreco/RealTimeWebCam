@@ -94,4 +94,20 @@ extern "C" {
 		return player ? player->getBitrateBps() : 0;
 	}
 
+	// Live connection state of the preview (0 idle, 1 connecting, 2 streaming,
+	// 3 reconnecting) plus the attempt / disconnect counters — see
+	// VCam_GetProducerConnectionState for the semantics.
+	__declspec(dllexport) int GetConnectionState(FfmpegPreviewPlayer* player,
+		uint32_t* attemptOut, uint32_t* disconnectsOut, int* lastErrorOut)
+	{
+		if (!player)
+		{
+			if (attemptOut) *attemptOut = 0;
+			if (disconnectsOut) *disconnectsOut = 0;
+			if (lastErrorOut) *lastErrorOut = 0;
+			return (int)ConnectionState::Idle;
+		}
+		return player->getConnectionState(attemptOut, disconnectsOut, lastErrorOut);
+	}
+
 } // extern "C"

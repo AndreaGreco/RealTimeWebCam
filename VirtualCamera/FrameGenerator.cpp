@@ -132,15 +132,14 @@ HRESULT FrameGenerator::Generate(IMFSample* sample, REFGUID format, IMFSample** 
 		_renderTarget->BeginDraw();
 		_renderTarget->Clear(D2D1::ColorF(0.08f, 0.08f, 0.08f, 1.0f));
 
-		// Build tag baked at compile time — changes every build to confirm DLL was redeployed.
 		// With the diagnostic overlay on, append the delivery counter so the synthetic frame
-		// advances at the same rate the real path is delivered.
+		// advances at the same rate the real path is delivered. (The build date/time that
+		// used to be baked in here was a redeploy check — not something end users should see.)
 		wchar_t text[128];
 		if (drawCounter)
-			swprintf_s(text, L"Camera IP non connessa\n%S %S\nframe: %llu",
-				__DATE__, __TIME__, (unsigned long long)counter);
+			swprintf_s(text, L"Camera IP non connessa\nframe: %llu", (unsigned long long)counter);
 		else
-			swprintf_s(text, L"Camera IP non connessa\n%S %S", __DATE__, __TIME__);
+			wcscpy_s(text, L"Camera IP non connessa");
 
 		wil::com_ptr_nothrow<IDWriteTextLayout> layout;
 		RETURN_IF_FAILED(_dwrite->CreateTextLayout(text, (UINT32)wcslen(text), _textFormat.get(), (FLOAT)_width, (FLOAT)_height, &layout));

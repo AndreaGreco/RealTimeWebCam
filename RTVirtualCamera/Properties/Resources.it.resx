@@ -523,4 +523,31 @@ Licenza MIT — © Simon Mourier, Andrea Greco.</value>
   <data name="Row_drift" xml:space="preserve">
     <value>Drift (ms)</value>
   </data>
+  <data name="Conn_Lost_Retrying" xml:space="preserve">
+    <value>Connessione persa — riconnessione in corso (tentativo {0})…</value>
+  </data>
+  <data name="Conn_Connecting_Attempt" xml:space="preserve">
+    <value>Connessione alla sorgente… (tentativo {0})</value>
+  </data>
+  <data name="Stats_State_Reconnecting" xml:space="preserve">
+    <value>Riconnessione (tentativo {0})</value>
+  </data>
+  <data name="Stats_State_Connecting" xml:space="preserve">
+    <value>Connessione (tentativo {0})</value>
+  </data>
+  <data name="Wait_Timeout_Title" xml:space="preserve">
+    <value>Timeout</value>
+  </data>
+  <data name="Wait_Timeout_Message" xml:space="preserve">
+    <value>L'operazione non è terminata entro {0} s. L'applicazione resta utilizzabile; l'operazione continua in background.</value>
+  </data>
+  <data name="Wait_Timeout_Start_Details" xml:space="preserve">
+    <value>Avvio della Virtual Camera non completato (Frame Server o apertura RTSP bloccati). Un eventuale avvio tardivo verrà annullato.</value>
+  </data>
+  <data name="Wait_Timeout_Stop_Details" xml:space="preserve">
+    <value>Arresto non completato: il Frame Server non ha rilasciato la sessione in tempo.</value>
+  </data>
+  <data name="Wait_Timeout_Open_Details" xml:space="preserve">
+    <value>Apertura dell'anteprima non completata (sorgente RTSP bloccata).</value>
+  </data>
 </root>

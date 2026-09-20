@@ -514,4 +514,31 @@ MIT License — © Simon Mourier, Andrea Greco.</value>
   <data name="Row_drift" xml:space="preserve">
     <value>Drift (ms)</value>
   </data>
+  <data name="Conn_Lost_Retrying" xml:space="preserve">
+    <value>Connection lost — reconnecting (attempt {0})…</value>
+  </data>
+  <data name="Conn_Connecting_Attempt" xml:space="preserve">
+    <value>Connecting to the source… (attempt {0})</value>
+  </data>
+  <data name="Stats_State_Reconnecting" xml:space="preserve">
+    <value>Reconnecting (attempt {0})</value>
+  </data>
+  <data name="Stats_State_Connecting" xml:space="preserve">
+    <value>Connecting (attempt {0})</value>
+  </data>
+  <data name="Wait_Timeout_Title" xml:space="preserve">
+    <value>Timeout</value>
+  </data>
+  <data name="Wait_Timeout_Message" xml:space="preserve">
+    <value>The operation did not complete within {0} s. The application stays usable; the operation continues in the background.</value>
+  </data>
+  <data name="Wait_Timeout_Start_Details" xml:space="preserve">
+    <value>Virtual Camera start did not complete (Frame Server or RTSP open hung). A late start will be rolled back.</value>
+  </data>
+  <data name="Wait_Timeout_Stop_Details" xml:space="preserve">
+    <value>Stop did not complete: the Frame Server did not release the session in time.</value>
+  </data>
+  <data name="Wait_Timeout_Open_Details" xml:space="preserve">
+    <value>Preview open did not complete (RTSP source hung).</value>
+  </data>
 </root>

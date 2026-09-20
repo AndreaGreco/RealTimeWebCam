@@ -86,7 +86,8 @@ extern "C" {
 		FfmpegRtspSource::SetHardwareDecodeEnabled(enabled != 0);
 	}
 
-	// RTSP socket timeout (libav "stimeout"), in milliseconds.
+	// RTSP socket timeout (libav "timeout", µs on the wire), in milliseconds. Also the
+	// engine's read-watchdog period (see FfmpegRtspSource::SetSocketTimeoutMs).
 	__declspec(dllexport) void VCam_SetSocketTimeoutMs(int ms)
 	{
 		FfmpegRtspSource::SetSocketTimeoutMs(ms);
@@ -128,6 +129,21 @@ extern "C" {
 	__declspec(dllexport) long long VCam_GetFfmpegProducerBitrate()
 	{
 		return g_producer ? (long long)g_producer->BitrateBps() : 0;
+	}
+
+	// Live connection state of the producer (FfmpegRtspSource::ConnectionState as
+	// int: 0 idle, 1 connecting, 2 streaming, 3 reconnecting). Optional outputs:
+	// attemptOut = number of the connection attempt in progress since frames last
+	// flowed (0 while streaming); disconnectsOut = how many times an established
+	// stream broke this session; lastErrorOut = last AVERROR code (0 = none). The UI
+	// polls this to show "connection lost, retrying (attempt N)".
+	__declspec(dllexport) int VCam_GetProducerConnectionState(
+		uint32_t* attemptOut, uint32_t* disconnectsOut, int* lastErrorOut)
+	{
+		if (attemptOut)     *attemptOut     = g_producer ? g_producer->ConnectAttempt() : 0;
+		if (disconnectsOut) *disconnectsOut = g_producer ? g_producer->Disconnects()    : 0;
+		if (lastErrorOut)   *lastErrorOut   = g_producer ? g_producer->LastError()      : 0;
+		return g_producer ? (int)g_producer->State() : (int)ConnectionState::Idle;
 	}
 
 } // extern "C"

@@ -38,6 +38,18 @@ enum class RtspTransport : int
 	Tcp  = 2, // force TCP only
 };
 
+// Live connection state of a decode session, published by the decode thread and
+// polled by the UI (preview and producer alike) so the app can show "connection
+// lost, retrying (attempt N)" instead of silently freezing. Values are part of the
+// P/Invoke ABI (VirtualCameraWrapper / VideoPlayerWrapper mirror them).
+enum class ConnectionState : int
+{
+	Idle         = 0, // not started / stopped
+	Connecting   = 1, // first connection of the session not established yet
+	Streaming    = 2, // frames are flowing
+	Reconnecting = 3, // connection was lost after streaming; retrying
+};
+
 // User-space RTSP receiver for the (now single) FFmpeg engine. Runs entirely in
 // the app process (RTCamNative): opens the RTSP URL with libavformat, decodes
 // H.264/H.265 with libavcodec (GPU via d3d11va when available, else software),
@@ -103,6 +115,18 @@ public:
 	// definitive once frames flow. Reset to 0 whenever the connection drops.
 	int ActiveTransport() const { return _activeTransport.load(); }
 
+	// Connection state machine (see ConnectionState). `attempt` is the number of the
+	// connection attempt currently in progress since the last time frames flowed (1
+	// = first try; grows while the source stays unreachable; 0 while Streaming).
+	// `disconnects` counts how many times an established stream broke this session.
+	// Cheap atomics — polled from the UI timer.
+	ConnectionState State() const { return (ConnectionState)_connState.load(); }
+	uint32_t ConnectAttempt() const { return _connectAttempt.load(); }
+	uint32_t Disconnects() const { return _disconnects.load(); }
+	// Last libav error (AVERROR code, negative) that ended a connection attempt or a
+	// running stream; 0 if none yet. Diagnostics only.
+	int LastError() const { return _lastError.load(); }
+
 	// Opens the URL just long enough to read geometry/codec, then closes it.
 	// Blocking (bounded by the RTSP socket timeout); safe to call before Start().
 	static FfmpegProbeInfo Probe(const std::wstring& rtspUrl);
@@ -116,8 +140,12 @@ public:
 	static void SetHardwareDecodeEnabled(bool enabled);    // default on
 	static bool HardwareDecodeEnabled();
 
-	// Socket timeout for the RTSP connection (libav "stimeout"), in milliseconds.
-	// Also bounds how long a dead UDP attempt blocks before Auto falls back to TCP.
+	// Socket timeout for the RTSP connection (libav "timeout" — the old "stimeout"
+	// name no longer exists in libav ≥ 5 and was being silently ignored), in
+	// milliseconds. It also drives our own read watchdog (see InterruptCb): a
+	// connection that delivers nothing for this long is torn down and reconnected.
+	// That is what bounds how long a dead UDP attempt blocks before Auto falls back
+	// to TCP, and how fast a silently vanished camera (no RST/FIN) is noticed.
 	static void SetSocketTimeoutMs(int ms);                // default 5000
 	static int  SocketTimeoutMs();
 
@@ -149,12 +177,28 @@ public:
 
 private:
 	void DecodeLoop(std::string url, uint32_t targetW, uint32_t targetH);
-	// libav interrupt callback: returns non-zero to abort a blocking call when _stop is set.
+	// libav interrupt callback: returns non-zero to abort a blocking call when _stop
+	// is set OR the current watchdog deadline (_ioDeadlineTick, GetTickCount64 ms; 0 =
+	// none) has passed. libav polls it every ~100 ms inside every blocking network
+	// call (connect, RTSP handshake, UDP poll, TCP recv), so this bounds every wait in
+	// the decode loop independently of which demuxer option names this libav honors.
 	static int InterruptCb(void* opaque);
+	// Arms / disarms the watchdog deadline for the next blocking libav call.
+	void ArmWatchdog(uint32_t timeoutMs);
+	void DisarmWatchdog() { _ioDeadlineTick.store(0); }
+	// Sleeps up to `ms` before the next reconnect attempt, returning early on Stop().
+	void SleepInterruptible(uint32_t ms);
+	// Records the end of a connection attempt / stream (error code + state transition).
+	void NoteConnectionLost(int avError, bool wasStreaming);
 
 	std::thread _thread;
 	std::atomic<bool> _stop{ false };
 	std::atomic<bool> _running{ false };
+	std::atomic<uint64_t> _ioDeadlineTick{ 0 }; // watchdog deadline for InterruptCb (0 = off)
+	std::atomic<int> _connState{ 0 };           // ConnectionState (see State())
+	std::atomic<uint32_t> _connectAttempt{ 0 }; // see ConnectAttempt()
+	std::atomic<uint32_t> _disconnects{ 0 };    // see Disconnects()
+	std::atomic<int> _lastError{ 0 };           // see LastError()
 	std::atomic<uint64_t> _framesDecoded{ 0 };
 	std::atomic<bool> _hwActive{ false };
 	std::atomic<int64_t> _lastLagMs{ 0 };

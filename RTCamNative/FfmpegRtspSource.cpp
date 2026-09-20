@@ -63,6 +63,11 @@ namespace
 	std::atomic<int>  g_maxDelayMs{ 0 };
 	std::atomic<int>  g_maxLagMs{ 350 };
 
+	// Pause between two connection attempts. Short on purpose: a camera that reboots
+	// or a cable that is re-plugged should be back on the virtual camera within a
+	// couple of seconds, and a failed attempt already costs the socket timeout.
+	constexpr uint32_t kReconnectDelayMs = 1000;
+
 	// The rtsp_transport value libav wants for the current preference. "udp+tcp" is a
 	// flag mask: libav tries the lower transports in enum order (UDP before TCP) and
 	// keeps the first whose SETUP succeeds, so Auto gets UDP with a TCP fallback.
@@ -96,7 +101,39 @@ FfmpegRtspSource::~FfmpegRtspSource()
 int FfmpegRtspSource::InterruptCb(void* opaque)
 {
 	auto* self = static_cast<FfmpegRtspSource*>(opaque);
-	return (self && self->_stop.load()) ? 1 : 0;
+	if (!self) return 0;
+	if (self->_stop.load()) return 1;
+	// Watchdog: abort the blocking call once its deadline has passed. This is what
+	// guarantees av_read_frame / avformat_open_input return in bounded time even if
+	// the camera vanishes silently (no RST/FIN) — the libav-side "timeout" option is
+	// belt, this is braces.
+	const uint64_t deadline = self->_ioDeadlineTick.load();
+	return (deadline != 0 && GetTickCount64() > deadline) ? 1 : 0;
+}
+
+void FfmpegRtspSource::ArmWatchdog(uint32_t timeoutMs)
+{
+	_ioDeadlineTick.store(GetTickCount64() + timeoutMs);
+}
+
+void FfmpegRtspSource::SleepInterruptible(uint32_t ms)
+{
+	const ULONGLONG until = GetTickCount64() + ms;
+	while (!_stop.load() && GetTickCount64() < until)
+		Sleep(50);
+}
+
+void FfmpegRtspSource::NoteConnectionLost(int avError, bool wasStreaming)
+{
+	_lastError.store(avError);
+	_activeTransport.store(0); // no live transport
+	_bitrateBps.store(0);      // no throughput while disconnected
+	if (wasStreaming)
+	{
+		_disconnects.fetch_add(1);
+		_connState.store((int)ConnectionState::Reconnecting);
+	}
+	// else: still Connecting (never streamed) or already Reconnecting — keep it.
 }
 
 void FfmpegRtspSource::SetTransportPreference(RtspTransport t) { g_transportPref.store((int)t); }
@@ -131,10 +168,21 @@ FfmpegProbeInfo FfmpegRtspSource::Probe(const std::wstring& rtspUrl)
 		return info;
 	}
 
+	// Hard bound on the whole probe (open + find_stream_info), enforced through the
+	// interrupt callback so it holds regardless of which socket op is blocking.
+	ULONGLONG probeDeadline = GetTickCount64() + (ULONGLONG)SocketTimeoutMs() * 2;
+	fmt->interrupt_callback.callback = [](void* opaque) -> int
+	{
+		return GetTickCount64() > *static_cast<const ULONGLONG*>(opaque) ? 1 : 0;
+	};
+	fmt->interrupt_callback.opaque = &probeDeadline;
+
 	AVDictionary* opts = nullptr;
 	// Honor the user's transport preference (Auto = UDP with TCP fallback).
 	av_dict_set(&opts, "rtsp_transport", TransportOption(), 0);
-	av_dict_set(&opts, "stimeout", "5000000", 0); // 5s socket timeout (microseconds)
+	// RTSP socket I/O timeout in microseconds. NOTE: the option is "timeout" — the
+	// pre-5.0 name "stimeout" is gone from this libav and would be silently ignored.
+	av_dict_set_int(&opts, "timeout", (int64_t)SocketTimeoutMs() * 1000, 0);
 	av_dict_set(&opts, "probesize", "500000", 0);
 
 	int r = avformat_open_input(&fmt, url.c_str(), nullptr, &opts);
@@ -213,6 +261,11 @@ bool FfmpegRtspSource::Start(const std::wstring& rtspUrl, uint32_t targetWidth, 
 	_lastLagMs.store(0);
 	_bitrateBps.store(0);
 	_activeTransport.store(0);
+	_ioDeadlineTick.store(0);
+	_connState.store((int)ConnectionState::Connecting);
+	_connectAttempt.store(0);
+	_disconnects.store(0);
+	_lastError.store(0);
 	_sink = std::move(sink);
 	avformat_network_init();
 
@@ -228,6 +281,9 @@ void FfmpegRtspSource::Stop()
 	if (_thread.joinable())
 		_thread.join();
 	_running.store(false);
+	_connState.store((int)ConnectionState::Idle);
+	_connectAttempt.store(0);
+	_activeTransport.store(0);
 	_sink = nullptr; // release anything the sink captured
 	avformat_network_deinit();
 }
@@ -288,13 +344,25 @@ void FfmpegRtspSource::DecodeLoop(std::string url, uint32_t targetW, uint32_t ta
 		const char* transportOpt = (attemptTransport == RtspTransport::Tcp) ? "tcp" : "udp";
 		_activeTransport.store(0); // not connected until the first frame arrives
 
+		// One more attempt since the last time frames flowed (1 = first try). The UI
+		// shows this as "retrying (attempt N)".
+		const uint32_t attemptNo = _connectAttempt.fetch_add(1) + 1;
+		{
+			std::ostringstream oss;
+			oss << "FfmpegRtspSource::DecodeLoop - connection attempt " << attemptNo
+			    << " over " << transportOpt;
+			DebugLog(oss.str().c_str());
+		}
+
 		AVFormatContext* fmt = avformat_alloc_context();
 		if (!fmt) break;
 		fmt->interrupt_callback.callback = &FfmpegRtspSource::InterruptCb;
 		fmt->interrupt_callback.opaque = this;
 
 		// Snapshot the user-tunable numeric options for this attempt (see the setters).
-		const std::string stimeoutUs = std::to_string((int64_t)SocketTimeoutMs() * 1000);
+		// The socket timeout doubles as the watchdog period: a connection that goes
+		// silent for that long is torn down and reconnected.
+		const uint32_t    socketTimeoutMs = (uint32_t)SocketTimeoutMs();
 		const std::string reorderQ   = std::to_string(ReorderQueueSize());
 		const std::string maxDelayUs = std::to_string((int64_t)MaxDelayMs() * 1000);
 		const int         udpBufBytes = UdpBufferSize();
@@ -302,7 +370,12 @@ void FfmpegRtspSource::DecodeLoop(std::string url, uint32_t targetW, uint32_t ta
 
 		AVDictionary* opts = nullptr;
 		av_dict_set(&opts, "rtsp_transport", transportOpt, 0);
-		av_dict_set(&opts, "stimeout", stimeoutUs.c_str(), 0); // socket timeout (microseconds)
+		// RTSP socket I/O timeout in microseconds (covers connect, the RTSP handshake,
+		// TCP recv and the UDP poll). NOTE: the option is "timeout" — the pre-5.0 name
+		// "stimeout" no longer exists in this libav and was being silently ignored,
+		// which left every read unbounded: a camera that vanished without RST/FIN made
+		// av_read_frame block forever and the reconnect loop never ran.
+		av_dict_set_int(&opts, "timeout", (int64_t)socketTimeoutMs * 1000, 0);
 		// --- Latency-critical demux options ---------------------------------------
 		// RTP reorder buffer: on TCP packets never reorder (harmless), but on UDP a
 		// value of 0 would drop every out-of-order packet and shred the picture. A
@@ -319,21 +392,27 @@ void FfmpegRtspSource::DecodeLoop(std::string url, uint32_t targetW, uint32_t ta
 		av_dict_set(&opts, "probesize", "500000", 0);         // small probe → faster startup (steady-state unaffected)
 		av_dict_set(&opts, "analyzeduration", "0", 0);        // RTSP carries codec params in the SDP; skip the analyze wait
 
+		// Bound the whole open (DNS + connect + DESCRIBE/SETUP/PLAY): the per-op
+		// "timeout" above covers each socket call, the watchdog covers their sum.
+		ArmWatchdog(socketTimeoutMs * 3);
 		int r = avformat_open_input(&fmt, url.c_str(), nullptr, &opts);
 		av_dict_free(&opts);
 		if (r < 0)
 		{
 			LogAv("avformat_open_input", r);
 			if (fmt) avformat_free_context(fmt);
-			if (!_stop.load()) Sleep(1000);
+			NoteConnectionLost(r, false);
+			SleepInterruptible(kReconnectDelayMs);
 			continue;
 		}
 
+		ArmWatchdog(socketTimeoutMs * 2);
 		if ((r = avformat_find_stream_info(fmt, nullptr)) < 0)
 		{
 			LogAv("avformat_find_stream_info", r);
 			avformat_close_input(&fmt);
-			if (!_stop.load()) Sleep(1000);
+			NoteConnectionLost(r, false);
+			SleepInterruptible(kReconnectDelayMs);
 			continue;
 		}
 
@@ -342,7 +421,8 @@ void FfmpegRtspSource::DecodeLoop(std::string url, uint32_t targetW, uint32_t ta
 		{
 			DebugLog("FfmpegRtspSource::DecodeLoop - no video stream");
 			avformat_close_input(&fmt);
-			if (!_stop.load()) Sleep(1000);
+			NoteConnectionLost(AVERROR_STREAM_NOT_FOUND, false);
+			SleepInterruptible(kReconnectDelayMs);
 			continue;
 		}
 
@@ -373,7 +453,8 @@ void FfmpegRtspSource::DecodeLoop(std::string url, uint32_t targetW, uint32_t ta
 			DebugLog("FfmpegRtspSource::DecodeLoop - failed to open decoder");
 			if (cc) avcodec_free_context(&cc);
 			avformat_close_input(&fmt);
-			if (!_stop.load()) Sleep(1000);
+			NoteConnectionLost(AVERROR_DECODER_NOT_FOUND, false);
+			SleepInterruptible(kReconnectDelayMs);
 			continue;
 		}
 
@@ -402,13 +483,33 @@ void FfmpegRtspSource::DecodeLoop(std::string url, uint32_t targetW, uint32_t ta
 		int64_t   bitrateWindowBytes = 0;
 		ULONGLONG bitrateWindowStart = GetTickCount64();
 
+		// Decoded-frame stall detector: packets may keep arriving while the decoder
+		// emits nothing (e.g. UDP losing every keyframe, or a source that only sends
+		// RTCP). Treat "no decoded frame for 2× the socket timeout" as a dead stream.
+		const ULONGLONG frameStallMs = (ULONGLONG)socketTimeoutMs * 2;
+		ULONGLONG lastFrameTick = GetTickCount64();
+		int lossError = 0; // the error that ended this connection (0 = Stop())
+
 		// Inner loop: decode until the stream drops, errors, or we are stopped.
 		while (!_stop.load())
 		{
+			// Watchdog for this read: if nothing arrives within the socket timeout the
+			// interrupt callback aborts av_read_frame with AVERROR_EXIT and we reconnect.
+			ArmWatchdog(socketTimeoutMs);
 			r = av_read_frame(fmt, pkt);
 			if (r < 0)
 			{
-				LogAv("av_read_frame (stream ended / broke)", r);
+				if (_stop.load()) break;
+				LogAv(r == AVERROR_EXIT ? "av_read_frame (watchdog: no data within socket timeout)"
+				                        : "av_read_frame (stream ended / broke)", r);
+				lossError = (r == AVERROR_EXIT) ? AVERROR(ETIMEDOUT) : r;
+				break; // reconnect
+			}
+			if (GetTickCount64() - lastFrameTick > frameStallMs)
+			{
+				DebugLog("FfmpegRtspSource::DecodeLoop - packets but no decoded frame within stall window; reconnecting");
+				av_packet_unref(pkt);
+				lossError = AVERROR(ETIMEDOUT);
 				break; // reconnect
 			}
 			if (pkt->stream_index != vs)
@@ -507,12 +608,16 @@ void FfmpegRtspSource::DecodeLoop(std::string url, uint32_t targetW, uint32_t ta
 							_sink(nv12->data[0], nv12->linesize[0],
 								nv12->data[1], nv12->linesize[1], targetW, targetH);
 						_framesDecoded.fetch_add(1);
+						lastFrameTick = GetTickCount64();
 						// First frame of this attempt: the transport actually carries
 						// video, so publish it and stop the Auto UDP↔TCP alternation.
 						if (!lastAttemptGotFrame)
 						{
 							lastAttemptGotFrame = true;
 							_activeTransport.store((int)attemptTransport);
+							_connectAttempt.store(0);
+							_connState.store((int)ConnectionState::Streaming);
+							DebugLog("FfmpegRtspSource::DecodeLoop - streaming (first frame received)");
 						}
 					}
 					if (srcFrame == swFrame)
@@ -527,11 +632,16 @@ void FfmpegRtspSource::DecodeLoop(std::string url, uint32_t targetW, uint32_t ta
 		av_frame_free(&frame);
 		av_packet_free(&pkt);
 		avcodec_free_context(&cc);
+		DisarmWatchdog();
 		avformat_close_input(&fmt);
-		_activeTransport.store(0); // connection dropped — no live transport
-		_bitrateBps.store(0);      // no throughput while disconnected
 
-		if (!_stop.load()) Sleep(1000); // brief pause before reconnecting
+		// Connection dropped (or Stop()): publish it so the UI can show "connection
+		// lost, retrying" and the Frame Server side sees the heartbeat go stale.
+		if (!_stop.load())
+		{
+			NoteConnectionLost(lossError, lastAttemptGotFrame);
+			SleepInterruptible(kReconnectDelayMs); // brief pause before reconnecting
+		}
 	}
 
 	av_frame_free(&swFrame);

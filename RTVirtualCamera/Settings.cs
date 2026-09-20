@@ -63,7 +63,7 @@ namespace RTVirtualCamera
         public bool HardwareDecode { get; set; } = true;
 
         // --- FFmpeg fine-tuning (applied to the engine on the next connection) ------
-        // RTSP socket timeout (libav "stimeout"), milliseconds. Also bounds how long a
+        // RTSP socket timeout (libav "timeout"), milliseconds. Also bounds how long a
         // dead UDP attempt waits before Auto falls back to TCP.
         public int SocketTimeoutMs { get; set; } = 5000;
 
