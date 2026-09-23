@@ -302,25 +302,54 @@ HRESULT MediaStream::CopyFrameChannelFrame(IMFSample* targetSample)
 {
 	RETURN_HR_IF_NULL(E_POINTER, targetSample);
 
+	auto& reader = FrameChannelReader::Instance();
 	const uint8_t* slot = nullptr;
 	uint32_t w = 0, h = 0, st = 0;
 	uint64_t fseq = 0, fwritten = 0, hb = 0;
 	_ffmpegFresh = false;
 
-	if (!FrameChannelReader::Instance().AcquireLatest(&slot, &w, &h, &st, &fseq, &fwritten, &hb) || !slot)
-		return S_FALSE;
+	// Acquires the latest slot; S_FALSE if there is none usable (not published, stale
+	// heartbeat, or geometry mismatch).
+	auto acquire = [&]() -> HRESULT {
+		if (!reader.AcquireLatest(&slot, &w, &h, &st, &fseq, &fwritten, &hb) || !slot)
+			return S_FALSE;
+		// Freshness: the producer stamps GetTickCount64() (system-wide, comparable across
+		// processes) on every write; treat >2s without an update as "producer gone".
+		const ULONGLONG now = GetTickCount64();
+		const bool fresh = (hb != 0) && (now >= hb) && (now - hb <= 2000);
+		_frameChannelRxFrames = fwritten;
+		if (!fresh || w != _videoWidth || h != _videoHeight)
+			return S_FALSE;
+		return S_OK;
+	};
 
-	// Freshness: the producer stamps GetTickCount64() (system-wide, comparable across
-	// processes) on every write; treat >2s without an update as "producer gone".
-	const ULONGLONG now = GetTickCount64();
-	const bool fresh = (hb != 0) && (now >= hb) && (now - hb <= 2000);
-	_frameChannelRxFrames = fwritten;
-	if (!fresh || w != _videoWidth || h != _videoHeight)
-		return S_FALSE;
+	HRESULT hr = acquire();
+	if (hr != S_OK)
+		return hr;
 
 	wil::com_ptr_nothrow<IMFMediaBuffer> dstBuffer;
 	RETURN_IF_FAILED(targetSample->GetBufferByIndex(0, &dstBuffer));
 	RETURN_IF_FAILED(CopyNv12ToSample(dstBuffer.get(), slot, (LONG)st, w, h));
+
+	// The pixels were copied outside the seqlock: if the producer lapped the ring during
+	// the copy, the slot may have been partly rewritten. Retry once; if that is torn too
+	// (or no longer acquirable), keep what we have — an imperfect frame beats a lost one.
+	if (!reader.IsSlotStillValid(fseq))
+	{
+		bool torn = true;
+		const uint64_t firstSeq = fseq;
+		if (acquire() == S_OK &&
+			SUCCEEDED(CopyNv12ToSample(dstBuffer.get(), slot, (LONG)st, w, h)))
+			torn = !reader.IsSlotStillValid(fseq);
+		else
+			fseq = firstSeq; // the buffer still holds the first copy
+		if (torn)
+		{
+			_tornFrameCount++;
+			WINTRACE(L"MediaStream::CopyFrameChannelFrame - torn copy kept (frameSeq=%llu, total=%llu)",
+				(unsigned long long)fseq, (unsigned long long)_tornFrameCount);
+		}
+	}
 
 	_ffmpegFresh = true;
 	// Duplicate detection for stats: same frameSeq as last delivery == a re-serve.

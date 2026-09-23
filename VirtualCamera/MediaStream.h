@@ -119,6 +119,7 @@ private:
 	UINT64 _lastDeliveredFrameSeq = 0; // frameSeq of the last frame delivered (dup detection)
 	bool   _hasDeliveredFrame = false; // false until the first frame is ever delivered
 	double _lastCopyMs = 0.0;         // cost of the last frame-channel copy (always CPU)
+	UINT64 _tornFrameCount = 0;       // copies kept although the producer lapped the slot (WINTRACE only, not in VCamFrameServerStats)
 
 	// The app producer's rx counter and heartbeat freshness from the last RequestSample.
 	UINT64 _frameChannelRxFrames = 0; // header framesWritten of the last frame we saw (producer's rx counter)

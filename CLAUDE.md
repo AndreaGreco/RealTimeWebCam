@@ -281,6 +281,13 @@ The frame reaches the consumer's sample through `MediaStream::CopyFrameChannelFr
   seqlock read) plus geometry, `frameSeq`, and the producer's heartbeat tick.
 - Freshness: the producer stamps `GetTickCount64()` on every write; >2s without an update ⇒
   "producer gone" ⇒ `S_FALSE`, and `RequestSample` falls back to the synthetic frame.
+  `AcquireLatest` also rejects a header whose `structVersion` doesn't match, and
+  `EnsureMapped` always re-stamps the header on (re)activation, so a previous session's frame
+  never looks fresh.
+- Tearing check: the pixels are copied outside the seqlock, so after the copy
+  `FrameChannelReader::IsSlotStillValid(frameSeq)` checks the producer hasn't advanced
+  `>= slotCount-1` frames (i.e. started rewriting that slot). If it has, acquire+copy is retried
+  once; a still-torn copy is kept (better than a lost frame) and only counted via `WINTRACE`.
 - `CopyNv12ToSample` does a single `MFCopyImage` per plane (Y + interleaved UV) from the
   system-memory slot into the destination sample buffer, honoring the dest's real pitch (2D or
   flat). The copy is always CPU — the source is system memory, not a GPU texture. (The Frame

@@ -3,6 +3,7 @@
 #include "WinTrace.h"
 #include <mfapi.h>
 #include <sddl.h>
+#include <atomic>
 
 #pragma comment(lib, "advapi32.lib")
 
@@ -67,10 +68,10 @@ bool FrameChannelReader::EnsureMapped(uint32_t width, uint32_t height, uint32_t 
 
 	if (_header)
 	{
-		// Already mapped (fixed max size); just re-stamp if the geometry changed.
-		if (_header->width != width || _header->height != height ||
-			_header->fpsNum != fpsNum || _header->fpsDen != fpsDen)
-			stampHeader();
+		// Already mapped (fixed max size). Always re-stamp, even with the same geometry:
+		// otherwise the previous session's latestSlot/heartbeat stay live and its last
+		// frame can be served as "fresh" for up to 2s.
+		stampHeader();
 		return true;
 	}
 
@@ -124,16 +125,23 @@ bool FrameChannelReader::AcquireLatest(const uint8_t** ppSlot, uint32_t* width, 
 		long seq0 = _header->publishSeq;
 		if (seq0 & 1)
 			continue; // writer mid-update
+		// Keep the plain (non-volatile) field reads between the two publishSeq reads.
+		std::atomic_thread_fence(std::memory_order_acquire);
+		uint32_t ver = _header->structVersion;
 		long latest = _header->latestSlot;
 		uint64_t fseq = _header->frameSeq;
 		uint64_t fwritten = _header->framesWritten;
 		uint64_t hb = _header->producerHeartbeatTickMs;
 		uint32_t w = _header->width, h = _header->height, st = _header->stride;
+		uint32_t slots = _header->slotCount;
+		std::atomic_thread_fence(std::memory_order_acquire);
 		long seq1 = _header->publishSeq;
 		if (seq0 != seq1)
 			continue; // changed mid-read, retry
 
-		if (latest < 0 || (uint32_t)latest >= _header->slotCount)
+		if (ver != VCAM_FRAMES_STRUCT_VERSION)
+			return false; // unknown layout: don't trust anything else in it
+		if (latest < 0 || (uint32_t)latest >= slots)
 			return false; // no frame published yet
 
 		if (ppSlot) *ppSlot = VCamFrameChannel_SlotPtr(_header, (uint32_t)latest);
@@ -146,4 +154,20 @@ bool FrameChannelReader::AcquireLatest(const uint8_t** ppSlot, uint32_t* width, 
 		return true;
 	}
 	return false;
+}
+
+bool FrameChannelReader::IsSlotStillValid(uint64_t acquiredFrameSeq) const
+{
+	if (!_header)
+		return false;
+
+	// Order the re-read after the caller's pixel copy.
+	std::atomic_thread_fence(std::memory_order_acquire);
+	const uint64_t current = _header->frameSeq;
+	const uint32_t slots = _header->slotCount;
+	// The writer fills latest+1, latest+2, then latest again: once it has published
+	// slotCount-1 newer frames, the next write targets the slot we copied from. A
+	// re-stamp (frameSeq reset below acquired) also invalidates it; the unsigned
+	// difference wraps to a huge value in that case.
+	return current - acquiredFrameSeq < (uint64_t)(slots > 1 ? slots - 1 : 1);
 }
