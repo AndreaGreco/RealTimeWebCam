@@ -78,14 +78,19 @@ private:
 
 	// --- Asynchronous two-queue delivery (per the MS custom-media-source model) -----
 	// RequestSample queues the request token and returns immediately (never blocks a
-	// work-queue thread). A periodic threadpool timer marks one frame "due" per frame
-	// interval; DispatchSamples pairs a due credit with a pending request and produces +
-	// delivers exactly one sample. This paces delivery to the advertised frame rate
-	// without the fast NV12 copy path free-running to hundreds of samples/sec.
+	// work-queue thread). The producer's frame-ready event (FrameChannelReader) marks one
+	// frame "due" as soon as a new frame is published; a periodic threadpool timer does
+	// the same only as a fallback, when no event arrived for ~1.5 frame intervals
+	// (producer gone → synthetic frame at the nominal rate, or no event available).
+	// DispatchSamples pairs a due credit with a pending request and produces + delivers
+	// exactly one sample, so delivery follows the producer's cadence without the fast
+	// NV12 copy path free-running to hundreds of samples/sec.
 	void DispatchSamples();                    // under _lock: drain (due AND pending) pairs
 	HRESULT ProduceAndQueue(IUnknown* pToken); // under _lock: allocate → fill → MEMediaSample
 	void OnDeliveryTick();                      // timer callback body (takes _lock)
 	static void CALLBACK DeliveryTimerThunk(PTP_CALLBACK_INSTANCE, void* ctx, PTP_TIMER);
+	void OnFrameReady(PTP_WAIT wait);           // frame-ready wait callback body (takes _lock, re-arms)
+	static void CALLBACK FrameReadyWaitThunk(PTP_CALLBACK_INSTANCE, void* ctx, PTP_WAIT wait, TP_WAIT_RESULT);
 
 	HRESULT BuildFrameTypeNV12(wil::com_ptr_nothrow<IMFMediaType>& nv12Type);
 	HRESULT BuildDescriptor();
@@ -137,11 +142,17 @@ private:
 
 	// --- Delivery pacing (async two-queue model) ----------------------------
 	// The Frame Server re-requests a sample as soon as the previous one is delivered,
-	// so instead of blocking we hold outstanding requests here and let a periodic
-	// threadpool timer gate delivery to the frame rate. See DispatchSamples().
+	// so instead of blocking we hold outstanding requests here and let the producer's
+	// frame-ready event (fallback: a periodic threadpool timer) gate delivery. See
+	// DispatchSamples().
 	std::deque<wil::com_ptr_nothrow<IUnknown>> _requests; // pending request tokens (may hold null)
-	bool      _frameDue = false;             // a timer tick made one frame due (max one credit)
-	PTP_TIMER _deliveryTimer = nullptr;      // periodic pacing timer, armed in Start()
+	bool      _frameDue = false;             // an event/tick made one frame due (max one credit)
+	PTP_TIMER _deliveryTimer = nullptr;      // periodic fallback timer, armed in Start()
+	DWORD     _deliveryPeriodMs = 33;        // nominal frame interval (from the fps hint), set in Start()
+	PTP_WAIT  _frameWait = nullptr;          // threadpool wait on the frame-ready event, re-armed per signal
+	HANDLE    _frameReadyEvent = nullptr;    // FrameChannelReader's event (owned by it), cached in Start()
+	bool      _frameWaitEnabled = false;     // under _lock: the wait callback may re-arm (cleared before disarming)
+	ULONGLONG _lastFrameEventTick = 0;       // GetTickCount64() of the last frame-ready signal (0 = none yet)
 
 	// Publishes the current snapshot (whatever the outcome of this RequestSample
 	// call) to StatsPublisher. Called once at the end of RequestSample().

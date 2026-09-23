@@ -72,7 +72,9 @@ Windows Frame Server (svchost.exe)  ← separate OS process, Local Service
        └─ Activator::ActivateObject()
             └─ VCamMediaSource::SetupCameraSettings(attrs) ← reads geometry; CREATES the frame mapping
             └─ VCamMediaSource::Initialize(attrs)          ← creates streams/descriptors
-       └─ MediaStream::RequestSample() ~30x/sec
+       └─ MediaStream::RequestSample() queues the token; a sample is produced when a frame is due:
+            on the producer's frame-ready event (OnFrameReady), or by the fallback timer
+            (OnDeliveryTick) when no event came for ~1.5 frame intervals
             └─ CopyFrameChannelFrame() → FrameChannelReader::AcquireLatest() → CopyNv12ToSample()
             └─ FrameGenerator synthetic frame if the producer heartbeat is stale (>2s) or none yet
             └─ MediaStream::PublishStats() → StatsPublisher (Global\ shared memory)
@@ -89,7 +91,8 @@ Two shared-memory channels, both `Global\` + explicit DACL (service creates, app
   (`Global\RTVCam_FrameReady_<CLSID>`), also created by the Frame Server
   (`FrameChannelReader::FrameReadyEvent()`, DACL grants IU `SYNCHRONIZE|EVENT_MODIFY_STATE`) and
   opened by the app, which signals it after each publish. It is optional on both sides (created/
-  opened best-effort); the Frame Server's delivery timer still works without it.
+  opened best-effort). `MediaStream` delivers on it (threadpool wait, re-armed per signal); without
+  it the fallback delivery timer paces at the nominal frame rate as before.
 - **Stats channel** (`Global\RTVCam_Stats_<CLSID>`, `Shared/VCamStats.h`) — live fps/copy-cost,
   Frame Server → app. Created/written by the Frame Server (`StatsPublisher`), read by the app
   (`StatsReader`).
@@ -118,7 +121,7 @@ space and is an accepted trade-off.
 |---|---|---|
 | `Activator` | `Activator.cpp` | `IMFActivate` — entry point when Frame Server loads the DLL. Calls `SetupCameraSettings()` then `Initialize()`. |
 | `VCamMediaSource` | `VCamMediaSource.cpp/.h` | `IMFMediaSourceEx` — the camera source. Reads config attrs, **creates the frame mapping** (`FrameChannelReader::EnsureMapped`), owns stream lifecycle. Never opens RTSP. |
-| `MediaStream` | `MediaStream.cpp/.h` | `IMFMediaStream2` — one video stream. On `RequestSample()` pulls the latest NV12 frame from `FrameChannelReader` via `CopyFrameChannelFrame()`, copies it with `CopyNv12ToSample()`, and delivers it (re-serving the same frame if the producer hasn't advanced, tracked as `declinedFrames`, count-only). Falls back to `FrameGenerator` before the first frame or when the producer heartbeat is stale. |
+| `MediaStream` | `MediaStream.cpp/.h` | `IMFMediaStream2` — one video stream. `RequestSample()` only queues the token; delivery is driven by the producer's frame-ready event (`OnFrameReady`, a threadpool wait re-armed per signal) with a periodic threadpool timer as fallback (`OnDeliveryTick` makes a frame due only if no event came for ~1.5 frame intervals — producer gone ⇒ synthetic frame at the nominal rate). Single due-credit (`_frameDue`), so a burst of producer frames never becomes a burst of samples. For each due frame it pulls the latest NV12 frame from `FrameChannelReader` via `CopyFrameChannelFrame()`, copies it with `CopyNv12ToSample()`, and delivers it (re-serving the same frame if the producer hasn't advanced, tracked as `declinedFrames`, count-only). Falls back to `FrameGenerator` before the first frame or when the producer heartbeat is stale. |
 | `FrameChannelReader` | `FrameChannelReader.cpp/.h` | Singleton (`Instance()`). **Creates** `Global\RTVCam_Frames_<CLSID>` with an explicit DACL (service privilege), max-sized (3840×2160) so it survives resolution changes. `AcquireLatest()` reads the latest ring slot under the header seqlock. |
 | `FrameGenerator` | `FrameGenerator.cpp` | Synthetic-frame fallback (Direct2D). Shown before the first real frame and whenever the producer heartbeat is stale ("Camera IP non connessa"). |
 | `StatsPublisher` | `StatsPublisher.cpp/.h` | Singleton (`Instance()`). Writes `VCamFrameServerStats` into the stats shared memory on every `MediaStream::RequestSample()` tick. See "Live stats" below. |
@@ -174,7 +177,7 @@ RTVirtualCamera.exe (app process)
 Frame Server (svchost.exe)
   VCamMediaSource::SetupCameraSettings
     → FrameChannelReader::EnsureMapped(w,h)   ← CREATES the mapping (service privilege)
-  MediaStream::RequestSample (~30x/sec)
+  MediaStream: on the frame-ready event (fallback: timer), paired with a pending RequestSample
     → CopyFrameChannelFrame() → FrameChannelReader::AcquireLatest() → CopyNv12ToSample()
     → synthetic FrameGenerator frame if the producer heartbeat is stale (>2s) or no frame yet
 ```

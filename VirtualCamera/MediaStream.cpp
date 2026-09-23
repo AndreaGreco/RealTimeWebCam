@@ -380,25 +380,40 @@ HRESULT MediaStream::Start(IMFMediaType* type)
 	RETURN_IF_FAILED(_allocator->InitializeSampleAllocator(kAllocatorSampleCount, type));
 	RETURN_IF_FAILED(_queue->QueueEventParamVar(MEStreamStarted, GUID_NULL, S_OK, nullptr));
 
-	// Async delivery pacing: a periodic threadpool timer makes one frame due per frame
-	// interval; DispatchSamples pairs that with a pending RequestSample. Start clean and
-	// allow the first sample immediately so the stream doesn't stutter on startup.
+	// Async delivery pacing: the producer's frame-ready event makes one frame due per
+	// published frame; a periodic threadpool timer does so only as a fallback (see
+	// OnDeliveryTick). DispatchSamples pairs a due frame with a pending RequestSample.
+	// Start clean and allow the first sample immediately so the stream doesn't stutter
+	// on startup.
+	const DWORD periodMs = max(1u, (1000u * _hintFpsDen) / max(1u, _hintFpsNum));
 	{
 		winrt::slim_lock_guard lock(_lock);
 		_requests.clear();
 		_frameDue = true;
+		_deliveryPeriodMs = periodMs;
+		_lastFrameEventTick = 0;
 		if (!_deliveryTimer)
 			_deliveryTimer = CreateThreadpoolTimer(&MediaStream::DeliveryTimerThunk, this, nullptr);
+		_frameReadyEvent = FrameChannelReader::Instance().FrameReadyEvent();
+		if (_frameReadyEvent && !_frameWait)
+			_frameWait = CreateThreadpoolWait(&MediaStream::FrameReadyWaitThunk, this, nullptr);
+		_frameWaitEnabled = _frameReadyEvent && _frameWait;
 	}
 	if (_deliveryTimer)
 	{
-		const DWORD periodMs = max(1u, (1000u * _hintFpsDen) / max(1u, _hintFpsNum));
 		LARGE_INTEGER rel; rel.QuadPart = -(LONGLONG)periodMs * 10000LL; // relative, 100ns units
 		FILETIME due{ rel.LowPart, (DWORD)rel.HighPart };
 		SetThreadpoolTimer(_deliveryTimer, &due, periodMs, 0);
 	}
 
 	_state = MF_STREAM_STATE_RUNNING;
+
+	// Arm the frame-ready wait only once RUNNING, so its first callback can't see a
+	// not-yet-running stream and skip the re-arm.
+	if (_frameWaitEnabled)
+		SetThreadpoolWait(_frameWait, _frameReadyEvent, nullptr);
+	WINTRACE(L"MediaStream::Start - delivery: %s (fallback timer %u ms)",
+		_frameWaitEnabled ? L"frame-ready event" : L"timer only", periodMs);
 	return S_OK;
 }
 
@@ -406,8 +421,19 @@ HRESULT MediaStream::Stop()
 {
 	RETURN_HR_IF(MF_E_SHUTDOWN, !_queue || !_allocator);
 
-	// Disarm the pacing timer and wait out any in-flight callback BEFORE taking _lock
-	// (the callback takes _lock — waiting while holding it would deadlock).
+	// Disarm the frame-ready wait and the pacing timer and wait out any in-flight
+	// callback BEFORE taking _lock (the callbacks take _lock — waiting while holding it
+	// would deadlock). The wait callback re-arms itself, so first forbid that under
+	// _lock; any callback already past the check has re-armed before we disarm.
+	{
+		winrt::slim_lock_guard lock(_lock);
+		_frameWaitEnabled = false;
+	}
+	if (_frameWait)
+	{
+		SetThreadpoolWait(_frameWait, nullptr, nullptr);
+		WaitForThreadpoolWaitCallbacks(_frameWait, TRUE);
+	}
 	if (_deliveryTimer)
 	{
 		SetThreadpoolTimer(_deliveryTimer, nullptr, 0, 0);
@@ -478,8 +504,20 @@ HRESULT MediaStream::SetRuntimeContext(const StreamRuntimeContext& context)
 
 void MediaStream::Shutdown()
 {
-	// Stop the pacing timer and wait out any in-flight callback before tearing down the
-	// queue it delivers into. Not under _lock — the callback takes _lock.
+	// Stop the frame-ready wait and the pacing timer and wait out any in-flight callback
+	// before tearing down the queue they deliver into. Not under _lock — the callbacks
+	// take _lock (re-arming is forbidden first, as in Stop()).
+	{
+		winrt::slim_lock_guard lock(_lock);
+		_frameWaitEnabled = false;
+	}
+	if (_frameWait)
+	{
+		SetThreadpoolWait(_frameWait, nullptr, nullptr);
+		WaitForThreadpoolWaitCallbacks(_frameWait, TRUE);
+		CloseThreadpoolWait(_frameWait);
+		_frameWait = nullptr;
+	}
 	if (_deliveryTimer)
 	{
 		SetThreadpoolTimer(_deliveryTimer, nullptr, 0, 0);
@@ -575,7 +613,8 @@ STDMETHODIMP MediaStream::GetStreamDescriptor(IMFStreamDescriptor** ppStreamDesc
 // IMFMediaStream::RequestSample — the Frame Server's "give me a frame" call. Per the MS
 // custom-media-source model we do NOT produce or block here: the token is queued and we
 // return immediately, so a work-queue thread is never held (deadlock-safe). Actual
-// delivery is paced by the threadpool timer (see DispatchSamples/OnDeliveryTick), which
+// delivery is paced by the producer's frame-ready event, with a threadpool timer as
+// fallback (see DispatchSamples/OnFrameReady/OnDeliveryTick), which
 // is what stops the fast NV12 copy path from free-running to hundreds of samples/sec.
 STDMETHODIMP MediaStream::RequestSample(IUnknown* pToken)
 {
@@ -704,13 +743,20 @@ HRESULT MediaStream::ProduceAndQueue(IUnknown* pToken)
 	return S_OK;
 }
 
-// Periodic threadpool-timer callback: makes one frame due and delivers it if a request
-// is already waiting. Takes _lock (like RequestSample), so Stop()/Shutdown() must NOT
-// hold _lock while draining callbacks — they don't.
+// Periodic threadpool-timer callback, now only the FALLBACK pacer: makes one frame due
+// only if no frame-ready event arrived for ~1.5 frame intervals (producer stopped/stale
+// → synthetic frame at the nominal rate, or no event available at all → the old fixed
+// cadence). Takes _lock (like RequestSample), so Stop()/Shutdown() must NOT hold _lock
+// while draining callbacks — they don't.
 void MediaStream::OnDeliveryTick()
 {
 	winrt::slim_lock_guard lock(_lock);
 	if (_state != MF_STREAM_STATE_RUNNING || !_queue)
+		return;
+	const ULONGLONG now = GetTickCount64();
+	const bool eventsFlowing = _frameWaitEnabled && _lastFrameEventTick != 0 &&
+		now - _lastFrameEventTick <= (ULONGLONG)_deliveryPeriodMs * 3 / 2;
+	if (eventsFlowing)
 		return;
 	_frameDue = true;
 	DispatchSamples();
@@ -719,6 +765,27 @@ void MediaStream::OnDeliveryTick()
 void CALLBACK MediaStream::DeliveryTimerThunk(PTP_CALLBACK_INSTANCE, void* ctx, PTP_TIMER)
 {
 	static_cast<MediaStream*>(ctx)->OnDeliveryTick();
+}
+
+// Frame-ready wait callback: the producer just published a new frame, so make one frame
+// due and deliver it if a request is waiting (single credit — a burst of frames still
+// yields at most one sample per request). A threadpool wait fires once per arming, so
+// re-arm here, but only while enabled (Stop()/Shutdown() clear it under _lock before
+// disarming, so no re-armed wait outlives them). Takes _lock, like OnDeliveryTick.
+void MediaStream::OnFrameReady(PTP_WAIT wait)
+{
+	winrt::slim_lock_guard lock(_lock);
+	if (!_frameWaitEnabled || _state != MF_STREAM_STATE_RUNNING || !_queue)
+		return;
+	_lastFrameEventTick = GetTickCount64();
+	_frameDue = true;
+	DispatchSamples();
+	SetThreadpoolWait(wait, _frameReadyEvent, nullptr);
+}
+
+void CALLBACK MediaStream::FrameReadyWaitThunk(PTP_CALLBACK_INSTANCE, void* ctx, PTP_WAIT wait, TP_WAIT_RESULT)
+{
+	static_cast<MediaStream*>(ctx)->OnFrameReady(wait);
 }
 
 // Assembles the current snapshot (whatever RequestSample just did) and hands it
