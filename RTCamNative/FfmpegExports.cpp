@@ -34,10 +34,10 @@ extern "C" {
 
 		// Sink: copy each decoded NV12 frame into the next shared-memory ring slot.
 		auto sink = [](const uint8_t* y, int strideY, const uint8_t* uv, int strideUV,
-		               uint32_t /*w*/, uint32_t /*h*/)
+		               uint32_t w, uint32_t h)
 		{
 			if (g_writer.EnsureOpen())
-				g_writer.WriteFrame(y, strideY, uv, strideUV);
+				g_writer.WriteFrame(y, strideY, uv, strideUV, w, h);
 		};
 
 		return g_producer->Start(std::wstring(url), width, height, fpsNum, fpsDen, sink) ? 0 : -1;

@@ -1,6 +1,7 @@
 #include "FrameChannelWriter.h"
 #include "Logger.h"
 #include <cstring>
+#include <cstdio>
 
 FrameChannelWriter::~FrameChannelWriter()
 {
@@ -46,22 +47,60 @@ bool FrameChannelWriter::EnsureOpen()
 }
 
 void FrameChannelWriter::WriteFrame(const uint8_t* srcY, int srcStrideY,
-                                    const uint8_t* srcUV, int srcStrideUV)
+                                    const uint8_t* srcUV, int srcStrideUV,
+                                    uint32_t width, uint32_t height)
 {
 	if (!_header || !srcY || !srcUV)
 		return;
 
-	const uint32_t width = _header->width;
-	const uint32_t height = _header->height;
+	// Snapshot the header geometry once: the Frame Server may re-stamp it at any
+	// time (re-activation with a different config), so every bound below comes
+	// from this single read, never from _header again.
+	const uint32_t hdrWidth = _header->width;
+	const uint32_t hdrHeight = _header->height;
 	const uint32_t dstStride = _header->stride; // writer/reader agree: tightly packed (stride == width)
+	const uint32_t slotCount = _header->slotCount;
+	const uint32_t bytesPerSlot = _header->bytesPerSlot;
 	const uint32_t copyBytes = width; // per-row payload for both Y and interleaved-UV planes
 
-	// Choose the next ring slot. Only this thread writes latestSlot, so a plain
-	// read is fine. Treat the initial -1 as "start at slot 0".
-	long cur = _header->latestSlot;
-	uint32_t next = (cur < 0) ? 0u : ((uint32_t)cur + 1u) % _header->slotCount;
+	// The source buffer is exactly width x height. If the header asks for another
+	// geometry (or is inconsistent), copying header-sized rows would read past the
+	// source or write past the section — skip the frame instead.
+	const bool geometryOk =
+		width == hdrWidth && height == hdrHeight &&
+		dstStride >= width &&
+		slotCount != 0 && slotCount <= 16 &&
+		VCamFrameChannel_Nv12Bytes(width, height) <= bytesPerSlot &&
+		(uint64_t)dstStride * height * 3u / 2u <= bytesPerSlot &&
+		sizeof(VCamFrameChannelHeader) + (uint64_t)slotCount * bytesPerSlot <= VCamFrameChannel_MaxMappingSize();
+	if (!geometryOk)
+	{
+		if (!_geometryMismatch)
+		{
+			char msg[192];
+			sprintf_s(msg, "FrameChannelWriter::WriteFrame - geometry mismatch, skipping frames "
+				"(frame %ux%u, header %ux%u stride=%u slots=%u bytesPerSlot=%u)",
+				width, height, hdrWidth, hdrHeight, dstStride, slotCount, bytesPerSlot);
+			DebugLog(msg);
+			_geometryMismatch = true;
+		}
+		return;
+	}
+	if (_geometryMismatch)
+	{
+		DebugLog("FrameChannelWriter::WriteFrame - geometry matches the header again, resuming writes");
+		_geometryMismatch = false;
+	}
 
-	uint8_t* dst = VCamFrameChannel_SlotPtr(_header, next);
+	// Choose the next ring slot. Only this thread writes latestSlot, so a plain
+	// read is fine. Treat the initial -1 (or an out-of-range index left by a
+	// re-stamp with fewer slots) as "start at slot 0".
+	long cur = _header->latestSlot;
+	uint32_t next = (cur < 0 || (uint32_t)cur >= slotCount) ? 0u : ((uint32_t)cur + 1u) % slotCount;
+
+	// Same arithmetic as VCamFrameChannel_SlotPtr, but on the snapshotted bytesPerSlot.
+	uint8_t* dst = reinterpret_cast<uint8_t*>(_header) + sizeof(VCamFrameChannelHeader)
+		+ (size_t)next * bytesPerSlot;
 	uint8_t* dstY = dst;
 	uint8_t* dstUV = dst + (size_t)dstStride * height;
 
@@ -95,4 +134,5 @@ void FrameChannelWriter::Close()
 		CloseHandle(_mapping);
 		_mapping = nullptr;
 	}
+	_geometryMismatch = false;
 }
