@@ -64,8 +64,8 @@ RTVirtualCamera.exe (C# WinForms, .NET 10)
             └─ IMFVirtualCamera::SetString/SetUINT32(...)   ← config attrs, BEFORE Start()
             └─ IMFVirtualCamera::Start()
        └─ after Start(): VCam_StartFfmpegProducer(url,w,h,…)  [FfmpegExports.cpp]
-            └─ FfmpegRtspSource (libav decode) → NV12
-                 └─ FrameChannelWriter → Global\RTVCam_Frames_<CLSID> (shared memory)
+            └─ FfmpegRtspSource (libav decode) → NV12 written directly into the slot
+                 └─ FrameChannelWriter (BeginWrite/CommitWrite) → Global\RTVCam_Frames_<CLSID> (shared memory)
 
 Windows Frame Server (svchost.exe)  ← separate OS process, Local Service
   └─ loads VCamSampleSource.dll (COM DLL, HKLM registered)
@@ -132,11 +132,11 @@ space and is an accepted trade-off.
 | Class | File | Role |
 |---|---|---|
 | `VirtualCamera` | `VirtualCamera.cpp/.h` | Wraps `IMFVirtualCamera`. Calls `SetString`/`SetUINT32` on the attrs bag before `Start()`. Exports C-style functions for P/Invoke. |
-| `FfmpegRtspSource` | `FfmpegRtspSource.cpp/.h` | **Native** (non-/clr). The single RTSP receiver: libav open/decode (d3d11va GPU or software), latency cap + resync-to-live, `sws_scale` → NV12, hands each frame to a caller-supplied `FrameSink`. Reconnects on its own until `Stop()`. Also `Probe()` (geometry/codec) as a static. |
-| `FfmpegExports.cpp` | — | C exports for the virtual-camera producer (`VCam_StartFfmpegProducer` etc.). Owns a `FrameChannelWriter`; its sink writes NV12 into the frame shared memory. |
+| `FfmpegRtspSource` | `FfmpegRtspSource.cpp/.h` | **Native** (non-/clr). The single RTSP receiver: libav open/decode (d3d11va GPU or software), latency cap + resync-to-live, `sws_scale` → NV12, hands each frame either to a caller-supplied `FrameSink` (preview: intermediate NV12 buffer) or writes it straight into a caller-owned `FrameTarget` (producer: the shared-memory slot — GPU NV12 frames at the target size via `av_hwframe_transfer_data` into the slot, everything else via `sws_scale` into the slot). Reconnects on its own until `Stop()`. Also `Probe()` (geometry/codec) as a static. |
+| `FfmpegExports.cpp` | — | C exports for the virtual-camera producer (`VCam_StartFfmpegProducer` etc.). Owns a `FrameChannelWriter`; its `FrameTarget` hands the decoder the next slot (`BeginWrite`) and publishes it (`CommitWrite`) or drops it (`AbortWrite`). |
 | `FfmpegPreviewPlayer` | `FfmpegPreviewPlayer.cpp/.h` | **Native**. FFmpeg-based preview (replaces the old MF/EVR `VideoPlayer`). Reuses `FfmpegRtspSource`; its sink converts NV12→BGRA and blits into the WinForms panel HWND with a double-buffered GDI path. Keeps `PreviewStats`. |
 | `PreviewExports.cpp` | — | C exports the C# preview wrapper P/Invokes (`CreateVideoPlayer`/`SetVideoPath`/`PlayVideo`/`GetVideoStreamInfo`/…), implemented on `FfmpegPreviewPlayer`. The original set kept the old Media Foundation names/signatures; `GetConnectionInfo` (container/transport/codec/bitrate for the UI "Connessione" table) was added later. |
-| `FrameChannelWriter` | `FrameChannelWriter.cpp/.h` | **Native**. Opens the frame mapping (created by the Frame Server) for writing, publishes NV12 into the ring slot under the header seqlock. |
+| `FrameChannelWriter` | `FrameChannelWriter.cpp/.h` | **Native**. Opens the frame mapping (created by the Frame Server) for writing, publishes NV12 into the ring slot under the header seqlock. Two-phase API (`BeginWrite` → fill the returned planes → `CommitWrite`/`AbortWrite`) so the producer decodes straight into the slot; `WriteFrame` is the copy-from-a-buffer variant built on it. |
 | `StatsReader` | `StatsReader.cpp/.h` | Singleton (`Instance()`). Opens the stats shared memory (read-only) and exports `VCam_GetFrameServerStats()` for P/Invoke. |
 
 **`/clr` note:** RTCamNative is compiled `/clr` (mixed-mode) on x64, and the libav C headers don't mix with C++/CLI. So `FfmpegRtspSource.cpp`, `FfmpegPreviewPlayer.cpp`, `FfmpegExports.cpp`, `PreviewExports.cpp`, and `FrameChannelWriter.cpp` are compiled **native** (`CompileAsManaged=false`, no PCH). Their C exports are the boundary the managed wrappers call.
@@ -171,8 +171,10 @@ RTVirtualCamera.exe (app process)
   MainForm: after Start(), VirtualCameraWrapper.StartFfmpegProducer(url,w,h,…)
     → RTCamNative!VCam_StartFfmpegProducer  (FfmpegExports.cpp)
       → FfmpegRtspSource (thread): libavformat open RTSP → libavcodec decode (d3d11va or SW)
-        → libswscale → NV12 → sink → FrameChannelWriter.WriteFrame()
-          → seqlock publish into Global\RTVCam_Frames_<CLSID>  (Shared/VCamFrameChannel.h)
+        → FrameTarget: FrameChannelWriter.BeginWrite() → slot planes
+          → GPU NV12 at target size: av_hwframe_transfer_data straight into the slot
+            else: (GPU download →) libswscale straight into the slot
+          → FrameChannelWriter.CommitWrite(): seqlock publish into Global\RTVCam_Frames_<CLSID>  (Shared/VCamFrameChannel.h)
 
 Frame Server (svchost.exe)
   VCamMediaSource::SetupCameraSettings
@@ -208,7 +210,12 @@ The decode loop opens RTSP with low-latency demux options: `rtsp_transport` and
 below), plus the fixed `max_delay=0`, `fflags=nobuffer+discardcorrupt`, `flags=low_delay`,
 `avioflags=direct`, `analyzeduration=0`, and the decoder with `AV_CODEC_FLAG_LOW_DELAY` +
 `FF_THREAD_SLICE`. Hardware decode (`d3d11va`) is attached when available (and not disabled in
-settings); GPU frames are downloaded to system-memory NV12 for the channel. A **latency cap**
+settings). For the producer, a GPU frame that is already NV12 at the target size is downloaded
+**directly into the shared-memory slot** (`av_hwframe_transfer_data` with a non-owning
+`buf[0]` over the slot — without `buf[0]` libav would allocate its own buffers); anything else
+(software, 10-bit, scaling) goes through `sws_scale` with the slot as destination. No
+intermediate NV12 buffer or extra copy on the producer path; the preview keeps its `FrameSink`
++ intermediate buffer. A **latency cap**
 anchors a wall-clock ↔ PTS baseline and, when a decoded frame falls more than `kMaxLagMs`
 (default 350 ms, `MaxLagMs()`) behind live, resyncs by dropping the rest of the GOP (skip to the
 next keyframe) and flushing the decoder. This is what keeps a fast/misbehaving source from
@@ -216,7 +223,7 @@ accumulating unbounded latency — the failure mode that a previous MF-based pre
 (reading ~130 fps from a 30 fps source with growing drift).
 
 The same `FfmpegRtspSource` core serves both the preview and the virtual-camera producer, each
-with its own `FrameSink`; they never run at the same time (the preview stops when the camera
+with its own destination (preview: `FrameSink`; producer: `FrameTarget`); they never run at the same time (the preview stops when the camera
 starts), so only one RTSP connection is open at a time. Reconnection is built into the decode
 loop: on a stream break it sleeps 1s (`kReconnectDelayMs`, interruptible) and retries
 `avformat_open_input` until `Stop()`.

@@ -71,8 +71,30 @@ void FrameChannelWriter::WriteFrame(const uint8_t* srcY, int srcStrideY,
                                     const uint8_t* srcUV, int srcStrideUV,
                                     uint32_t width, uint32_t height)
 {
-	if (!_header || !srcY || !srcUV)
+	if (!srcY || !srcUV)
 		return;
+
+	uint8_t* dst[2] = {};
+	int dstStride[2] = {};
+	if (!BeginWrite(width, height, dst, dstStride))
+		return;
+
+	const uint32_t copyBytes = width; // per-row payload for both Y and interleaved-UV planes
+	// Y plane: height rows.
+	for (uint32_t row = 0; row < height; ++row)
+		memcpy(dst[0] + (size_t)row * dstStride[0], srcY + (size_t)row * srcStrideY, copyBytes);
+	// UV plane (interleaved): height/2 rows.
+	for (uint32_t row = 0; row < height / 2; ++row)
+		memcpy(dst[1] + (size_t)row * dstStride[1], srcUV + (size_t)row * srcStrideUV, copyBytes);
+
+	CommitWrite();
+}
+
+bool FrameChannelWriter::BeginWrite(uint32_t width, uint32_t height, uint8_t* data[2], int linesize[2])
+{
+	_pendingSlot = -1;
+	if (!_header || !data || !linesize)
+		return false;
 
 	// Snapshot the header geometry once: the Frame Server may re-stamp it at any
 	// time (re-activation with a different config), so every bound below comes
@@ -82,10 +104,9 @@ void FrameChannelWriter::WriteFrame(const uint8_t* srcY, int srcStrideY,
 	const uint32_t dstStride = _header->stride; // writer/reader agree: tightly packed (stride == width)
 	const uint32_t slotCount = _header->slotCount;
 	const uint32_t bytesPerSlot = _header->bytesPerSlot;
-	const uint32_t copyBytes = width; // per-row payload for both Y and interleaved-UV planes
 
-	// The source buffer is exactly width x height. If the header asks for another
-	// geometry (or is inconsistent), copying header-sized rows would read past the
+	// The caller's frame is exactly width x height. If the header asks for another
+	// geometry (or is inconsistent), writing header-sized rows would read past the
 	// source or write past the section — skip the frame instead.
 	const bool geometryOk =
 		width == hdrWidth && height == hdrHeight &&
@@ -99,17 +120,17 @@ void FrameChannelWriter::WriteFrame(const uint8_t* srcY, int srcStrideY,
 		if (!_geometryMismatch)
 		{
 			char msg[192];
-			sprintf_s(msg, "FrameChannelWriter::WriteFrame - geometry mismatch, skipping frames "
+			sprintf_s(msg, "FrameChannelWriter::BeginWrite - geometry mismatch, skipping frames "
 				"(frame %ux%u, header %ux%u stride=%u slots=%u bytesPerSlot=%u)",
 				width, height, hdrWidth, hdrHeight, dstStride, slotCount, bytesPerSlot);
 			DebugLog(msg);
 			_geometryMismatch = true;
 		}
-		return;
+		return false;
 	}
 	if (_geometryMismatch)
 	{
-		DebugLog("FrameChannelWriter::WriteFrame - geometry matches the header again, resuming writes");
+		DebugLog("FrameChannelWriter::BeginWrite - geometry matches the header again, resuming writes");
 		_geometryMismatch = false;
 	}
 
@@ -122,21 +143,31 @@ void FrameChannelWriter::WriteFrame(const uint8_t* srcY, int srcStrideY,
 	// Same arithmetic as VCamFrameChannel_SlotPtr, but on the snapshotted bytesPerSlot.
 	uint8_t* dst = reinterpret_cast<uint8_t*>(_header) + VCAM_FRAMES_HEADER_BYTES
 		+ (size_t)next * bytesPerSlot;
-	uint8_t* dstY = dst;
-	uint8_t* dstUV = dst + (size_t)dstStride * height;
+	data[0] = dst;                               // Y plane: height rows
+	data[1] = dst + (size_t)dstStride * height;  // interleaved UV plane: height/2 rows
+	linesize[0] = (int)dstStride;
+	linesize[1] = (int)dstStride;
+	_pendingSlot = (long)next;
+	return true;
+}
 
-	// Y plane: height rows.
-	for (uint32_t row = 0; row < height; ++row)
-		memcpy(dstY + (size_t)row * dstStride, srcY + (size_t)row * srcStrideY, copyBytes);
-	// UV plane (interleaved): height/2 rows.
-	for (uint32_t row = 0; row < height / 2; ++row)
-		memcpy(dstUV + (size_t)row * dstStride, srcUV + (size_t)row * srcStrideUV, copyBytes);
+void FrameChannelWriter::AbortWrite()
+{
+	_pendingSlot = -1; // nothing was published; the slot is simply reused next time
+}
+
+void FrameChannelWriter::CommitWrite()
+{
+	if (!_header || _pendingSlot < 0)
+		return;
+	const long slot = _pendingSlot;
+	_pendingSlot = -1;
 
 	// Publish under the header seqlock: bump odd, update metadata, bump even. The
-	// pixels above are in a slot the reader is not currently reading (triple
-	// buffering), so only the small metadata needs the lock.
+	// pixels are in a slot the reader is not currently reading (triple buffering),
+	// so only the small metadata needs the lock.
 	InterlockedIncrement(&_header->publishSeq); // -> odd
-	_header->latestSlot = (long)next;
+	_header->latestSlot = slot;
 	_header->frameSeq++;
 	_header->framesWritten++;
 	_header->producerHeartbeatTickMs = GetTickCount64();
@@ -166,4 +197,5 @@ void FrameChannelWriter::Close()
 	}
 	_lastEventOpenTick = 0;
 	_geometryMismatch = false;
+	_pendingSlot = -1;
 }

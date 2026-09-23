@@ -12,9 +12,10 @@
 //
 // The Frame Server is the source of truth for geometry: this writer reads
 // width/height/stride/slotCount from the header the reader stamped, and the
-// producer (FfmpegRtspSource) scales its decoded frames to the geometry it was
-// started with before calling WriteFrame. WriteFrame takes that source geometry
-// and skips any frame that doesn't match the header (the Frame Server can re-stamp
+// producer (FfmpegRtspSource) decodes/scales its frames to the geometry it was
+// started with straight into a slot handed out by BeginWrite (WriteFrame is the
+// copy-from-a-buffer variant). Both take that frame geometry and skip any frame
+// that doesn't match the header (the Frame Server can re-stamp
 // it with a different config while the app is running), so a stale producer can
 // never read past its source buffer or write past the section.
 class FrameChannelWriter
@@ -47,6 +48,16 @@ public:
 	                const uint8_t* srcUV, int srcStrideUV,
 	                uint32_t width, uint32_t height);
 
+	// Two-phase write straight into the shared slot (no intermediate buffer), so the
+	// producer can decode/scale directly into it. BeginWrite checks the geometry like
+	// WriteFrame, picks the next ring slot and returns its Y/UV plane pointers and
+	// stride; the caller fills them, then CommitWrite publishes under the seqlock (+
+	// frame-ready event) or AbortWrite drops the slot unpublished. Returns false (and
+	// no write is pending) if not open or the geometry doesn't match the header.
+	bool BeginWrite(uint32_t width, uint32_t height, uint8_t* data[2], int linesize[2]);
+	void CommitWrite();
+	void AbortWrite();
+
 	void Close();
 
 private:
@@ -59,4 +70,5 @@ private:
 	HANDLE _frameReadyEvent = nullptr;
 	ULONGLONG _lastEventOpenTick = 0; // throttles open retries to 1/s
 	bool _geometryMismatch = false; // last WriteFrame skipped on geometry; only log transitions
+	long _pendingSlot = -1;         // slot handed out by BeginWrite, not yet committed (-1 = none)
 };

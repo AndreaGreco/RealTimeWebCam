@@ -32,15 +32,23 @@ extern "C" {
 		else
 			g_producer = std::make_unique<FfmpegRtspSource>();
 
-		// Sink: copy each decoded NV12 frame into the next shared-memory ring slot.
-		auto sink = [](const uint8_t* y, int strideY, const uint8_t* uv, int strideUV,
-		               uint32_t w, uint32_t h)
+		// Target: decode/scale each frame straight into the next shared-memory ring slot
+		// (no intermediate NV12 buffer + memcpy), then publish it — or drop the slot if
+		// the conversion failed.
+		FfmpegRtspSource::FrameTarget target;
+		target.acquire = [](uint32_t w, uint32_t h, uint8_t* data[2], int linesize[2])
 		{
-			if (g_writer.EnsureOpen())
-				g_writer.WriteFrame(y, strideY, uv, strideUV, w, h);
+			return g_writer.EnsureOpen() && g_writer.BeginWrite(w, h, data, linesize);
+		};
+		target.release = [](bool publish)
+		{
+			if (publish)
+				g_writer.CommitWrite();
+			else
+				g_writer.AbortWrite();
 		};
 
-		return g_producer->Start(std::wstring(url), width, height, fpsNum, fpsDen, sink) ? 0 : -1;
+		return g_producer->Start(std::wstring(url), width, height, fpsNum, fpsDen, std::move(target)) ? 0 : -1;
 	}
 
 	__declspec(dllexport) int VCam_StopFfmpegProducer()

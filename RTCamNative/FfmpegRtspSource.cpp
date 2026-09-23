@@ -252,8 +252,32 @@ bool FfmpegRtspSource::Start(const std::wstring& rtspUrl, uint32_t targetWidth, 
                              uint32_t fpsNum, uint32_t fpsDen, FrameSink sink)
 {
 	(void)fpsNum; (void)fpsDen; // producer pushes ASAP; the consumer paces delivery
-	if (_running.load() || rtspUrl.empty() || targetWidth == 0 || targetHeight == 0 || !sink)
+	if (_running.load() || !sink)
 		return false;
+	_sink = std::move(sink);
+	_target = FrameTarget{};
+	return StartThread(rtspUrl, targetWidth, targetHeight);
+}
+
+bool FfmpegRtspSource::Start(const std::wstring& rtspUrl, uint32_t targetWidth, uint32_t targetHeight,
+                             uint32_t fpsNum, uint32_t fpsDen, FrameTarget target)
+{
+	(void)fpsNum; (void)fpsDen; // producer pushes ASAP; the consumer paces delivery
+	if (_running.load() || !target.acquire || !target.release)
+		return false;
+	_sink = nullptr;
+	_target = std::move(target);
+	return StartThread(rtspUrl, targetWidth, targetHeight);
+}
+
+bool FfmpegRtspSource::StartThread(const std::wstring& rtspUrl, uint32_t targetWidth, uint32_t targetHeight)
+{
+	if (rtspUrl.empty() || targetWidth == 0 || targetHeight == 0)
+	{
+		_sink = nullptr;
+		_target = FrameTarget{};
+		return false;
+	}
 
 	_stop.store(false);
 	_framesDecoded.store(0);
@@ -266,7 +290,6 @@ bool FfmpegRtspSource::Start(const std::wstring& rtspUrl, uint32_t targetWidth, 
 	_connectAttempt.store(0);
 	_disconnects.store(0);
 	_lastError.store(0);
-	_sink = std::move(sink);
 	avformat_network_init();
 
 	std::string url = ToUtf8(rtspUrl);
@@ -284,21 +307,34 @@ void FfmpegRtspSource::Stop()
 	_connState.store((int)ConnectionState::Idle);
 	_connectAttempt.store(0);
 	_activeTransport.store(0);
-	_sink = nullptr; // release anything the sink captured
+	_sink = nullptr; // release anything the sink/target captured
+	_target = FrameTarget{};
 	avformat_network_deinit();
 }
 
 void FfmpegRtspSource::DecodeLoop(std::string url, uint32_t targetW, uint32_t targetH)
 {
-	// NV12 destination frame, sized to the target once for the whole session.
-	AVFrame* nv12 = av_frame_alloc();
-	if (!nv12 ||
-		av_image_alloc(nv12->data, nv12->linesize, (int)targetW, (int)targetH, AV_PIX_FMT_NV12, 32) < 0)
+	// Direct-target mode (producer): frames are written straight into the caller's
+	// destination (the shared-memory slot), so no intermediate buffer is needed.
+	const bool directTarget = (bool)_target.acquire;
+
+	// NV12 destination frame for the sink path (preview), sized to the target once
+	// for the whole session. Not allocated in direct-target mode.
+	AVFrame* nv12 = nullptr;
+	if (!directTarget)
 	{
-		DebugLog("FfmpegRtspSource::DecodeLoop - failed to allocate NV12 frame");
-		if (nv12) av_frame_free(&nv12);
-		return;
+		nv12 = av_frame_alloc();
+		if (!nv12 ||
+			av_image_alloc(nv12->data, nv12->linesize, (int)targetW, (int)targetH, AV_PIX_FMT_NV12, 32) < 0)
+		{
+			DebugLog("FfmpegRtspSource::DecodeLoop - failed to allocate NV12 frame");
+			if (nv12) av_frame_free(&nv12);
+			return;
+		}
 	}
+	// Wrapper AVFrame describing the target's planes for the zero-intermediate GPU
+	// download (see below); its data is reset per frame.
+	AVFrame* targetFrame = directTarget ? av_frame_alloc() : nullptr;
 
 	// Hardware decode (d3d11va / DXVA): create the GPU device once for the whole
 	// session. When attached to the decoder, H.264/H.265 decode runs on the GPU and
@@ -574,39 +610,109 @@ void FfmpegRtspSource::DecodeLoop(std::string url, uint32_t targetW, uint32_t ta
 						break;
 					}
 
+					const bool isHw = (frame->format == AV_PIX_FMT_D3D11);
+					_hwActive.store(isHw);
+
 					// Hardware frames come back as a D3D11 GPU surface — download to
-					// system-memory NV12 (swFrame) for the sink. Software frames used as-is.
-					AVFrame* srcFrame = frame;
-					if (frame->format == AV_PIX_FMT_D3D11)
+					// system-memory (swFrame) before scaling. Software frames used as-is.
+					// Returns nullptr if the download failed.
+					auto toSystemMemory = [&]() -> AVFrame*
 					{
-						_hwActive.store(true);
+						if (!isHw)
+							return frame;
 						int tr = av_hwframe_transfer_data(swFrame, frame, 0);
 						if (tr < 0)
 						{
 							LogAv("av_hwframe_transfer_data", tr);
-							av_frame_unref(frame);
-							continue;
+							return nullptr;
 						}
-						srcFrame = swFrame;
-					}
-					else
+						return swFrame;
+					};
+					// Converts/scales src into the NV12 planes dst/dstLs (4-entry arrays:
+					// sws_scale reads all four). sws_getCachedContext recreates the scaler
+					// if the source dimensions/format change; otherwise it reuses it.
+					auto scaleInto = [&](const AVFrame* src, uint8_t* const dst[4], const int dstLs[4]) -> bool
 					{
-						_hwActive.store(false);
+						sws = sws_getCachedContext(sws,
+							src->width, src->height, (AVPixelFormat)src->format,
+							(int)targetW, (int)targetH, AV_PIX_FMT_NV12,
+							SWS_BILINEAR, nullptr, nullptr, nullptr);
+						if (!sws)
+							return false;
+						sws_scale(sws, src->data, src->linesize, 0, src->height, dst, dstLs);
+						return true;
+					};
+
+					bool produced = false; // frame reached its destination (counts as decoded)
+					if (directTarget)
+					{
+						// Producer: write straight into the caller's slot, no intermediate
+						// NV12 buffer and no extra memcpy.
+						uint8_t* dst[4] = {};
+						int dstLs[4] = {};
+						if (!_target.acquire(targetW, targetH, dst, dstLs))
+						{
+							// Destination not ready (mapping not open yet / geometry
+							// mismatch): drop the frame, but it was decoded fine.
+							produced = true;
+						}
+						else
+						{
+							bool ok = false;
+							// GPU frame already NV12 at the target size: download the
+							// texture straight into the slot. av_hwframe_transfer_data only
+							// uses our planes if dst->buf[0] is set (otherwise it allocates
+							// its own) — hence the non-owning buffer ref (no-op free). With
+							// it, the d3d11va path av_image_copy2()s staging → slot
+							// (libavutil 8.1 hwcontext.c / hwcontext_d3d11va.c).
+							const AVHWFramesContext* hwfc = (isHw && frame->hw_frames_ctx)
+								? (const AVHWFramesContext*)frame->hw_frames_ctx->data : nullptr;
+							if (hwfc && targetFrame && hwfc->sw_format == AV_PIX_FMT_NV12 &&
+								frame->width == (int)targetW && frame->height == (int)targetH)
+							{
+								const size_t slotBytes = (size_t)dstLs[0] * targetH * 3 / 2;
+								targetFrame->format = AV_PIX_FMT_NV12;
+								targetFrame->width = (int)targetW;
+								targetFrame->height = (int)targetH;
+								targetFrame->data[0] = dst[0];
+								targetFrame->data[1] = dst[1];
+								targetFrame->linesize[0] = dstLs[0];
+								targetFrame->linesize[1] = dstLs[1];
+								targetFrame->buf[0] = av_buffer_create(dst[0], slotBytes,
+									[](void*, uint8_t*) {}, nullptr, 0);
+								if (targetFrame->buf[0])
+								{
+									int tr = av_hwframe_transfer_data(targetFrame, frame, 0);
+									if (tr < 0)
+										LogAv("av_hwframe_transfer_data (direct to slot)", tr);
+									ok = tr >= 0;
+								}
+								av_frame_unref(targetFrame); // drops the non-owning ref; resets fields
+							}
+							else if (AVFrame* src = toSystemMemory())
+							{
+								// Software, other pixel format, or scaling: sws_scale
+								// directly into the slot.
+								ok = scaleInto(src, dst, dstLs);
+							}
+							_target.release(ok);
+							produced = ok;
+						}
+					}
+					else if (AVFrame* src = toSystemMemory())
+					{
+						// Preview: intermediate NV12 buffer handed to the sink.
+						if (scaleInto(src, nv12->data, nv12->linesize))
+						{
+							if (_sink)
+								_sink(nv12->data[0], nv12->linesize[0],
+									nv12->data[1], nv12->linesize[1], targetW, targetH);
+							produced = true;
+						}
 					}
 
-					// sws_getCachedContext recreates the scaler if the source
-					// dimensions/format change; otherwise it reuses the existing one.
-					sws = sws_getCachedContext(sws,
-						srcFrame->width, srcFrame->height, (AVPixelFormat)srcFrame->format,
-						(int)targetW, (int)targetH, AV_PIX_FMT_NV12,
-						SWS_BILINEAR, nullptr, nullptr, nullptr);
-					if (sws)
+					if (produced)
 					{
-						sws_scale(sws, srcFrame->data, srcFrame->linesize, 0, srcFrame->height,
-							nv12->data, nv12->linesize);
-						if (_sink)
-							_sink(nv12->data[0], nv12->linesize[0],
-								nv12->data[1], nv12->linesize[1], targetW, targetH);
 						_framesDecoded.fetch_add(1);
 						lastFrameTick = GetTickCount64();
 						// First frame of this attempt: the transport actually carries
@@ -620,8 +726,7 @@ void FfmpegRtspSource::DecodeLoop(std::string url, uint32_t targetW, uint32_t ta
 							DebugLog("FfmpegRtspSource::DecodeLoop - streaming (first frame received)");
 						}
 					}
-					if (srcFrame == swFrame)
-						av_frame_unref(swFrame);
+					av_frame_unref(swFrame); // no-op unless a GPU download filled it
 					av_frame_unref(frame);
 				}
 			}
@@ -645,9 +750,13 @@ void FfmpegRtspSource::DecodeLoop(std::string url, uint32_t targetW, uint32_t ta
 	}
 
 	av_frame_free(&swFrame);
+	av_frame_free(&targetFrame);
 	if (hwDeviceCtx)
 		av_buffer_unref(&hwDeviceCtx);
-	av_freep(&nv12->data[0]);
-	av_frame_free(&nv12);
+	if (nv12)
+	{
+		av_freep(&nv12->data[0]);
+		av_frame_free(&nv12);
+	}
 	DebugLog("FfmpegRtspSource::DecodeLoop - exited");
 }

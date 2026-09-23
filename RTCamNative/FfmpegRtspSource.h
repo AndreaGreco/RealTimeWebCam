@@ -75,6 +75,19 @@ public:
 	                                     const uint8_t* uv, int strideUV,
 	                                     uint32_t w, uint32_t h)>;
 
+	// Alternative to FrameSink: a caller-owned NV12 destination the decode thread
+	// writes into directly (no intermediate buffer + copy). For each frame, acquire
+	// is asked for a w x h NV12 destination (Y plane in data[0], interleaved UV in
+	// data[1], strides in linesize[]); returning false means "not ready, drop this
+	// frame" (it still counts as decoded). If acquired, the frame is downloaded
+	// (d3d11va) or scaled into it and release(publish) is called exactly once:
+	// publish=true on success, false if the conversion failed.
+	struct FrameTarget
+	{
+		std::function<bool(uint32_t w, uint32_t h, uint8_t* data[2], int linesize[2])> acquire;
+		std::function<void(bool publish)> release;
+	};
+
 	FfmpegRtspSource() = default;
 	~FfmpegRtspSource();
 	FfmpegRtspSource(const FfmpegRtspSource&) = delete;
@@ -86,6 +99,10 @@ public:
 	// thread; returns false if already running or the args are invalid.
 	bool Start(const std::wstring& rtspUrl, uint32_t targetWidth, uint32_t targetHeight,
 	           uint32_t fpsNum, uint32_t fpsDen, FrameSink sink);
+	// Same, but frames go straight into a caller-owned destination (see FrameTarget);
+	// the virtual-camera producer uses this to decode into the shared-memory slot.
+	bool Start(const std::wstring& rtspUrl, uint32_t targetWidth, uint32_t targetHeight,
+	           uint32_t fpsNum, uint32_t fpsDen, FrameTarget target);
 
 	// Signals the decode thread (interrupting any blocking libav call) and joins it.
 	void Stop();
@@ -176,6 +193,8 @@ public:
 	static int  MaxLagMs();
 
 private:
+	// Common tail of both Start overloads (after _sink/_target is set).
+	bool StartThread(const std::wstring& rtspUrl, uint32_t targetWidth, uint32_t targetHeight);
 	void DecodeLoop(std::string url, uint32_t targetW, uint32_t targetH);
 	// libav interrupt callback: returns non-zero to abort a blocking call when _stop
 	// is set OR the current watchdog deadline (_ioDeadlineTick, GetTickCount64 ms; 0 =
@@ -204,5 +223,6 @@ private:
 	std::atomic<int64_t> _lastLagMs{ 0 };
 	std::atomic<int64_t> _bitrateBps{ 0 };  // measured received video bitrate (see BitrateBps)
 	std::atomic<int> _activeTransport{ 0 }; // 0 none, 1 UDP, 2 TCP (see ActiveTransport)
-	FrameSink _sink;
+	FrameSink _sink;       // preview path (intermediate NV12 buffer + callback)
+	FrameTarget _target;   // producer path (direct write); exactly one of the two is set
 };
