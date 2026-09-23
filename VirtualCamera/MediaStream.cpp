@@ -149,6 +149,12 @@ HRESULT MediaStream::CopyNv12ToSample(IMFMediaBuffer* dstBuffer, const BYTE* src
 	if (SUCCEEDED(dstBuffer->QueryInterface(IID_PPV_ARGS(&dst2D))))
 	{
 		hrCopy = dst2D->Lock2D(&pbScan0, &dstPitch);
+		if (SUCCEEDED(hrCopy) && dstPitch < (LONG)width)
+		{
+			// A row wouldn't fit (or a bottom-up negative pitch): don't write past it.
+			dst2D->Unlock2D();
+			return MF_E_BUFFERTOOSMALL;
+		}
 		if (SUCCEEDED(hrCopy))
 		{
 			// Y plane: height rows of width bytes.
@@ -165,15 +171,20 @@ HRESULT MediaStream::CopyNv12ToSample(IMFMediaBuffer* dstBuffer, const BYTE* src
 	{
 		BYTE* pbDst = nullptr; DWORD cbDstMax = 0;
 		hrCopy = dstBuffer->Lock(&pbDst, &cbDstMax, nullptr);
+		if (SUCCEEDED(hrCopy) && cbDstMax < cbExpected)
+		{
+			// MFCopyImage writes the full frame regardless: refuse instead of overflowing.
+			dstBuffer->Unlock();
+			return MF_E_BUFFERTOOSMALL;
+		}
 		if (SUCCEEDED(hrCopy))
 		{
-			DWORD cb = min(cbExpected, cbDstMax);
 			MFCopyImage(pbDst, (LONG)width, src, srcPitch, width, height);
 			MFCopyImage(pbDst + width * height, (LONG)width,
 				src + srcPitch * (LONG)height, srcPitch,
 				width, height / 2);
 			dstBuffer->Unlock();
-			dstBuffer->SetCurrentLength(cb);
+			dstBuffer->SetCurrentLength(cbExpected);
 		}
 	}
 	return hrCopy;
@@ -565,7 +576,17 @@ void MediaStream::DispatchSamples()
 			WINTRACE(L"MediaStream::DispatchSamples - allocator empty, retrying next tick");
 			break;
 		}
-		// Delivered (or dropped on a hard error): consume the request and the credit.
+		if (FAILED(hr))
+		{
+			// Fatal (allocation, token or event queue): the request can't be completed.
+			// Surface it as MEError so the Frame Server tears down/reopens cleanly instead
+			// of waiting forever on a token that will never come back.
+			WINTRACE(L"MediaStream::DispatchSamples - ProduceAndQueue failed: 0x%08X, queueing MEError", hr);
+			HRESULT hrEvt = _queue->QueueEventParamVar(MEError, GUID_NULL, hr, nullptr);
+			if (FAILED(hrEvt))
+				WINTRACE(L"MediaStream::DispatchSamples - MEError not queued: 0x%08X", hrEvt);
+		}
+		// Delivered (or failed and reported): consume the request and the credit.
 		_requests.pop_front();
 		_frameDue = false;
 	}
@@ -582,8 +603,14 @@ HRESULT MediaStream::ProduceAndQueue(IUnknown* pToken)
 		return hr; // handled by the caller (retry next tick)
 	RETURN_IF_FAILED(hr);
 
-	RETURN_IF_FAILED(sample->SetSampleTime(MFGetSystemTime()));
-	RETURN_IF_FAILED(sample->SetSampleDuration((10000000LL * _hintFpsDen) / max(1u, _hintFpsNum)));
+	// From here on, only attaching the token and queueing the event are fatal: a failed
+	// fill still delivers the sample (synthetic, or whatever the buffer holds), because
+	// every dropped request permanently shrinks the Frame Server's in-flight window.
+	hr = sample->SetSampleTime(MFGetSystemTime());
+	if (SUCCEEDED(hr))
+		hr = sample->SetSampleDuration((10000000LL * _hintFpsDen) / max(1u, _hintFpsNum));
+	if (FAILED(hr))
+		WINTRACE(L"MediaStream::ProduceAndQueue - sample time/duration failed: 0x%08X", hr);
 
 	wil::com_ptr_nothrow<IMFSample> outSample;
 
@@ -607,6 +634,10 @@ HRESULT MediaStream::ProduceAndQueue(IUnknown* pToken)
 			if (_overlayEnabled)
 				DrawOverlayCounter(sample.get(), _overlayCounter);
 		}
+		else if (FAILED(hrCopy))
+		{
+			WINTRACE(L"MediaStream::ProduceAndQueue - frame channel copy failed: 0x%08X, synthetic frame", hrCopy);
+		}
 	}
 
 	if (!outSample)
@@ -616,10 +647,17 @@ HRESULT MediaStream::ProduceAndQueue(IUnknown* pToken)
 		// so a disconnected camera doesn't look like a silent stall. The synthetic path
 		// draws the overlay counter itself (Direct2D).
 		IMFSample* rawOut = nullptr;
-		if (SUCCEEDED(_frameGenerator.Generate(sample.get(), _format, &rawOut, _overlayEnabled, _overlayCounter)) && rawOut)
+		HRESULT hrGen = _frameGenerator.Generate(sample.get(), _format, &rawOut, _overlayEnabled, _overlayCounter);
+		if (SUCCEEDED(hrGen) && rawOut)
+		{
 			outSample.attach(rawOut);
+		}
 		else
+		{
+			// Deliver the allocated sample as-is rather than dropping the request.
+			WINTRACE(L"MediaStream::ProduceAndQueue - synthetic frame failed: 0x%08X, delivering the raw sample", hrGen);
 			outSample = sample;
+		}
 	}
 
 	if (_overlayEnabled)
