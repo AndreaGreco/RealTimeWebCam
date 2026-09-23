@@ -6,6 +6,8 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="WixToolset.UI.wixext" Version="7.0.0" />
+    <!-- WixShellExec: the "Launch RTVirtualCamera" checkbox on the exit dialog. -->
+    <PackageReference Include="WixToolset.Util.wixext" Version="7.0.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\RTCamNative\RTCamNative.vcxproj" />
