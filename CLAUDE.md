@@ -293,6 +293,11 @@ The frame reaches the consumer's sample through `MediaStream::CopyFrameChannelFr
   flat). The copy is always CPU — the source is system memory, not a GPU texture. (The Frame
   Server's D3D11 device manager, from `SetD3DManager`, is still used for the *output* sample
   allocator, but there is no source-side GPU copy anymore.)
+- The 2D destination is locked **write-only** via `IMF2DBuffer2::Lock2DSize(MF2DBuffer_LockFlags_Write)`
+  (fallback: plain `Lock2D`), so a D3D texture sample isn't read back to the CPU before being
+  overwritten; the reported buffer size bounds the copy (`MF_E_BUFFERTOOSMALL` otherwise). The
+  diagnostic overlay counter (`DrawOverlayCounter`) is drawn into the planes under that same
+  lock — one lock/unlock per frame.
 
 ## Live stats (Frame Server → app)
 

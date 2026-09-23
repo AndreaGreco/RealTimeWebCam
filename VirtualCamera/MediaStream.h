@@ -64,15 +64,17 @@ private:
 
 	// Copies a contiguous NV12 source (Y then interleaved UV at src + srcPitch*height)
 	// into the destination sample buffer, honoring the dest's real pitch (2D or flat).
-	HRESULT CopyNv12ToSample(IMFMediaBuffer* dstBuffer, const BYTE* src, LONG srcPitch, UINT32 width, UINT32 height);
+	// 2D destinations are locked write-only (IMF2DBuffer2::Lock2DSize) when possible, and
+	// the overlay counter (overlayValue, if _overlayEnabled) is drawn under that same lock.
+	HRESULT CopyNv12ToSample(IMFMediaBuffer* dstBuffer, const BYTE* src, LONG srcPitch, UINT32 width, UINT32 height, UINT64 overlayValue);
 	// Reads the latest NV12 frame the app published into the frame shared memory
 	// (FrameChannelReader) and copies it into targetSample. Returns S_FALSE if no
 	// fresh frame is available (caller falls back to the synthetic frame).
 	HRESULT CopyFrameChannelFrame(IMFSample* targetSample);
-	// Diagnostic overlay: burns a decimal counter into the Y plane of a delivered NV12
-	// sample (for real frames; the synthetic path draws its own via FrameGenerator).
-	// Best-effort — silently does nothing if the buffer can't be locked as NV12.
-	void DrawOverlayCounter(IMFSample* sample, UINT64 value);
+	// Diagnostic overlay: burns a decimal counter into already-locked NV12 planes of a
+	// delivered frame (for real frames; the synthetic path draws its own via FrameGenerator).
+	// Called by CopyNv12ToSample before it unlocks.
+	void DrawOverlayCounter(BYTE* yPlane, BYTE* uvPlane, LONG pitch, UINT64 value);
 
 	// --- Asynchronous two-queue delivery (per the MS custom-media-source model) -----
 	// RequestSample queues the request token and returns immediately (never blocks a

@@ -135,7 +135,9 @@ HRESULT MediaStream::Initialize(IMFMediaSource* source, int index)
 // interleaved UV plane of `height/2` rows at `srcPitch`, starting at src + srcPitch*height)
 // into the destination buffer, honoring the dest's real pitch. The source is the
 // shared-memory slot the app producer filled (system memory), so the copy is CPU.
-HRESULT MediaStream::CopyNv12ToSample(IMFMediaBuffer* dstBuffer, const BYTE* src, LONG srcPitch, UINT32 width, UINT32 height)
+// With the diagnostic overlay on, `overlayValue` is burned into the 2D destination
+// while it is still locked (no second lock/unlock round-trip).
+HRESULT MediaStream::CopyNv12ToSample(IMFMediaBuffer* dstBuffer, const BYTE* src, LONG srcPitch, UINT32 width, UINT32 height, UINT64 overlayValue)
 {
 	RETURN_HR_IF_NULL(E_POINTER, dstBuffer);
 	RETURN_HR_IF_NULL(E_POINTER, src);
@@ -148,10 +150,20 @@ HRESULT MediaStream::CopyNv12ToSample(IMFMediaBuffer* dstBuffer, const BYTE* src
 	wil::com_ptr_nothrow<IMF2DBuffer> dst2D;
 	if (SUCCEEDED(dstBuffer->QueryInterface(IID_PPV_ARGS(&dst2D))))
 	{
-		hrCopy = dst2D->Lock2D(&pbScan0, &dstPitch);
-		if (SUCCEEDED(hrCopy) && dstPitch < (LONG)width)
+		// Prefer a write-only lock: we overwrite the whole frame, so for a D3D texture
+		// sample this skips MF's GPU→CPU readback of the old contents. It also reports
+		// the buffer size, so the copy can be bounded.
+		wil::com_ptr_nothrow<IMF2DBuffer2> dst2D2;
+		BYTE* pbBufStart = nullptr; DWORD cbBuf = 0;
+		const bool sized = SUCCEEDED(dst2D->QueryInterface(IID_PPV_ARGS(&dst2D2)));
+		hrCopy = sized
+			? dst2D2->Lock2DSize(MF2DBuffer_LockFlags_Write, &pbScan0, &dstPitch, &pbBufStart, &cbBuf)
+			: dst2D->Lock2D(&pbScan0, &dstPitch);
+		if (SUCCEEDED(hrCopy) &&
+			(dstPitch < (LONG)width ||
+			 (sized && (ULONGLONG)dstPitch * height * 3 / 2 > cbBuf)))
 		{
-			// A row wouldn't fit (or a bottom-up negative pitch): don't write past it.
+			// A row or the frame wouldn't fit (or a bottom-up negative pitch): don't write past it.
 			dst2D->Unlock2D();
 			return MF_E_BUFFERTOOSMALL;
 		}
@@ -160,9 +172,12 @@ HRESULT MediaStream::CopyNv12ToSample(IMFMediaBuffer* dstBuffer, const BYTE* src
 			// Y plane: height rows of width bytes.
 			MFCopyImage(pbScan0, dstPitch, src, srcPitch, width, height);
 			// UV plane: half height. Src UV follows the Y plane at srcPitch * height.
-			MFCopyImage(pbScan0 + dstPitch * (LONG)height, dstPitch,
+			BYTE* pbUV = pbScan0 + dstPitch * (LONG)height;
+			MFCopyImage(pbUV, dstPitch,
 				src + srcPitch * (LONG)height, srcPitch,
 				width, height / 2);
+			if (_overlayEnabled)
+				DrawOverlayCounter(pbScan0, pbUV, dstPitch, overlayValue);
 			dst2D->Unlock2D();
 			dstBuffer->SetCurrentLength(cbExpected);
 		}
@@ -269,29 +284,17 @@ namespace
 	}
 }
 
-// Burns the delivery counter into a real NV12 sample's Y plane (best-effort). The
-// synthetic FrameGenerator path draws its own counter with Direct2D, so this only
-// needs to handle the shared-memory frames.
-void MediaStream::DrawOverlayCounter(IMFSample* sample, UINT64 value)
+// Burns the delivery counter into a real NV12 frame whose planes the caller already
+// holds locked (CopyNv12ToSample). The synthetic FrameGenerator path draws its own
+// counter with Direct2D, so this only needs to handle the shared-memory frames.
+void MediaStream::DrawOverlayCounter(BYTE* yPlane, BYTE* uvPlane, LONG pitch, UINT64 value)
 {
-	if (!sample) return;
-	wil::com_ptr_nothrow<IMFMediaBuffer> buffer;
-	if (FAILED(sample->GetBufferByIndex(0, &buffer)) || !buffer) return;
-
-	wil::com_ptr_nothrow<IMF2DBuffer> buffer2D;
-	if (FAILED(buffer->QueryInterface(IID_PPV_ARGS(&buffer2D)))) return;
-
-	BYTE* scan0 = nullptr; LONG pitch = 0;
-	if (FAILED(buffer2D->Lock2D(&scan0, &pitch)) || !scan0) return;
+	if (!yPlane || !uvPlane) return;
 
 	char text[32];
 	snprintf(text, sizeof(text), "%llu", (unsigned long long)value);
-	// UV plane immediately follows the Y plane in NV12 (same pitch).
-	BYTE* uv = scan0 + (LONG)pitch * _videoHeight;
 	const int scale = max(2u, _videoHeight / 90); // ~ readable regardless of resolution
-	DrawDigitsNv12(scan0, uv, pitch, _videoWidth, _videoHeight, text, 16, 16, scale);
-
-	buffer2D->Unlock2D();
+	DrawDigitsNv12(yPlane, uvPlane, pitch, _videoWidth, _videoHeight, text, 16, 16, scale);
 }
 
 // Pull the latest NV12 frame the app (FFmpeg) published into the frame shared
@@ -329,7 +332,7 @@ HRESULT MediaStream::CopyFrameChannelFrame(IMFSample* targetSample)
 
 	wil::com_ptr_nothrow<IMFMediaBuffer> dstBuffer;
 	RETURN_IF_FAILED(targetSample->GetBufferByIndex(0, &dstBuffer));
-	RETURN_IF_FAILED(CopyNv12ToSample(dstBuffer.get(), slot, (LONG)st, w, h));
+	RETURN_IF_FAILED(CopyNv12ToSample(dstBuffer.get(), slot, (LONG)st, w, h, _overlayCounter));
 
 	// The pixels were copied outside the seqlock: if the producer lapped the ring during
 	// the copy, the slot may have been partly rewritten. Retry once; if that is torn too
@@ -339,7 +342,7 @@ HRESULT MediaStream::CopyFrameChannelFrame(IMFSample* targetSample)
 		bool torn = true;
 		const uint64_t firstSeq = fseq;
 		if (acquire() == S_OK &&
-			SUCCEEDED(CopyNv12ToSample(dstBuffer.get(), slot, (LONG)st, w, h)))
+			SUCCEEDED(CopyNv12ToSample(dstBuffer.get(), slot, (LONG)st, w, h, _overlayCounter)))
 			torn = !reader.IsSlotStillValid(fseq);
 		else
 			fseq = firstSeq; // the buffer still holds the first copy
@@ -660,8 +663,7 @@ HRESULT MediaStream::ProduceAndQueue(IUnknown* pToken)
 			_lastCopyMs = freq.QuadPart > 0
 				? (double)(t1.QuadPart - t0.QuadPart) * 1000.0 / (double)freq.QuadPart
 				: 0.0;
-			if (_overlayEnabled)
-				DrawOverlayCounter(sample.get(), _overlayCounter);
+			// (The overlay counter, if enabled, was drawn inside the copy's lock.)
 		}
 		else if (FAILED(hrCopy))
 		{

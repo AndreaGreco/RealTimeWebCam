@@ -12,7 +12,7 @@ ciascuno in una shell/sessione separata. Ogni step è autocontenuto: chi lo impl
 | 1 | Guardia geometria nel writer | app (`RTCamNative`) | ☑ |
 | 2 | Nessuna richiesta persa + controllo buffer flat | Frame Server | ☑ |
 | 3 | Seqlock robusto + controllo tearing + reset header | Frame Server | ☑ |
-| 4 | `Lock2DSize` in sola scrittura + overlay nello stesso lock | Frame Server | ☐ |
+| 4 | `Lock2DSize` in sola scrittura + overlay nello stesso lock | Frame Server | ☑ |
 | 5 | Wire format v2: slot allineati + evento "frame pronto" | Shared + entrambi | ☐ |
 | 6 | Consegna guidata dall'evento (timer solo fallback) | Frame Server | ☐ |
 | 7 | Decodifica/scaling direttamente nello slot condiviso | app | ☐ |
