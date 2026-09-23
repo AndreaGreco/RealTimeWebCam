@@ -7,6 +7,32 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.3.0] - 2026-09-24
+
+Latency and robustness release for the virtual camera path, plus a smaller, better-behaved installer. Frames reach Teams/Zoom sooner and more evenly, a latency spike no longer freezes the picture, and the MSI is about 10 MB lighter.
+
+> **Upgrade note:** the app ↔ Frame Server frame channel changed format (v2). Install the new MSI (it stops the Frame Server for you); if you deploy by hand with `deploy_vcam.ps1`, update the app and `VCamSampleSource.dll` together and restart the *Windows Camera Frame Server* service.
+
+### Changed
+- **Frames are delivered when the camera produces them, not on a fixed timer.** The app signals a new *frame-ready* event after every frame it publishes, and the Frame Server delivers on that signal. Before, a fixed ~33 ms timer decided when a frame was due, which added on average half a frame period (~16 ms) of latency and beat against 25 / 29.97 fps cameras (periodic duplicated or skipped frames). The timer is kept only as a fallback when no event arrives (app closed → synthetic frame at the nominal rate).
+- **No more intermediate copies on the decode side.** The FFmpeg producer now decodes/scales straight into the shared-memory slot the Frame Server reads: a GPU (d3d11va) frame that is already NV12 at the target size is downloaded directly into the slot, everything else goes through `sws_scale` with the slot as destination. At 1080p30 this removes ~180 MB/s of copying and 1–3 ms per frame.
+- **Latency spikes no longer freeze the picture.** When the stream falls behind live, the engine first catches up by decoding without presenting (non-reference frames skipped) until it is back within half the latency cap, with no visible freeze. The old behavior — drop to the next keyframe and flush, which froze the image for a whole GOP (2–4 s on many cameras) — is now only a fallback if catch-up lasts more than 1 s or keeps losing ground.
+- **Software decode uses all cores.** Slice threading was configured but left at libavcodec's default of 1 thread; it now uses automatic thread count (slice threads add no latency). The producer's scaler uses fast bilinear.
+- **Frame channel v2.** Page-aligned ring slots and the new frame-ready event (`Global\RTVCam_FrameReady_<CLSID>`, created by the Frame Server like the mapping).
+- **Faster frame copy in the Frame Server.** The destination sample is locked write-only (`Lock2DSize`), so a GPU texture sample is no longer read back to the CPU before being overwritten, and the diagnostic overlay is drawn under the same lock (one lock per frame instead of two).
+- **Smaller install.** The app targets plain `net10.0-windows`, dropping the unused C#/WinRT projection (~25 MB), and only ships the satellite languages it is translated into (EN/IT/DE/ES). The .NET diagnostics helpers (`createdump.exe`, DiaSymReader) are no longer installed, and the MSI uses high compression. MSI: 56.3 MB → 45.9 MB.
+
+### Added
+- **Installer:** stops the Frame Server services during install/uninstall, so upgrading while a camera is open no longer asks for a reboot and never leaves an old frame channel alive; refuses to install on Windows 10 (Windows 11 build 22000+ is required by the virtual camera API); optional *Launch RTVirtualCamera* checkbox at the end of setup; support/about links in *Settings → Apps*. Rebuilding the same version now upgrades in place instead of installing side by side.
+- **FFmpeg licensing information.** The About dialog shows the FFmpeg version in use and its LGPL 2.1+ license; the full license text is installed as `ffmpeg-LICENSE.txt`, and `THIRD_PARTY_NOTICES.md` states the exact version (8.1.2) and where its source and build recipe are.
+
+### Fixed
+- **The Frame Server could stop delivering after a few errors.** A failed sample production discarded the consumer's request token without delivering anything; the Frame Server keeps only a few requests in flight, so each lost token permanently reduced them until the stream stalled. Tokens are now always answered.
+- **Possible out-of-bounds read when the camera geometry changed while the app was running.** The writer now skips frames whose size doesn't match the frame-channel header instead of copying past the source buffer.
+- **Torn or stale frames.** The reader uses proper acquire fences, re-checks after the copy that the producer hasn't started overwriting the slot (retrying once), and always re-stamps the header when the camera is re-activated, so a previous session's frame can never look fresh.
+- Flat (non-2D) sample buffers are bounds-checked before the copy.
+- The main window uses the correct application icon.
+
 ## [1.2.1] - 2026-09-20
 
 Bugfix release: the virtual camera reconnects again after the RTSP source drops, the app tells you when it is retrying, and no wait dialog can block the window forever.
@@ -143,6 +169,7 @@ First stable release. The receive pipeline is now a single, tunable FFmpeg user-
 - `PAUSED→RUNNING` transition (`SetStreamState`) returning `E_POINTER`.
 - Memory leak on Stop/Start cycle.
 
+[1.3.0]: https://github.com/AndreaGreco/RealTimeWebCam/compare/1.2.1...1.3.0
 [1.2.1]: https://github.com/andrea-greco/RealTimeWebCam/compare/1.2.0...1.2.1
 [1.2.0]: https://github.com/andrea-greco/RealTimeWebCam/compare/1.1.0...1.2.0
 [1.1.0]: https://github.com/andrea-greco/RealTimeWebCam/compare/1.0.1...1.1.0
