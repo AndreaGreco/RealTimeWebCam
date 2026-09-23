@@ -219,8 +219,18 @@ settings). For the producer, a GPU frame that is already NV12 at the target size
 intermediate NV12 buffer or extra copy on the producer path; the preview keeps its `FrameSink`
 + intermediate buffer. A **latency cap**
 anchors a wall-clock ↔ PTS baseline and, when a decoded frame falls more than `kMaxLagMs`
-(default 350 ms, `MaxLagMs()`) behind live, resyncs by dropping the rest of the GOP (skip to the
-next keyframe) and flushing the decoder. This is what keeps a fast/misbehaving source from
+(default 350 ms, `MaxLagMs()`) behind live, catches up in two levels:
+1. **Catch-up (no freeze):** keeps decoding but stops presenting (no scale/copy/sink) with
+   `cc->skip_frame = AVDISCARD_NONREF`, until the lag drops to `kMaxLagMs / 2` (hysteresis), then
+   restores `AVDISCARD_DEFAULT` and resumes. Decoded-but-not-presented frames still refresh the
+   stall detector (`lastFrameTick`), so a catch-up never causes a spurious reconnect.
+2. **Keyframe resync (fallback):** if catch-up lasts more than `kCatchUpMaxMs` (1 s) or the lag
+   grows by more than `kMaxLagMs` over its entry value, it drops the rest of the GOP (skip to the
+   next keyframe), flushes the decoder and re-anchors the clock — the old behavior, which freezes
+   the picture until the next keyframe.
+
+`_lastLagMs` is updated in both levels; every level entry/exit is `DebugLog`ged (not per frame).
+This is what keeps a fast/misbehaving source from
 accumulating unbounded latency — the failure mode that a previous MF-based preview exhibited
 (reading ~130 fps from a 30 fps source with growing drift).
 

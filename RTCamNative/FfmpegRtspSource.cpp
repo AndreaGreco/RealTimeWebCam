@@ -507,17 +507,28 @@ void FfmpegRtspSource::DecodeLoop(std::string url, uint32_t targetW, uint32_t ta
 		// If software decode can't keep up with the camera's frame rate, the demuxer
 		// backlog (and thus end-to-end latency) grows without bound. We anchor a
 		// wall-clock ↔ stream-PTS baseline and, whenever a decoded frame falls more
-		// than kMaxLagMs behind where it "should" be, we resync to live: drop the
-		// rest of the current GOP (skip packets until the next keyframe) and flush
-		// the decoder. Costs a visible jump but keeps latency bounded on both TCP
-		// and UDP.
+		// than kMaxLagMs behind where it "should" be, we catch up in two levels:
+		//  1. Catch-up: keep decoding but stop presenting (no scale/copy/sink) and let
+		//     the decoder skip non-reference frames (AVDISCARD_NONREF), so the backlog
+		//     drains faster than real time while the picture just holds its last frame
+		//     briefly. Exits with hysteresis once lag <= kMaxLagMs / 2.
+		//  2. Keyframe resync (fallback): if catch-up lasts longer than
+		//     kCatchUpMaxMs or the lag keeps growing (decode itself can't keep up),
+		//     drop the rest of the GOP (skip packets until the next keyframe) and
+		//     flush the decoder. Costs a freeze until the next keyframe (the whole GOP,
+		//     2-4 s on many cameras), which is why it is only the fallback.
+		// Keeps latency bounded on both TCP and UDP.
 		const int64_t kMaxLagMs = MaxLagMs();
+		constexpr ULONGLONG kCatchUpMaxMs = 1000;
 		const AVRational streamTb = fmt->streams[vs]->time_base;
 		const AVRational msTb{ 1, 1000 };
 		bool haveClockBase = false;
 		int64_t ptsBaseMs = 0;
 		ULONGLONG wallBaseMs = 0;
 		bool skipToKeyframe = false;
+		bool catchingUp = false;        // level 1 active: decode but don't present
+		ULONGLONG catchUpStartMs = 0;   // when level 1 started
+		int64_t catchUpStartLagMs = 0;  // lag at entry, to detect a lag that keeps growing
 
 		// Received-bitrate meter: sum the demuxed video packet sizes over a ~1s window
 		// and publish bytes*8/elapsed. This is the real throughput (what the SDP omits).
@@ -580,6 +591,7 @@ void FfmpegRtspSource::DecodeLoop(std::string url, uint32_t targetW, uint32_t ta
 					skipToKeyframe = false;
 					avcodec_flush_buffers(cc);
 					haveClockBase = false; // re-anchor the clock at the new live position
+					DebugLog("FfmpegRtspSource::DecodeLoop - keyframe reached; resynced to live");
 				}
 				else
 				{
@@ -596,23 +608,68 @@ void FfmpegRtspSource::DecodeLoop(std::string url, uint32_t targetW, uint32_t ta
 					int64_t pts = frame->best_effort_timestamp;
 					if (pts == AV_NOPTS_VALUE) pts = frame->pts;
 					const ULONGLONG nowMs = GetTickCount64();
-					bool behind = false;
+					bool haveLag = false;
+					int64_t lagMs = 0;
 					if (pts != AV_NOPTS_VALUE)
 					{
 						const int64_t ptsMs = av_rescale_q(pts, streamTb, msTb);
 						if (!haveClockBase) { haveClockBase = true; ptsBaseMs = ptsMs; wallBaseMs = nowMs; }
 						const int64_t expectedMs = (int64_t)wallBaseMs + (ptsMs - ptsBaseMs);
-						const int64_t lagMs = (int64_t)nowMs - expectedMs;
+						lagMs = (int64_t)nowMs - expectedMs;
 						_lastLagMs.store(lagMs);
-						behind = lagMs > kMaxLagMs;
+						haveLag = true;
 					}
 
-					if (behind)
+					// Level 1 entry: too far behind → stop presenting, skip non-ref frames.
+					if (!catchingUp && haveLag && lagMs > kMaxLagMs)
 					{
-						// Too far behind: resync to live instead of publishing stale frames.
-						skipToKeyframe = true;
-						av_frame_unref(frame);
-						break;
+						catchingUp = true;
+						catchUpStartMs = nowMs;
+						catchUpStartLagMs = lagMs;
+						cc->skip_frame = AVDISCARD_NONREF;
+						std::ostringstream oss;
+						oss << "FfmpegRtspSource::DecodeLoop - lag " << lagMs << " ms > cap "
+						    << kMaxLagMs << " ms; catching up (not presenting)";
+						DebugLog(oss.str().c_str());
+					}
+
+					if (catchingUp)
+					{
+						if (haveLag && lagMs <= kMaxLagMs / 2)
+						{
+							// Caught up (hysteresis): present this frame and resume normally.
+							catchingUp = false;
+							cc->skip_frame = AVDISCARD_DEFAULT;
+							std::ostringstream oss;
+							oss << "FfmpegRtspSource::DecodeLoop - caught up in " << (nowMs - catchUpStartMs)
+							    << " ms (lag " << lagMs << " ms)";
+							DebugLog(oss.str().c_str());
+						}
+						else if (nowMs - catchUpStartMs > kCatchUpMaxMs ||
+							(haveLag && lagMs > catchUpStartLagMs + kMaxLagMs))
+						{
+							// Level 2: catch-up isn't winning (too long, or the lag keeps
+							// growing) → resync to the next keyframe instead of publishing
+							// stale frames.
+							catchingUp = false;
+							cc->skip_frame = AVDISCARD_DEFAULT;
+							skipToKeyframe = true;
+							std::ostringstream oss;
+							oss << "FfmpegRtspSource::DecodeLoop - catch-up failed after " << (nowMs - catchUpStartMs)
+							    << " ms (lag " << lagMs << " ms); resyncing to the next keyframe";
+							DebugLog(oss.str().c_str());
+							av_frame_unref(frame);
+							break;
+						}
+						else
+						{
+							// Still catching up: decoded but not presented. It still counts
+							// as a live frame for the stall detector, or a long catch-up
+							// would trigger a spurious reconnect.
+							lastFrameTick = nowMs;
+							av_frame_unref(frame);
+							continue;
+						}
 					}
 
 					const bool isHw = (frame->format == AV_PIX_FMT_D3D11);
