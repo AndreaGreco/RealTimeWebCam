@@ -209,6 +209,27 @@ namespace RTVirtualCamera
         [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
         private static extern int VCam_GetProducerConnectionState(out uint attempt, out uint disconnects, out int lastError);
 
+        // FFmpeg version string (libavutil-owned static storage: returned as IntPtr so
+        // the marshaller doesn't try to free it).
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
+        private static extern IntPtr VCam_GetFfmpegVersion();
+
+        /// <summary>
+        /// Version of the FFmpeg libraries loaded by RTCamNative (e.g. "8.1.2"), or null
+        /// if RTCamNative/FFmpeg can't be loaded.
+        /// </summary>
+        public static string GetFfmpegVersion()
+        {
+            try
+            {
+                return Marshal.PtrToStringAnsi(VCam_GetFfmpegVersion());
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
         /// <summary>
         /// Pushes all engine options from Settings.Current into RTCamNative. Static because
         /// the options are process-wide (they configure the shared decode core), not tied

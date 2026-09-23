@@ -262,6 +262,10 @@
     <value>Built on VCamSample by Simon Mourier.
 MIT License — © Simon Mourier, Andrea Greco.</value>
   </data>
+  <data name="About_FfmpegFormat" xml:space="preserve">
+    <value>Uses FFmpeg {0} (LGPL 2.1+), dynamically linked.
+Source code and license: see the project repository.</value>
+  </data>
   <data name="Button_Close" xml:space="preserve">
     <value>Close</value>
   </data>

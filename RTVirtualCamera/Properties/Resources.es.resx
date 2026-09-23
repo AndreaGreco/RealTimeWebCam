@@ -262,6 +262,10 @@
     <value>Basado en VCamSample de Simon Mourier.
 Licencia MIT — © Simon Mourier, Andrea Greco.</value>
   </data>
+  <data name="About_FfmpegFormat" xml:space="preserve">
+    <value>Usa FFmpeg {0} (LGPL 2.1+), enlazado dinámicamente.
+Código fuente y licencia: ver el repositorio del proyecto.</value>
+  </data>
   <data name="Button_Close" xml:space="preserve">
     <value>Cerrar</value>
   </data>

@@ -79,6 +79,14 @@
 				<Component Id="ThirdPartyNotices">
 					<File Id="ThirdPartyNoticesFile" Source="..\THIRD_PARTY_NOTICES.md" />
 				</Component>
+				<!-- Full FFmpeg license text (LGPL 2.1+ and the other notices FFmpeg
+				     carries), as installed by vcpkg for the exact build we ship. The LGPL
+				     requires a copy of the license alongside the libraries. -->
+				<Component Id="FfmpegLicense">
+					<File Id="FfmpegLicenseFile"
+						  Source="..\vcpkg_installed\x64-windows\share\ffmpeg\copyright"
+						  Name="ffmpeg-LICENSE.txt" />
+				</Component>
 			</Directory>
 		</StandardDirectory>
 
@@ -177,6 +185,7 @@
 			<ComponentGroupRef Id="AppFiles" />
 			<ComponentRef Id="CameraCOM" />
 			<ComponentRef Id="ThirdPartyNotices" />
+			<ComponentRef Id="FfmpegLicense" />
 			<ComponentRef Id="StartMenuShortcut" />
 
 			<Feature Id="DesktopShortcut"

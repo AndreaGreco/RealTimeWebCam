@@ -8,6 +8,10 @@
 #include "FfmpegRtspSource.h"
 #include "FrameChannelWriter.h"
 
+extern "C" {
+#include <libavutil/avutil.h>
+}
+
 namespace
 {
 	std::unique_ptr<FfmpegRtspSource> g_producer;
@@ -152,6 +156,13 @@ extern "C" {
 		if (disconnectsOut) *disconnectsOut = g_producer ? g_producer->Disconnects()    : 0;
 		if (lastErrorOut)   *lastErrorOut   = g_producer ? g_producer->LastError()      : 0;
 		return g_producer ? (int)g_producer->State() : (int)ConnectionState::Idle;
+	}
+
+	// Version string of the FFmpeg libraries actually loaded (e.g. "8.1.2"), for the
+	// About dialog / license notice. Static storage owned by libavutil; never null.
+	__declspec(dllexport) const char* VCam_GetFfmpegVersion()
+	{
+		return av_version_info();
 	}
 
 } // extern "C"

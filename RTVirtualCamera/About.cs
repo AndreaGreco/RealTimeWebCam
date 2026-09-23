@@ -21,6 +21,9 @@ namespace RTVirtualCamera
             versionLabel.Text = string.Format(AppStrings.Get("About_VersionFormat"), Application.ProductVersion);
             taglineLabel.Text = AppStrings.Get("About_Tagline");
             creditsLabel.Text = AppStrings.Get("About_Credits");
+            // LGPL notice for the bundled FFmpeg DLLs, with the version actually loaded.
+            ffmpegLabel.Text = string.Format(AppStrings.Get("About_FfmpegFormat"),
+                VirtualCameraWrapper.GetFfmpegVersion() ?? "?");
             closeButton.Text = AppStrings.Get("Button_Close");
 
             // Pull the icon straight out of the running exe (the one embedded via

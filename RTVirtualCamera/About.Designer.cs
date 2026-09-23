@@ -34,6 +34,7 @@ namespace RTVirtualCamera
             taglineLabel = new System.Windows.Forms.Label();
             separatorLabel = new System.Windows.Forms.Label();
             creditsLabel = new System.Windows.Forms.Label();
+            ffmpegLabel = new System.Windows.Forms.Label();
             githubLink = new System.Windows.Forms.LinkLabel();
             closeButton = new System.Windows.Forms.Button();
             ((System.ComponentModel.ISupportInitialize)appIconBox).BeginInit();
@@ -94,11 +95,21 @@ namespace RTVirtualCamera
             creditsLabel.TabIndex = 5;
             creditsLabel.Text = "Credits";
             //
+            // ffmpegLabel
+            //
+            ffmpegLabel.Font = new System.Drawing.Font("Segoe UI", 8.25F);
+            ffmpegLabel.ForeColor = System.Drawing.SystemColors.GrayText;
+            ffmpegLabel.Location = new System.Drawing.Point(20, 160);
+            ffmpegLabel.Name = "ffmpegLabel";
+            ffmpegLabel.Size = new System.Drawing.Size(400, 34);
+            ffmpegLabel.TabIndex = 8;
+            ffmpegLabel.Text = "FFmpeg";
+            //
             // githubLink
             //
             githubLink.AutoSize = true;
             githubLink.LinkColor = System.Drawing.SystemColors.HotTrack;
-            githubLink.Location = new System.Drawing.Point(20, 162);
+            githubLink.Location = new System.Drawing.Point(20, 198);
             githubLink.Name = "githubLink";
             githubLink.Size = new System.Drawing.Size(220, 15);
             githubLink.TabIndex = 6;
@@ -110,7 +121,7 @@ namespace RTVirtualCamera
             //
             closeButton.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
             closeButton.DialogResult = System.Windows.Forms.DialogResult.OK;
-            closeButton.Location = new System.Drawing.Point(344, 190);
+            closeButton.Location = new System.Drawing.Point(344, 226);
             closeButton.Name = "closeButton";
             closeButton.Size = new System.Drawing.Size(76, 26);
             closeButton.TabIndex = 7;
@@ -123,9 +134,10 @@ namespace RTVirtualCamera
             AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             CancelButton = closeButton;
-            ClientSize = new System.Drawing.Size(440, 236);
+            ClientSize = new System.Drawing.Size(440, 272);
             Controls.Add(closeButton);
             Controls.Add(githubLink);
+            Controls.Add(ffmpegLabel);
             Controls.Add(creditsLabel);
             Controls.Add(separatorLabel);
             Controls.Add(taglineLabel);
@@ -154,6 +166,7 @@ namespace RTVirtualCamera
         private System.Windows.Forms.Label taglineLabel;
         private System.Windows.Forms.Label separatorLabel;
         private System.Windows.Forms.Label creditsLabel;
+        private System.Windows.Forms.Label ffmpegLabel;
         private System.Windows.Forms.LinkLabel githubLink;
         private System.Windows.Forms.Button closeButton;
     }
