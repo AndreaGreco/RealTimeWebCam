@@ -26,8 +26,8 @@ public:
 	FrameChannelWriter& operator=(const FrameChannelWriter&) = delete;
 
 	// Opens the existing mapping for writing. Returns false if it does not exist
-	// yet (the Frame Server hasn't created it) — the caller retries. Cheap no-op
-	// once open.
+	// yet (the Frame Server hasn't created it) — the caller retries. Cheap once
+	// open: it only retries opening the frame-ready event, at most once a second.
 	bool EnsureOpen();
 
 	bool IsOpen() const { return _header != nullptr; }
@@ -40,8 +40,8 @@ public:
 	// Publishes one width x height NV12 frame. srcY points at the Y plane (height
 	// rows of srcStrideY bytes), srcUV at the interleaved UV plane (height/2 rows of
 	// srcStrideUV bytes). The planes are copied into the next ring slot honoring the
-	// destination stride, then the slot is published under the header seqlock.
-	// No-op if not open, or if width/height don't match the header geometry (logged
+	// destination stride, then the slot is published under the header seqlock and
+	// the frame-ready event (if open) is signaled. No-op if not open, or if width/height don't match the header geometry (logged
 	// once per mismatch episode, not per frame).
 	void WriteFrame(const uint8_t* srcY, int srcStrideY,
 	                const uint8_t* srcUV, int srcStrideUV,
@@ -50,7 +50,13 @@ public:
 	void Close();
 
 private:
+	void TryOpenFrameReadyEvent();
+
 	HANDLE _mapping = nullptr;
 	VCamFrameChannelHeader* _header = nullptr;
+	// Frame-ready event (created by the Frame Server). Optional: without it the
+	// writer works as before and the Frame Server falls back to its timer.
+	HANDLE _frameReadyEvent = nullptr;
+	ULONGLONG _lastEventOpenTick = 0; // throttles open retries to 1/s
 	bool _geometryMismatch = false; // last WriteFrame skipped on geometry; only log transitions
 };

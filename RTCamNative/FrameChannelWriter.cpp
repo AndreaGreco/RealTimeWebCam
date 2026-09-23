@@ -8,10 +8,30 @@ FrameChannelWriter::~FrameChannelWriter()
 	Close();
 }
 
+// Opens the Frame Server's frame-ready event for SetEvent only. Called per frame via
+// EnsureOpen, so a missing event (older Frame Server, creation failed) is retried
+// at most once a second rather than on every frame.
+void FrameChannelWriter::TryOpenFrameReadyEvent()
+{
+	if (_frameReadyEvent)
+		return;
+	const ULONGLONG now = GetTickCount64();
+	if (_lastEventOpenTick != 0 && now - _lastEventOpenTick < 1000)
+		return;
+	_lastEventOpenTick = now;
+
+	_frameReadyEvent = OpenEventW(EVENT_MODIFY_STATE, FALSE, VCAM_FRAMES_EVENT_NAME);
+	if (_frameReadyEvent)
+		DebugLog("FrameChannelWriter - frame-ready event opened");
+}
+
 bool FrameChannelWriter::EnsureOpen()
 {
 	if (_header)
+	{
+		TryOpenFrameReadyEvent();
 		return true;
+	}
 
 	// FILE_MAP_WRITE implies read on a PAGE_READWRITE section. The Frame Server's
 	// DACL grants Interactive Users read+write, so this succeeds for the app's
@@ -43,6 +63,7 @@ bool FrameChannelWriter::EnsureOpen()
 	_mapping = mapping;
 	_header = header;
 	DebugLog("FrameChannelWriter::EnsureOpen - mapping opened");
+	TryOpenFrameReadyEvent();
 	return true;
 }
 
@@ -72,7 +93,7 @@ void FrameChannelWriter::WriteFrame(const uint8_t* srcY, int srcStrideY,
 		slotCount != 0 && slotCount <= 16 &&
 		VCamFrameChannel_Nv12Bytes(width, height) <= bytesPerSlot &&
 		(uint64_t)dstStride * height * 3u / 2u <= bytesPerSlot &&
-		sizeof(VCamFrameChannelHeader) + (uint64_t)slotCount * bytesPerSlot <= VCamFrameChannel_MaxMappingSize();
+		VCAM_FRAMES_HEADER_BYTES + (uint64_t)slotCount * bytesPerSlot <= VCamFrameChannel_MaxMappingSize();
 	if (!geometryOk)
 	{
 		if (!_geometryMismatch)
@@ -99,7 +120,7 @@ void FrameChannelWriter::WriteFrame(const uint8_t* srcY, int srcStrideY,
 	uint32_t next = (cur < 0 || (uint32_t)cur >= slotCount) ? 0u : ((uint32_t)cur + 1u) % slotCount;
 
 	// Same arithmetic as VCamFrameChannel_SlotPtr, but on the snapshotted bytesPerSlot.
-	uint8_t* dst = reinterpret_cast<uint8_t*>(_header) + sizeof(VCamFrameChannelHeader)
+	uint8_t* dst = reinterpret_cast<uint8_t*>(_header) + VCAM_FRAMES_HEADER_BYTES
 		+ (size_t)next * bytesPerSlot;
 	uint8_t* dstY = dst;
 	uint8_t* dstUV = dst + (size_t)dstStride * height;
@@ -120,6 +141,10 @@ void FrameChannelWriter::WriteFrame(const uint8_t* srcY, int srcStrideY,
 	_header->framesWritten++;
 	_header->producerHeartbeatTickMs = GetTickCount64();
 	InterlockedIncrement(&_header->publishSeq); // -> even
+
+	// Wake the Frame Server only once the publish is complete (auto-reset event).
+	if (_frameReadyEvent)
+		SetEvent(_frameReadyEvent);
 }
 
 void FrameChannelWriter::Close()
@@ -134,5 +159,11 @@ void FrameChannelWriter::Close()
 		CloseHandle(_mapping);
 		_mapping = nullptr;
 	}
+	if (_frameReadyEvent)
+	{
+		CloseHandle(_frameReadyEvent);
+		_frameReadyEvent = nullptr;
+	}
+	_lastEventOpenTick = 0;
 	_geometryMismatch = false;
 }

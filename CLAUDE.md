@@ -85,7 +85,11 @@ Two shared-memory channels, both `Global\` + explicit DACL (service creates, app
 
 - **Frame channel** (`Global\RTVCam_Frames_<CLSID>`, `Shared/VCamFrameChannel.h`) — NV12 pixels,
   app → Frame Server. Created by the Frame Server (`FrameChannelReader`), written by the app
-  (`FrameChannelWriter`).
+  (`FrameChannelWriter`). Paired with an auto-reset **frame-ready event**
+  (`Global\RTVCam_FrameReady_<CLSID>`), also created by the Frame Server
+  (`FrameChannelReader::FrameReadyEvent()`, DACL grants IU `SYNCHRONIZE|EVENT_MODIFY_STATE`) and
+  opened by the app, which signals it after each publish. It is optional on both sides (created/
+  opened best-effort); the Frame Server's delivery timer still works without it.
 - **Stats channel** (`Global\RTVCam_Stats_<CLSID>`, `Shared/VCamStats.h`) — live fps/copy-cost,
   Frame Server → app. Created/written by the Frame Server (`StatsPublisher`), read by the app
   (`StatsReader`).
@@ -149,7 +153,7 @@ Single source of truth for the GUIDs and the `VCamConfig` struct shared between 
 
 ### `Shared/VCamFrameChannel.h`
 
-Single source of truth for the FFmpeg frame channel wire format: the `VCamFrameChannelHeader` struct, the `Global\RTVCam_Frames_<CLSID>` mapping name, the triple-buffered NV12 ring, and the seqlock convention. Included by `RTCamNative/FrameChannelWriter.cpp` (writer) and `VirtualCamera/FrameChannelReader.cpp` (reader). No C# mirror — the app touches this channel only through native code.
+Single source of truth for the FFmpeg frame channel wire format (v2): the `VCamFrameChannelHeader` struct, the `Global\RTVCam_Frames_<CLSID>` mapping name, the `Global\RTVCam_FrameReady_<CLSID>` event name (`VCAM_FRAMES_EVENT_NAME`), the triple-buffered NV12 ring, and the seqlock convention. The header is reserved one page (`VCAM_FRAMES_HEADER_BYTES` = 4096) and each slot's size (`bytesPerSlot`, `VCamFrameChannel_SlotBytes`) is the NV12 payload (`VCamFrameChannel_Nv12Bytes`) rounded up to whole pages, so every slot starts page-aligned; `stride` is still `== width`. Included by `RTCamNative/FrameChannelWriter.cpp` (writer) and `VirtualCamera/FrameChannelReader.cpp` (reader). No C# mirror — the app touches this channel only through native code.
 
 ### `Shared/VCamStats.h`
 
@@ -186,7 +190,8 @@ Design points:
 - **Fixed max-size mapping.** Created for `VCAM_FRAMES_MAX_*` (3840×2160); real geometry lives in
   the header, so it survives resolution changes across sessions without a resize.
 - **Triple-buffered, seqlock-published.** Ring of `VCAM_FRAMES_SLOT_COUNT` (3) NV12 slots; the
-  single writer fills the next slot then publishes `latestSlot`+`frameSeq` under the header seqlock.
+  single writer fills the next slot then publishes `latestSlot`+`frameSeq` under the header seqlock,
+  then `SetEvent`s the frame-ready event (if it managed to open it; retried at most 1/s).
 - **FFmpeg = LGPL, dynamic, via vcpkg.** Provided by vcpkg manifest mode; vcpkg is a git submodule
   at `external/vcpkg`, and `vcpkg.json` pins the version via `builtin-baseline` (ffmpeg 8.1.2, LGPL,
   features `avcodec`/`avformat`/`swscale`). `RTCamNative.vcxproj` imports vcpkg's MSBuild
@@ -350,7 +355,8 @@ Notes:
 - **The virtual camera stays Media Foundation.** Only the source of the pixels changed (the FFmpeg frame channel). Do not reintroduce an in-process RTSP reader in the Frame Server.
 - **`VCamConfig` struct ABI**: when modifying `Shared/VCamConfig.h::VCamConfig`, update the C# mirror `RTVirtualCamera/VirtualCameraWrapper.cs::VCamConfig` in the same change.
 - **`VCamFrameChannel` wire format**: `Shared/VCamFrameChannel.h` is the single source of truth; writer (`RTCamNative/FrameChannelWriter.cpp`) and reader (`VirtualCamera/FrameChannelReader.cpp`) both include it. Bump `VCAM_FRAMES_STRUCT_VERSION` if the layout changes. No C# mirror.
-- **The frame mapping is created ONLY by the Frame Server** (`FrameChannelReader`, `SeCreateGlobalPrivilege`); the app opens it for writing. Do not create it app-side.
+- **The frame mapping and the frame-ready event are created ONLY by the Frame Server** (`FrameChannelReader`, `SeCreateGlobalPrivilege`); the app opens the mapping for writing and the event with `EVENT_MODIFY_STATE`. Do not create either app-side.
+- **Wire-format changes need a matched deploy.** App and `VCamSampleSource.dll` must be updated together, and the Frame Server restarted after deploy: a still-live older section is rejected by the writer's `structVersion` check (no frames until the Frame Server recreates it).
 - **`VCamFrameServerStats` struct ABI**: when modifying `Shared/VCamStats.h::VCamFrameServerStats`, bump `VCAM_STATS_STRUCT_VERSION` and update `RTVirtualCamera/VirtualCameraWrapper.cs::FrameServerStats` (same field order, `Pack = 1`) in the same change.
 - **Both shared mappings use the `Global\` namespace with an explicit DACL** — the Frame Server (Local Service, session 0) and the app (interactive user session) are in different Terminal Server sessions. Handled in `FrameChannelReader::EnsureMapped` / `StatsPublisher::EnsureMapped`; do not create either mapping anywhere else.
 - **libav files are native (non-/clr).** RTCamNative is `/clr`; the FFmpeg/preview translation units must stay `CompileAsManaged=false` with no PCH, or the libav C headers won't compile.

@@ -26,6 +26,11 @@ public:
 
 	bool IsMapped() const { return _header != nullptr; }
 
+	// Auto-reset Global\ event the app signals after each publish (VCAM_FRAMES_EVENT_NAME),
+	// created alongside the mapping. nullptr if creation failed — it is an optimization,
+	// callers must keep working without it.
+	HANDLE FrameReadyEvent() const { return _frameReadyEvent; }
+
 	// Points ppSlot at the latest fully-written NV12 slot (tightly packed, stride ==
 	// width) and returns its identity/heartbeat, doing a bounded seqlock read. The
 	// caller must copy the pixels out promptly; triple buffering guarantees the
@@ -46,6 +51,9 @@ private:
 	FrameChannelReader(const FrameChannelReader&) = delete;
 	FrameChannelReader& operator=(const FrameChannelReader&) = delete;
 
+	void EnsureFrameReadyEvent();
+
 	HANDLE _mapping = nullptr;
 	VCamFrameChannelHeader* _header = nullptr;
+	HANDLE _frameReadyEvent = nullptr;
 };

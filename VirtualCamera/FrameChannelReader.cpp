@@ -19,6 +19,8 @@ FrameChannelReader::~FrameChannelReader()
 		UnmapViewOfFile(_header);
 	if (_mapping)
 		CloseHandle(_mapping);
+	if (_frameReadyEvent)
+		CloseHandle(_frameReadyEvent);
 }
 
 // Local Service (the Frame Server) full control; Interactive Users read+write (the
@@ -34,6 +36,39 @@ static PSECURITY_DESCRIPTOR BuildFramesSecurityDescriptor()
 		return nullptr;
 	}
 	return sd;
+}
+
+// Creates the frame-ready event next to the mapping, same "service creates, app opens"
+// reason. Interactive Users get SYNCHRONIZE | EVENT_MODIFY_STATE (0x00100002): enough
+// to SetEvent, nothing more. Failure only loses the optimization — the timer still
+// drives delivery — so it is traced, not propagated.
+void FrameChannelReader::EnsureFrameReadyEvent()
+{
+	if (_frameReadyEvent)
+		return;
+
+	PSECURITY_DESCRIPTOR sd = nullptr;
+	if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
+		L"D:(A;;GA;;;LS)(A;;0x00100002;;;IU)", SDDL_REVISION_1, &sd, nullptr))
+	{
+		WINTRACE(L"FrameChannelReader::EnsureFrameReadyEvent - security descriptor failed, error=%u", GetLastError());
+		sd = nullptr;
+	}
+	SECURITY_ATTRIBUTES sa{ sizeof(sa), sd, FALSE };
+
+	HANDLE ev = CreateEventW(sd ? &sa : nullptr, FALSE /*auto-reset*/, FALSE, VCAM_FRAMES_EVENT_NAME);
+	DWORD err = GetLastError();
+	if (sd)
+		LocalFree(sd);
+
+	if (!ev)
+	{
+		WINTRACE(L"FrameChannelReader::EnsureFrameReadyEvent - CreateEventW failed, error=%u", err);
+		return;
+	}
+	_frameReadyEvent = ev;
+	WINTRACE(L"FrameChannelReader::EnsureFrameReadyEvent - frame-ready event created (reused existing=%d)",
+		err == ERROR_ALREADY_EXISTS);
 }
 
 bool FrameChannelReader::EnsureMapped(uint32_t width, uint32_t height, uint32_t fpsNum, uint32_t fpsDen)
@@ -58,7 +93,7 @@ bool FrameChannelReader::EnsureMapped(uint32_t width, uint32_t height, uint32_t 
 		_header->fpsDen = fpsDen;
 		_header->format = MFVideoFormat_NV12;
 		_header->slotCount = VCAM_FRAMES_SLOT_COUNT;
-		_header->bytesPerSlot = VCamFrameChannel_Nv12Bytes(width, height);
+		_header->bytesPerSlot = VCamFrameChannel_SlotBytes(width, height); // page-rounded
 		_header->latestSlot = -1;
 		_header->frameSeq = 0;
 		_header->producerHeartbeatTickMs = 0;
@@ -72,6 +107,7 @@ bool FrameChannelReader::EnsureMapped(uint32_t width, uint32_t height, uint32_t 
 		// otherwise the previous session's latestSlot/heartbeat stay live and its last
 		// frame can be served as "fresh" for up to 2s.
 		stampHeader();
+		EnsureFrameReadyEvent(); // no-op if already created; retries a past failure
 		return true;
 	}
 
@@ -108,6 +144,7 @@ bool FrameChannelReader::EnsureMapped(uint32_t width, uint32_t height, uint32_t 
 	stampHeader();
 	WINTRACE(L"FrameChannelReader::EnsureMapped - mapping ready %ux%u (reused existing=%d)",
 		width, height, createErr == ERROR_ALREADY_EXISTS);
+	EnsureFrameReadyEvent();
 	return true;
 }
 
