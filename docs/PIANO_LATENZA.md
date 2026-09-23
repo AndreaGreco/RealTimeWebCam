@@ -18,7 +18,10 @@ ciascuno in una shell/sessione separata. Ogni step è autocontenuto: chi lo impl
 | 7 | Decodifica/scaling direttamente nello slot condiviso | app | ☑ |
 | 8 | Thread del decoder SW + scaler più veloce | app | ☑ |
 | 9 | Resync senza freeze (catch-up a due livelli) | app | ☑ |
-| 10 | (Sperimentale) `max_delay` UDP e avvio più rapido | app | ☐ |
+| 10 | (Sperimentale) `max_delay` UDP e avvio più rapido | app | ✗ non adottato |
+
+**Piano chiuso** (2026-09-23): step 1–9 implementati; lo step 10 è stato escluso per decisione
+dell'utente e non verrà implementato.
 
 Dipendenze: 6 richiede 5; 7 richiede 1 (e conviene dopo 5, che tocca lo stesso writer).
 Gli altri sono indipendenti, ma vanno eseguiti in ordine per evitare conflitti sugli stessi file
@@ -362,6 +365,9 @@ la latenza torna sotto il cap.
 ---
 
 ## Step 10 — (Sperimentale) `max_delay` UDP e avvio più rapido
+
+> **Non adottato** (2026-09-23): escluso per decisione dell'utente alla chiusura del piano.
+> Il testo sotto resta solo come riferimento.
 
 File: `RTCamNative/FfmpegRtspSource.cpp`. **Da fare solo con misure sul campo;** se non danno
 beneficio, non fare commit e annotare il risultato qui.
