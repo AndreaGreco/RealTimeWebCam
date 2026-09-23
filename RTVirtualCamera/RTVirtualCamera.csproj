@@ -2,7 +2,12 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows10.0.22000.0</TargetFramework>
+    <!-- Plain net10.0-windows, no OS-version suffix: a versioned TFM pulls in the
+         C#/WinRT projection (Microsoft.Windows.SDK.NET.dll + WinRT.Runtime.dll,
+         ~25 MB) that the app never uses. The Windows 11 requirement is enforced
+         by the MSI launch condition (Setup/Package.wxs) and, at runtime, by
+         MFCreateVirtualCamera itself. -->
+    <TargetFramework>net10.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <RootNamespace>RTVirtualCamera</RootNamespace>
     <AssemblyName>RTVirtualCamera</AssemblyName>
@@ -27,7 +32,7 @@
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
 
     <!-- The SDK also appends a TargetFramework folder segment by default
-         (bin\x64\Debug\net10.0-windows10.0.22000.0\), independently of the
+         (bin\x64\Debug\net10.0-windows\), independently of the
          RuntimeIdentifier one above. Missing this is almost certainly why
          RTVirtualCamera.exe stopped finding RTCamNative.dll: the exe was
          landing one folder deeper than the native project's plain
@@ -46,7 +51,12 @@
          next to the exe at runtime without any assembly reference. -->
     <BaseOutputPath>..\bin\</BaseOutputPath>
     <BaseIntermediateOutputPath>obj\</BaseIntermediateOutputPath>
-    <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
+
+    <!-- Only copy satellite assemblies for the cultures the app is localized in
+         (Properties/Resources.*.resx, SettingsForm.it-IT.resx). Without this the
+         self-contained WinForms runtime drops cs/fr/ja/ko/pl/pt-BR/ru/tr/zh-* folders
+         into the output, and the MSI harvests them. -->
+    <SatelliteResourceLanguages>en;it;it-IT;de;es</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)'=='Debug'">

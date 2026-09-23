@@ -12,7 +12,7 @@ Open `RTVirtualCamera.sln` in **Visual Studio 2022** and build in **x64**. All t
 | `RTCamNative.dll` | `RTCamNative/` |
 | `RTVirtualCamera.exe` | `RTVirtualCamera/` |
 
-There is no CLI build command; this is a Visual Studio solution only. Target: `.NET 10` (C#, self-contained, `net10.0-windows10.0.22000.0`), C++17 (C++), all x64.
+There is no CLI build command; this is a Visual Studio solution only. Target: `.NET 10` (C#, self-contained, `net10.0-windows`), C++17 (C++), all x64.
 
 ### Registering the COM DLL
 
