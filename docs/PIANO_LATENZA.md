@@ -16,7 +16,7 @@ ciascuno in una shell/sessione separata. Ogni step è autocontenuto: chi lo impl
 | 5 | Wire format v2: slot allineati + evento "frame pronto" | Shared + entrambi | ☑ |
 | 6 | Consegna guidata dall'evento (timer solo fallback) | Frame Server | ☑ |
 | 7 | Decodifica/scaling direttamente nello slot condiviso | app | ☑ |
-| 8 | Thread del decoder SW + scaler più veloce | app | ☐ |
+| 8 | Thread del decoder SW + scaler più veloce | app | ☑ |
 | 9 | Resync senza freeze (catch-up a due livelli) | app | ☐ |
 | 10 | (Sperimentale) `max_delay` UDP e avvio più rapido | app | ☐ |
 

@@ -209,7 +209,9 @@ The decode loop opens RTSP with low-latency demux options: `rtsp_transport` and
 `reorder_queue_size` (default 8) come from the user settings (see "User-tunable engine options"
 below), plus the fixed `max_delay=0`, `fflags=nobuffer+discardcorrupt`, `flags=low_delay`,
 `avioflags=direct`, `analyzeduration=0`, and the decoder with `AV_CODEC_FLAG_LOW_DELAY` +
-`FF_THREAD_SLICE`. Hardware decode (`d3d11va`) is attached when available (and not disabled in
+`FF_THREAD_SLICE` with `thread_count = 0` (auto — libavcodec's default of 1 would leave slice
+threading idle; slice threads add no latency). The producer's scaler uses `SWS_FAST_BILINEAR`
+(only relevant when actually scaling). Hardware decode (`d3d11va`) is attached when available (and not disabled in
 settings). For the producer, a GPU frame that is already NV12 at the target size is downloaded
 **directly into the shared-memory slot** (`av_hwframe_transfer_data` with a non-owning
 `buf[0]` over the slot — without `buf[0]` libav would allocate its own buffers); anything else

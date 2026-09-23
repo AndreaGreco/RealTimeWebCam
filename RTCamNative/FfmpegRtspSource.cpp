@@ -475,8 +475,13 @@ void FfmpegRtspSource::DecodeLoop(std::string url, uint32_t targetW, uint32_t ta
 			//  - SLICE threading instead of the default FRAME threading, which would
 			//    otherwise delay output by thread_count frames — the single biggest
 			//    avoidable latency in the decode path.
+			//  - thread_count = 0 (auto, one per core): libavcodec's default is 1, which
+			//    left slice threading with no parallelism at all. Slice threads add no
+			//    latency; they only help streams encoded with multiple slices per frame,
+			//    and are irrelevant to hardware (d3d11va) decode.
 			cc->flags |= AV_CODEC_FLAG_LOW_DELAY;
 			cc->thread_type = FF_THREAD_SLICE;
+			cc->thread_count = 0;
 			if (hwDeviceCtx)
 			{
 				// Attach the GPU device + hw-format selector so the decoder uses DXVA.
@@ -631,12 +636,14 @@ void FfmpegRtspSource::DecodeLoop(std::string url, uint32_t targetW, uint32_t ta
 					// Converts/scales src into the NV12 planes dst/dstLs (4-entry arrays:
 					// sws_scale reads all four). sws_getCachedContext recreates the scaler
 					// if the source dimensions/format change; otherwise it reuses it.
+					// SWS_FAST_BILINEAR: the flag only matters when actually scaling; at
+					// equal size it is a plain format conversion either way.
 					auto scaleInto = [&](const AVFrame* src, uint8_t* const dst[4], const int dstLs[4]) -> bool
 					{
 						sws = sws_getCachedContext(sws,
 							src->width, src->height, (AVPixelFormat)src->format,
 							(int)targetW, (int)targetH, AV_PIX_FMT_NV12,
-							SWS_BILINEAR, nullptr, nullptr, nullptr);
+							SWS_FAST_BILINEAR, nullptr, nullptr, nullptr);
 						if (!sws)
 							return false;
 						sws_scale(sws, src->data, src->linesize, 0, src->height, dst, dstLs);
