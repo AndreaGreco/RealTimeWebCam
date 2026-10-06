@@ -560,6 +560,24 @@ Codice sorgente e licenza: vedi il repository del progetto.</value>
   <data name="Settings_PersistentCamera" xml:space="preserve">
     <value>Mantieni la videocamera registrata alla chiusura dell'app. Vale dal prossimo avvio.</value>
   </data>
+  <data name="Settings_OfflineImage" xml:space="preserve">
+    <value>Immagine quando offline</value>
+  </data>
+  <data name="Settings_OfflineImage_Choose" xml:space="preserve">
+    <value>Scegli...</value>
+  </data>
+  <data name="Settings_OfflineImage_Remove" xml:space="preserve">
+    <value>Rimuovi</value>
+  </data>
+  <data name="Settings_OfflineImage_None" xml:space="preserve">
+    <value>Immagine predefinita (nessuna personalizzata)</value>
+  </data>
+  <data name="Settings_OfflineImage_Filter" xml:space="preserve">
+    <value>Immagini|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff|Tutti i file|*.*</value>
+  </data>
+  <data name="Settings_OfflineImage_Error" xml:space="preserve">
+    <value>Impossibile applicare l'immagine.</value>
+  </data>
   <data name="VirtualCamera_StoppedPersistent" xml:space="preserve">
     <value>Streaming interrotto. La videocamera virtuale resta registrata e mostra l'immagine offline finché non viene riavviata.</value>
   </data>

@@ -61,6 +61,44 @@ namespace RTVirtualCamera.Properties {
         }
         
         /// <summary>
+        ///   Cerca una stringa localizzata simile a Built on VCamSample by Simon Mourier.
+        ///MIT License — © Simon Mourier, Andrea Greco..
+        /// </summary>
+        internal static string About_Credits {
+            get {
+                return ResourceManager.GetString("About_Credits", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Uses FFmpeg {0} (LGPL 2.1+), dynamically linked.
+        ///Source code and license: see the project repository..
+        /// </summary>
+        internal static string About_FfmpegFormat {
+            get {
+                return ResourceManager.GetString("About_FfmpegFormat", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Turns an RTSP network camera into a Windows virtual webcam..
+        /// </summary>
+        internal static string About_Tagline {
+            get {
+                return ResourceManager.GetString("About_Tagline", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Version {0}.
+        /// </summary>
+        internal static string About_VersionFormat {
+            get {
+                return ResourceManager.GetString("About_VersionFormat", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Cerca una stringa localizzata simile a RT Virtual Camera.
         /// </summary>
         internal static string App_Title {
@@ -75,6 +113,15 @@ namespace RTVirtualCamera.Properties {
         internal static string Button_Browse {
             get {
                 return ResourceManager.GetString("Button_Browse", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Close.
+        /// </summary>
+        internal static string Button_Close {
+            get {
+                return ResourceManager.GetString("Button_Close", resourceCulture);
             }
         }
         
@@ -97,6 +144,15 @@ namespace RTVirtualCamera.Properties {
         }
         
         /// <summary>
+        ///   Cerca una stringa localizzata simile a Stop Preview.
+        /// </summary>
+        internal static string Button_StopPreview {
+            get {
+                return ResourceManager.GetString("Button_StopPreview", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Cerca una stringa localizzata simile a Stop VCam.
         /// </summary>
         internal static string Button_StopVCam {
@@ -106,11 +162,119 @@ namespace RTVirtualCamera.Properties {
         }
         
         /// <summary>
+        ///   Cerca una stringa localizzata simile a Metric.
+        /// </summary>
+        internal static string Col_Metric {
+            get {
+                return ResourceManager.GetString("Col_Metric", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Property.
+        /// </summary>
+        internal static string Col_Property {
+            get {
+                return ResourceManager.GetString("Col_Property", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Value.
+        /// </summary>
+        internal static string Col_Value {
+            get {
+                return ResourceManager.GetString("Col_Value", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Connecting to the source… (attempt {0}).
+        /// </summary>
+        internal static string Conn_Connecting_Attempt {
+            get {
+                return ResourceManager.GetString("Conn_Connecting_Attempt", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Connection lost — reconnecting (attempt {0})….
+        /// </summary>
+        internal static string Conn_Lost_Retrying {
+            get {
+                return ResourceManager.GetString("Conn_Lost_Retrying", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a FFmpeg documentation.
+        /// </summary>
+        internal static string Guide_FfmpegDocLink {
+            get {
+                return ResourceManager.GetString("Guide_FfmpegDocLink", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a How each FFmpeg receive option affects latency and reliability. The defaults favor real-time while staying robust on most sources; raise the buffers if you see green bands or stutter on a high-bitrate stream..
+        /// </summary>
+        internal static string Guide_Intro {
+            get {
+                return ResourceManager.GetString("Guide_Intro", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Engine options guide.
+        /// </summary>
+        internal static string Guide_Title {
+            get {
+                return ResourceManager.GetString("Guide_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Connection (FFmpeg).
+        /// </summary>
+        internal static string Header_Connection {
+            get {
+                return ResourceManager.GetString("Header_Connection", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Live stats.
+        /// </summary>
+        internal static string Header_Stats {
+            get {
+                return ResourceManager.GetString("Header_Stats", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Cerca una stringa localizzata simile a Information.
         /// </summary>
         internal static string Info_Title {
             get {
                 return ResourceManager.GetString("Info_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Properties:.
+        /// </summary>
+        internal static string Label_Properties {
+            get {
+                return ResourceManager.GetString("Label_Properties", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a RTSP URL:.
+        /// </summary>
+        internal static string Label_Source {
+            get {
+                return ResourceManager.GetString("Label_Source", resourceCulture);
             }
         }
         
@@ -142,11 +306,191 @@ namespace RTVirtualCamera.Properties {
         }
         
         /// <summary>
+        ///   Cerca una stringa localizzata simile a About.
+        /// </summary>
+        internal static string Menu_About {
+            get {
+                return ResourceManager.GetString("Menu_About", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Clear address history.
+        /// </summary>
+        internal static string Menu_ClearHistory {
+            get {
+                return ResourceManager.GetString("Menu_ClearHistory", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Exit.
+        /// </summary>
+        internal static string Menu_Exit {
+            get {
+                return ResourceManager.GetString("Menu_Exit", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a File.
+        /// </summary>
+        internal static string Menu_File {
+            get {
+                return ResourceManager.GetString("Menu_File", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Guide.
+        /// </summary>
+        internal static string Menu_Guide {
+            get {
+                return ResourceManager.GetString("Menu_Guide", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Cerca una stringa localizzata simile a Language.
         /// </summary>
         internal static string Menu_Language {
             get {
                 return ResourceManager.GetString("Menu_Language", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Settings.
+        /// </summary>
+        internal static string Menu_Settings {
+            get {
+                return ResourceManager.GetString("Menu_Settings", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Maps to FFmpeg&apos;s buffer_size (the socket receive buffer). A full 1080p frame of incompressible video arrives as a burst of many packets; if the buffer is too small the OS silently drops the overflow, causing green bands. A few MB absorbs the burst. This — together with the reorder window — is the main fix for packet loss on UDP even when bandwidth is plentiful. 0 leaves the system default..
+        /// </summary>
+        internal static string OptHelp_buffersize_Body {
+            get {
+                return ResourceManager.GetString("OptHelp_buffersize_Body", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Size of the UDP receive buffer, in KB. Larger absorbs high-bitrate bursts..
+        /// </summary>
+        internal static string OptHelp_buffersize_Tip {
+            get {
+                return ResourceManager.GetString("OptHelp_buffersize_Tip", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a When on, H.264/H.265 are decoded on the GPU (Direct3D 11 / DXVA), which is much cheaper for high-resolution streams and keeps latency down. Turn it off if a GPU driver misbehaves (artifacts, crashes) to fall back to CPU decoding..
+        /// </summary>
+        internal static string OptHelp_hwdecode_Body {
+            get {
+                return ResourceManager.GetString("OptHelp_hwdecode_Body", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Decode on the GPU (d3d11va) when available; off forces software decoding..
+        /// </summary>
+        internal static string OptHelp_hwdecode_Tip {
+            get {
+                return ResourceManager.GetString("OptHelp_hwdecode_Tip", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a This is our own resync-to-live guard, not an FFmpeg option. If a decoded frame is more than this many milliseconds behind real time (a slow decoder, or a bursty source building a backlog), the engine drops to the next keyframe to catch up. Lower keeps latency tight but causes more visible jumps; higher is smoother but laggier..
+        /// </summary>
+        internal static string OptHelp_latencycap_Body {
+            get {
+                return ResourceManager.GetString("OptHelp_latencycap_Body", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a If the picture falls this far behind live, jump back to live (milliseconds)..
+        /// </summary>
+        internal static string OptHelp_latencycap_Tip {
+            get {
+                return ResourceManager.GetString("OptHelp_latencycap_Tip", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Maps to FFmpeg&apos;s max_delay. 0 emits each frame as soon as it&apos;s decoded (lowest latency). A small non-zero value gives the reorder buffer time to wait for late packets, trading a little latency for smoother playback on a jittery network..
+        /// </summary>
+        internal static string OptHelp_maxdelay_Body {
+            get {
+                return ResourceManager.GetString("OptHelp_maxdelay_Body", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Extra time the demuxer may wait to reorder packets (milliseconds)..
+        /// </summary>
+        internal static string OptHelp_maxdelay_Tip {
+            get {
+                return ResourceManager.GetString("OptHelp_maxdelay_Tip", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Maps to FFmpeg&apos;s reorder_queue_size. On UDP, packets can arrive out of order; a larger window lets the engine wait for them instead of dropping them, which is what prevents missing slices (green bands) on a high-bitrate stream. Set too low it shreds a busy stream; very high can add latency during loss. Irrelevant on TCP..
+        /// </summary>
+        internal static string OptHelp_reorder_Body {
+            get {
+                return ResourceManager.GetString("OptHelp_reorder_Body", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a How many out-of-order RTP packets to hold before dropping them..
+        /// </summary>
+        internal static string OptHelp_reorder_Tip {
+            get {
+                return ResourceManager.GetString("OptHelp_reorder_Tip", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Maps to FFmpeg&apos;s stimeout. Bounds how long a stalled connection blocks before the engine retries, and how long a dead UDP attempt waits before Auto falls back to TCP. Too low can abort a slow-but-alive source; too high makes a truly dead source hang longer before reconnecting..
+        /// </summary>
+        internal static string OptHelp_sockettimeout_Body {
+            get {
+                return ResourceManager.GetString("OptHelp_sockettimeout_Body", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a How long to wait on the RTSP socket before giving up (milliseconds)..
+        /// </summary>
+        internal static string OptHelp_sockettimeout_Tip {
+            get {
+                return ResourceManager.GetString("OptHelp_sockettimeout_Tip", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Chooses the RTSP lower transport. UDP has the lowest latency but drops packets on a busy or lossy network, which shows up as green bands and corruption. TCP is reliable (no packet loss) at the cost of a little latency — the best choice for high-bitrate streams or networks you don&apos;t control. Auto starts on UDP and falls back to TCP only if no frame arrives at all..
+        /// </summary>
+        internal static string OptHelp_transport_Body {
+            get {
+                return ResourceManager.GetString("OptHelp_transport_Body", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a How RTP is carried: Auto (UDP, TCP fallback), UDP only, or TCP only..
+        /// </summary>
+        internal static string OptHelp_transport_Tip {
+            get {
+                return ResourceManager.GetString("OptHelp_transport_Tip", resourceCulture);
             }
         }
         
@@ -358,6 +702,447 @@ namespace RTVirtualCamera.Properties {
         }
         
         /// <summary>
+        ///   Cerca una stringa localizzata simile a Bitrate.
+        /// </summary>
+        internal static string Row_bitrate {
+            get {
+                return ResourceManager.GetString("Row_bitrate", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a UDP buffer.
+        /// </summary>
+        internal static string Row_cfgBuffer {
+            get {
+                return ResourceManager.GetString("Row_cfgBuffer", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a HW decode.
+        /// </summary>
+        internal static string Row_cfgHw {
+            get {
+                return ResourceManager.GetString("Row_cfgHw", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Latency cap.
+        /// </summary>
+        internal static string Row_cfgLatency {
+            get {
+                return ResourceManager.GetString("Row_cfgLatency", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Max delay.
+        /// </summary>
+        internal static string Row_cfgMaxDelay {
+            get {
+                return ResourceManager.GetString("Row_cfgMaxDelay", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a RTP reorder.
+        /// </summary>
+        internal static string Row_cfgReorder {
+            get {
+                return ResourceManager.GetString("Row_cfgReorder", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Socket timeout.
+        /// </summary>
+        internal static string Row_cfgTimeout {
+            get {
+                return ResourceManager.GetString("Row_cfgTimeout", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Transport preference.
+        /// </summary>
+        internal static string Row_cfgTransport {
+            get {
+                return ResourceManager.GetString("Row_cfgTransport", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Codec.
+        /// </summary>
+        internal static string Row_codec {
+            get {
+                return ResourceManager.GetString("Row_codec", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Container.
+        /// </summary>
+        internal static string Row_container {
+            get {
+                return ResourceManager.GetString("Row_container", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Decode.
+        /// </summary>
+        internal static string Row_decode {
+            get {
+                return ResourceManager.GetString("Row_decode", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Drift (ms).
+        /// </summary>
+        internal static string Row_drift {
+            get {
+                return ResourceManager.GetString("Row_drift", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Dropped (fps).
+        /// </summary>
+        internal static string Row_drop {
+            get {
+                return ResourceManager.GetString("Row_drop", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Duplicates (fps).
+        /// </summary>
+        internal static string Row_dup {
+            get {
+                return ResourceManager.GetString("Row_dup", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Engine.
+        /// </summary>
+        internal static string Row_engine {
+            get {
+                return ResourceManager.GetString("Row_engine", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Frame rate.
+        /// </summary>
+        internal static string Row_fps {
+            get {
+                return ResourceManager.GetString("Row_fps", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Pixel format.
+        /// </summary>
+        internal static string Row_pixfmt {
+            get {
+                return ResourceManager.GetString("Row_pixfmt", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Processing (ms).
+        /// </summary>
+        internal static string Row_proc {
+            get {
+                return ResourceManager.GetString("Row_proc", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Render (fps).
+        /// </summary>
+        internal static string Row_render {
+            get {
+                return ResourceManager.GetString("Row_render", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Resolution.
+        /// </summary>
+        internal static string Row_resolution {
+            get {
+                return ResourceManager.GetString("Row_resolution", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a RX (fps).
+        /// </summary>
+        internal static string Row_rx {
+            get {
+                return ResourceManager.GetString("Row_rx", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a State.
+        /// </summary>
+        internal static string Row_state {
+            get {
+                return ResourceManager.GetString("Row_state", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Transport.
+        /// </summary>
+        internal static string Row_transport {
+            get {
+                return ResourceManager.GetString("Row_transport", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Automatically start the virtual camera on launch.
+        /// </summary>
+        internal static string Settings_AutoStart {
+            get {
+                return ResourceManager.GetString("Settings_AutoStart", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a FFmpeg (user-space — live only while the app is open).
+        /// </summary>
+        internal static string Settings_Engine_Ffmpeg {
+            get {
+                return ResourceManager.GetString("Settings_Engine_Ffmpeg", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Media Foundation (Frame Server — works with the app closed).
+        /// </summary>
+        internal static string Settings_Engine_MediaFoundation {
+            get {
+                return ResourceManager.GetString("Settings_Engine_MediaFoundation", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Receive engine.
+        /// </summary>
+        internal static string Settings_EngineSection {
+            get {
+                return ResourceManager.GetString("Settings_EngineSection", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Frame counter overlay (diagnostic).
+        /// </summary>
+        internal static string Settings_FrameCounterOverlay {
+            get {
+                return ResourceManager.GetString("Settings_FrameCounterOverlay", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a General.
+        /// </summary>
+        internal static string Settings_GeneralSection {
+            get {
+                return ResourceManager.GetString("Settings_GeneralSection", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Hardware decoding (GPU).
+        /// </summary>
+        internal static string Settings_HardwareDecode {
+            get {
+                return ResourceManager.GetString("Settings_HardwareDecode", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Latency cap (ms).
+        /// </summary>
+        internal static string Settings_LatencyCap {
+            get {
+                return ResourceManager.GetString("Settings_LatencyCap", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Max delay (ms).
+        /// </summary>
+        internal static string Settings_MaxDelay {
+            get {
+                return ResourceManager.GetString("Settings_MaxDelay", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Network.
+        /// </summary>
+        internal static string Settings_NetworkSection {
+            get {
+                return ResourceManager.GetString("Settings_NetworkSection", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Image when offline.
+        /// </summary>
+        internal static string Settings_OfflineImage {
+            get {
+                return ResourceManager.GetString("Settings_OfflineImage", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Choose....
+        /// </summary>
+        internal static string Settings_OfflineImage_Choose {
+            get {
+                return ResourceManager.GetString("Settings_OfflineImage_Choose", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a The image could not be applied..
+        /// </summary>
+        internal static string Settings_OfflineImage_Error {
+            get {
+                return ResourceManager.GetString("Settings_OfflineImage_Error", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Images|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff|All files|*.*.
+        /// </summary>
+        internal static string Settings_OfflineImage_Filter {
+            get {
+                return ResourceManager.GetString("Settings_OfflineImage_Filter", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Default image (no custom image).
+        /// </summary>
+        internal static string Settings_OfflineImage_None {
+            get {
+                return ResourceManager.GetString("Settings_OfflineImage_None", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Remove.
+        /// </summary>
+        internal static string Settings_OfflineImage_Remove {
+            get {
+                return ResourceManager.GetString("Settings_OfflineImage_Remove", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Keep the camera registered when the app closes. Applies at the next start..
+        /// </summary>
+        internal static string Settings_PersistentCamera {
+            get {
+                return ResourceManager.GetString("Settings_PersistentCamera", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a RTP reorder buffer (pkt).
+        /// </summary>
+        internal static string Settings_ReorderQueue {
+            get {
+                return ResourceManager.GetString("Settings_ReorderQueue", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Socket timeout (ms).
+        /// </summary>
+        internal static string Settings_SocketTimeout {
+            get {
+                return ResourceManager.GetString("Settings_SocketTimeout", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Settings.
+        /// </summary>
+        internal static string Settings_Title {
+            get {
+                return ResourceManager.GetString("Settings_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a RTSP transport.
+        /// </summary>
+        internal static string Settings_Transport {
+            get {
+                return ResourceManager.GetString("Settings_Transport", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Auto (UDP, TCP fallback).
+        /// </summary>
+        internal static string Settings_Transport_Auto {
+            get {
+                return ResourceManager.GetString("Settings_Transport_Auto", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a TCP only.
+        /// </summary>
+        internal static string Settings_Transport_Tcp {
+            get {
+                return ResourceManager.GetString("Settings_Transport_Tcp", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a UDP only.
+        /// </summary>
+        internal static string Settings_Transport_Udp {
+            get {
+                return ResourceManager.GetString("Settings_Transport_Udp", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a UDP socket buffer (KB).
+        /// </summary>
+        internal static string Settings_UdpBufferSize {
+            get {
+                return ResourceManager.GetString("Settings_UdpBufferSize", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Virtual camera.
+        /// </summary>
+        internal static string Settings_VCamSection {
+            get {
+                return ResourceManager.GetString("Settings_VCamSection", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Cerca una stringa localizzata simile a Source missing.
         /// </summary>
         internal static string Source_Missing_Title {
@@ -385,11 +1170,92 @@ namespace RTVirtualCamera.Properties {
         }
         
         /// <summary>
+        ///   Cerca una stringa localizzata simile a FFmpeg (preview).
+        /// </summary>
+        internal static string Stats_Engine_Preview {
+            get {
+                return ResourceManager.GetString("Stats_Engine_Preview", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Camera active.
+        /// </summary>
+        internal static string Stats_State_CameraActive {
+            get {
+                return ResourceManager.GetString("Stats_State_CameraActive", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Connecting (attempt {0}).
+        /// </summary>
+        internal static string Stats_State_Connecting {
+            get {
+                return ResourceManager.GetString("Stats_State_Connecting", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Inactive.
+        /// </summary>
+        internal static string Stats_State_Inactive {
+            get {
+                return ResourceManager.GetString("Stats_State_Inactive", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Preview active.
+        /// </summary>
+        internal static string Stats_State_PreviewActive {
+            get {
+                return ResourceManager.GetString("Stats_State_PreviewActive", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Reconnecting (attempt {0}).
+        /// </summary>
+        internal static string Stats_State_Reconnecting {
+            get {
+                return ResourceManager.GetString("Stats_State_Reconnecting", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Waiting (stale).
+        /// </summary>
+        internal static string Stats_State_WaitingStale {
+            get {
+                return ResourceManager.GetString("Stats_State_WaitingStale", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Waiting for stats….
+        /// </summary>
+        internal static string Stats_State_WaitingStats {
+            get {
+                return ResourceManager.GetString("Stats_State_WaitingStats", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Cerca una stringa localizzata simile a Technical details:.
         /// </summary>
         internal static string Tech_Details {
             get {
                 return ResourceManager.GetString("Tech_Details", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a n/a.
+        /// </summary>
+        internal static string Value_NotAvailable {
+            get {
+                return ResourceManager.GetString("Value_NotAvailable", resourceCulture);
             }
         }
         
@@ -471,6 +1337,114 @@ namespace RTVirtualCamera.Properties {
         internal static string VirtualCamera_Stopped {
             get {
                 return ResourceManager.GetString("VirtualCamera_Stopped", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Streaming stopped. The virtual camera stays registered and shows the offline image until it is started again..
+        /// </summary>
+        internal static string VirtualCamera_StoppedPersistent {
+            get {
+                return ResourceManager.GetString("VirtualCamera_StoppedPersistent", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Connecting to the source….
+        /// </summary>
+        internal static string Wait_Connecting {
+            get {
+                return ResourceManager.GetString("Wait_Connecting", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Opening the preview….
+        /// </summary>
+        internal static string Wait_Opening {
+            get {
+                return ResourceManager.GetString("Wait_Opening", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Starting the virtual camera….
+        /// </summary>
+        internal static string Wait_Starting {
+            get {
+                return ResourceManager.GetString("Wait_Starting", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Stopping the virtual camera….
+        /// </summary>
+        internal static string Wait_Stopping {
+            get {
+                return ResourceManager.GetString("Wait_Stopping", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a The operation did not complete within {0} s. The application stays usable; the operation continues in the background..
+        /// </summary>
+        internal static string Wait_Timeout_Message {
+            get {
+                return ResourceManager.GetString("Wait_Timeout_Message", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Preview open did not complete (RTSP source hung)..
+        /// </summary>
+        internal static string Wait_Timeout_Open_Details {
+            get {
+                return ResourceManager.GetString("Wait_Timeout_Open_Details", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Virtual Camera start did not complete (Frame Server or RTSP open hung). A late start will be rolled back..
+        /// </summary>
+        internal static string Wait_Timeout_Start_Details {
+            get {
+                return ResourceManager.GetString("Wait_Timeout_Start_Details", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Stop did not complete: the Frame Server did not release the session in time..
+        /// </summary>
+        internal static string Wait_Timeout_Stop_Details {
+            get {
+                return ResourceManager.GetString("Wait_Timeout_Stop_Details", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Timeout.
+        /// </summary>
+        internal static string Wait_Timeout_Title {
+            get {
+                return ResourceManager.GetString("Wait_Timeout_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Timeout in {0} s.
+        /// </summary>
+        internal static string Wait_TimeoutIn {
+            get {
+                return ResourceManager.GetString("Wait_TimeoutIn", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Cerca una stringa localizzata simile a Please wait.
+        /// </summary>
+        internal static string Wait_Title {
+            get {
+                return ResourceManager.GetString("Wait_Title", resourceCulture);
             }
         }
     }

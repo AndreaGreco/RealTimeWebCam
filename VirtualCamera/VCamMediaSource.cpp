@@ -72,6 +72,11 @@ HRESULT VCamMediaSource::SetupCameraSettings(IMFAttributes* attributes)
 	if (FAILED(attributes->GetUINT32(MF_VCAM_FPS_DEN, &_camera_config.fpsDen))) _camera_config.fpsDen = 1;
 	if (FAILED(attributes->GetUINT32(MF_VCAM_OVERLAY, &_camera_config.overlay))) _camera_config.overlay = 0;
 
+	wil::unique_cotaskmem_string imageStr;
+	UINT32 imageLen = 0;
+	if (SUCCEEDED(attributes->GetAllocatedString(MF_VCAM_OFFLINE_IMAGE, &imageStr, &imageLen)) && imageLen > 0)
+		wcsncpy_s(_camera_config.offlineImagePath, imageStr.get(), _TRUNCATE);
+
 	if (_camera_config.width == 0) _camera_config.width = 1920;
 	if (_camera_config.height == 0) _camera_config.height = 1080;
 	if (_camera_config.fpsNum == 0) _camera_config.fpsNum = 30;

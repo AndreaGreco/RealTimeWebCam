@@ -161,6 +161,9 @@ namespace RTVirtualCamera
             latencyCapLabel.Text = AppStrings.Get("Settings_LatencyCap");
             vcamSectionLabel.Text = AppStrings.Get("Settings_VCamSection");
             PersistentCameraCheckBox.Text = AppStrings.Get("Settings_PersistentCamera");
+            offlineImageLabel.Text = AppStrings.Get("Settings_OfflineImage");
+            offlineImageBrowseButton.Text = AppStrings.Get("Settings_OfflineImage_Choose");
+            offlineImageRemoveButton.Text = AppStrings.Get("Settings_OfflineImage_Remove");
             closeButton.Text = AppStrings.Get("Button_Close");
 
             languageComboBox.Items.Clear();
@@ -211,6 +214,7 @@ namespace RTVirtualCamera
             OverlayCheckBox.Checked = Settings.Current.FrameCounterOverlay;
             HardwareDecodeCheckBox.Checked = Settings.Current.HardwareDecode;
             PersistentCameraCheckBox.Checked = Settings.Current.PersistentCamera;
+            RefreshOfflineImagePreview();
 
             // Load the persisted values (clamped to each control's range). The ValueChanged
             // handlers are wired in InitializeComponent, so assigning a value that differs
@@ -288,6 +292,83 @@ namespace RTVirtualCamera
             // camera left registered by an earlier run (MainForm, once the camera is idle).
             Settings.Current.PersistentCamera = PersistentCameraCheckBox.Checked;
             Settings.Current.Save();
+        }
+
+        private void OfflineImageBrowseButton_Click(object sender, EventArgs e)
+        {
+            using (OpenFileDialog dlg = new OpenFileDialog())
+            {
+                dlg.Title = AppStrings.Get("Settings_OfflineImage");
+                dlg.Filter = AppStrings.Get("Settings_OfflineImage_Filter");
+                if (dlg.ShowDialog(this) != DialogResult.OK)
+                {
+                    return;
+                }
+
+                try
+                {
+                    Cursor = Cursors.WaitCursor;
+                    OfflineImage.Install(dlg.FileName);
+                    Settings.Current.OfflineImageName = System.IO.Path.GetFileName(dlg.FileName);
+                    Settings.Current.Save();
+                }
+                catch (Exception ex)
+                {
+                    ShowOfflineImageError(ex);
+                }
+                finally
+                {
+                    Cursor = Cursors.Default;
+                }
+            }
+
+            RefreshOfflineImagePreview();
+        }
+
+        private void OfflineImageRemoveButton_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                OfflineImage.Remove();
+                Settings.Current.OfflineImageName = string.Empty;
+                Settings.Current.Save();
+            }
+            catch (Exception ex)
+            {
+                ShowOfflineImageError(ex);
+            }
+
+            RefreshOfflineImagePreview();
+        }
+
+        private void ShowOfflineImageError(Exception ex)
+        {
+            MessageBox.Show(
+                AppStrings.Get("Settings_OfflineImage_Error") + Environment.NewLine + Environment.NewLine + ex.Message,
+                AppStrings.Get("Settings_Title"),
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+        }
+
+        // Shows the image the Frame Server actually uses (the installed copy), with the
+        // original file name as tooltip.
+        private void RefreshOfflineImagePreview()
+        {
+            Image old = offlineImagePreview.Image;
+            offlineImagePreview.Image = OfflineImage.LoadPreview();
+            old?.Dispose();
+
+            bool hasImage = offlineImagePreview.Image != null;
+            offlineImageRemoveButton.Enabled = hasImage;
+            _helpTip.SetToolTip(offlineImagePreview,
+                hasImage ? Settings.Current.OfflineImageName : AppStrings.Get("Settings_OfflineImage_None"));
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            offlineImagePreview.Image?.Dispose();
+            offlineImagePreview.Image = null;
+            base.OnFormClosed(e);
         }
     }
 }

@@ -4,6 +4,107 @@
 #include "EnumNames.h"
 #include "MFTools.h"
 #include "FrameGenerator.h"
+#include <shlwapi.h>
+#include <vector>
+
+#pragma comment(lib, "shlwapi")
+
+namespace
+{
+	// How often Generate() looks at the offline image file (one GetFileAttributesEx).
+	constexpr ULONGLONG kOfflineImageCheckMs = 2000;
+	// Refuse absurd files (the app writes a re-encoded PNG, normally well under this).
+	constexpr ULONGLONG kOfflineImageMaxBytes = 64ull * 1024 * 1024;
+}
+
+void FrameGenerator::SetOfflineImagePath(const wchar_t* path)
+{
+	const std::wstring next(path ? path : L"");
+	if (next == _offlineImagePath)
+		return;
+
+	WINTRACE(L"FrameGenerator offline image path '%s'", next.c_str());
+	_offlineImagePath = next;
+	_offlineImage.reset();
+	_offlineImageWriteTime = {};
+	_offlineImageSize = 0;
+	_offlineImageNextCheck = 0;
+}
+
+// Looks at the offline image file at most every kOfflineImageCheckMs and (re)loads it
+// when its timestamp/size changed; drops it when the file is gone. Failures just leave
+// the default text frame — the synthetic frame must never fail because of the image.
+void FrameGenerator::RefreshOfflineImage()
+{
+	const ULONGLONG now = GetTickCount64();
+	if (now < _offlineImageNextCheck)
+		return;
+	_offlineImageNextCheck = now + kOfflineImageCheckMs;
+
+	const std::wstring& path = _offlineImagePath;
+	WIN32_FILE_ATTRIBUTE_DATA data{};
+	if (path.empty() || !GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &data))
+	{
+		if (_offlineImage)
+			WINTRACE(L"FrameGenerator offline image removed");
+		_offlineImage.reset();
+		_offlineImageWriteTime = {};
+		_offlineImageSize = 0;
+		return;
+	}
+
+	const ULONGLONG size = ((ULONGLONG)data.nFileSizeHigh << 32) | data.nFileSizeLow;
+	if (size == _offlineImageSize && CompareFileTime(&data.ftLastWriteTime, &_offlineImageWriteTime) == 0)
+		return; // unchanged (loaded, or already known to be unusable)
+
+	_offlineImageWriteTime = data.ftLastWriteTime;
+	_offlineImageSize = size;
+	_offlineImage.reset();
+	HRESULT hr = LoadOfflineImage(path);
+	WINTRACE(L"FrameGenerator offline image load '%s' (%llu bytes): 0x%08X", path.c_str(), size, hr);
+}
+
+// Decodes the image into a D2D bitmap bound to _renderTarget. The file is read into
+// memory first (with full sharing) so the app can replace it at any time without
+// hitting a decoder that keeps it open.
+HRESULT FrameGenerator::LoadOfflineImage(const std::wstring& path)
+{
+	RETURN_HR_IF_NULL(E_UNEXPECTED, _renderTarget.get());
+
+	wil::unique_hfile file(CreateFileW(path.c_str(), GENERIC_READ,
+		FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
+	RETURN_LAST_ERROR_IF(!file);
+
+	LARGE_INTEGER fileSize{};
+	RETURN_IF_WIN32_BOOL_FALSE(GetFileSizeEx(file.get(), &fileSize));
+	RETURN_HR_IF(E_INVALIDARG, fileSize.QuadPart <= 0 || (ULONGLONG)fileSize.QuadPart > kOfflineImageMaxBytes);
+
+	std::vector<BYTE> bytes((size_t)fileSize.QuadPart);
+	DWORD read = 0;
+	RETURN_IF_WIN32_BOOL_FALSE(ReadFile(file.get(), bytes.data(), (DWORD)bytes.size(), &read, nullptr));
+	RETURN_HR_IF(E_FAIL, read != bytes.size());
+	file.reset();
+
+	if (!_wicFactory)
+		RETURN_IF_FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&_wicFactory)));
+
+	wil::com_ptr_nothrow<IStream> stream;
+	stream.attach(SHCreateMemStream(bytes.data(), (UINT)bytes.size()));
+	RETURN_IF_NULL_ALLOC(stream.get());
+
+	wil::com_ptr_nothrow<IWICBitmapDecoder> decoder;
+	RETURN_IF_FAILED(_wicFactory->CreateDecoderFromStream(stream.get(), nullptr, WICDecodeMetadataCacheOnLoad, &decoder));
+	wil::com_ptr_nothrow<IWICBitmapFrameDecode> frame;
+	RETURN_IF_FAILED(decoder->GetFrame(0, &frame));
+
+	wil::com_ptr_nothrow<IWICFormatConverter> converter;
+	RETURN_IF_FAILED(_wicFactory->CreateFormatConverter(&converter));
+	RETURN_IF_FAILED(converter->Initialize(frame.get(), GUID_WICPixelFormat32bppPBGRA,
+		WICBitmapDitherTypeNone, nullptr, 0.0, WICBitmapPaletteTypeMedianCut));
+
+	RETURN_IF_FAILED(_renderTarget->CreateBitmapFromWicBitmap(converter.get(), nullptr, &_offlineImage));
+	return S_OK;
+}
 
 HRESULT FrameGenerator::EnsureRenderTarget(UINT width, UINT height)
 {
@@ -116,6 +217,13 @@ HRESULT FrameGenerator::CreateRenderTargetResources(UINT width, UINT height)
 	RETURN_IF_FAILED(_textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER));
 	_width = width;
 	_height = height;
+
+	// A D2D bitmap belongs to the render target that created it: force a reload on
+	// the next Generate() for the new target.
+	_offlineImage.reset();
+	_offlineImageWriteTime = {};
+	_offlineImageSize = 0;
+	_offlineImageNextCheck = 0;
 	return S_OK;
 }
 
@@ -126,24 +234,51 @@ HRESULT FrameGenerator::Generate(IMFSample* sample, REFGUID format, IMFSample** 
 	RETURN_HR_IF_NULL(E_POINTER, outSample);
 	*outSample = nullptr;
 
-	// Render "Camera IP non connessa" on dark background (CPU and GPU paths share this drawing step)
+	// Render the user's offline image (aspect-fit, letterboxed) or, without one,
+	// "Camera IP non connessa" on a dark background (CPU and GPU paths share this step)
 	if (_renderTarget && _textFormat && _dwrite && _whiteBrush)
 	{
+		RefreshOfflineImage();
+
 		_renderTarget->BeginDraw();
 		_renderTarget->Clear(D2D1::ColorF(0.08f, 0.08f, 0.08f, 1.0f));
+
+		if (_offlineImage)
+		{
+			const D2D1_SIZE_F img = _offlineImage->GetSize();
+			if (img.width > 0 && img.height > 0)
+			{
+				const float scale = min((float)_width / img.width, (float)_height / img.height);
+				const float w = img.width * scale;
+				const float h = img.height * scale;
+				const float x = ((float)_width - w) / 2;
+				const float y = ((float)_height - h) / 2;
+				_renderTarget->DrawBitmap(_offlineImage.get(), D2D1::RectF(x, y, x + w, y + h),
+					1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+			}
+		}
 
 		// With the diagnostic overlay on, append the delivery counter so the synthetic frame
 		// advances at the same rate the real path is delivered. (The build date/time that
 		// used to be baked in here was a redeploy check — not something end users should see.)
-		wchar_t text[128];
-		if (drawCounter)
+		// A custom image replaces the built-in text; only the counter is drawn over it.
+		wchar_t text[128] = {};
+		if (_offlineImage)
+		{
+			if (drawCounter)
+				swprintf_s(text, L"frame: %llu", (unsigned long long)counter);
+		}
+		else if (drawCounter)
 			swprintf_s(text, L"Camera IP non connessa\nframe: %llu", (unsigned long long)counter);
 		else
 			wcscpy_s(text, L"Camera IP non connessa");
 
-		wil::com_ptr_nothrow<IDWriteTextLayout> layout;
-		RETURN_IF_FAILED(_dwrite->CreateTextLayout(text, (UINT32)wcslen(text), _textFormat.get(), (FLOAT)_width, (FLOAT)_height, &layout));
-		_renderTarget->DrawTextLayout(D2D1::Point2F(0, 0), layout.get(), _whiteBrush.get());
+		if (text[0])
+		{
+			wil::com_ptr_nothrow<IDWriteTextLayout> layout;
+			RETURN_IF_FAILED(_dwrite->CreateTextLayout(text, (UINT32)wcslen(text), _textFormat.get(), (FLOAT)_width, (FLOAT)_height, &layout));
+			_renderTarget->DrawTextLayout(D2D1::Point2F(0, 0), layout.get(), _whiteBrush.get());
+		}
 		_renderTarget->EndDraw();
 	}
 

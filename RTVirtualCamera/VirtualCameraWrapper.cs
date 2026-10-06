@@ -158,6 +158,9 @@ namespace RTVirtualCamera
         [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
         private static extern int RemovePersistentVCam(string name);
 
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
+        private static extern int VCam_GetOfflineImagePath(System.Text.StringBuilder buffer, int cch);
+
         [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
         private static extern bool IsVCamRegistered(IntPtr vcam);
 
@@ -309,6 +312,16 @@ namespace RTVirtualCamera
         public static bool RemovePersistentCamera()
         {
             return RemovePersistentVCam(CameraName) == 0;
+        }
+
+        /// <summary>
+        /// Machine-wide file the Frame Server shows instead of the default synthetic
+        /// frame (%ProgramData%\RTVirtualCamera\offline-image.png — Shared/VCamConfig.h).
+        /// </summary>
+        public static string GetOfflineImagePath()
+        {
+            var sb = new System.Text.StringBuilder(1024);
+            return VCam_GetOfflineImagePath(sb, sb.Capacity) > 0 ? sb.ToString() : null;
         }
 
         private IntPtr vcamHandle;

@@ -17,7 +17,19 @@ class FrameGenerator
 	wil::com_ptr_nothrow<IWICBitmap> _bitmap;
 	wil::com_ptr_nothrow<IMFDXGIDeviceManager> _dxgiManager;
 
+	// The user's offline image (path from MF_VCAM_OFFLINE_IMAGE, see Shared/VCamConfig.h).
+	// Bound to _renderTarget; the file is re-checked at most every few seconds so the
+	// user can change it while the camera is running.
+	std::wstring _offlineImagePath;
+	wil::com_ptr_nothrow<IWICImagingFactory> _wicFactory;
+	wil::com_ptr_nothrow<ID2D1Bitmap> _offlineImage;
+	FILETIME _offlineImageWriteTime;
+	ULONGLONG _offlineImageSize;
+	ULONGLONG _offlineImageNextCheck;
+
 	HRESULT CreateRenderTargetResources(UINT width, UINT height);
+	void RefreshOfflineImage();
+	HRESULT LoadOfflineImage(const std::wstring& path);
 
 public:
 	FrameGenerator() :
@@ -26,7 +38,10 @@ public:
 		_frame(0),
 		_fps(0),
 		_deviceHandle(nullptr),
-		_prevTime(MFGetSystemTime())
+		_prevTime(MFGetSystemTime()),
+		_offlineImageWriteTime{},
+		_offlineImageSize(0),
+		_offlineImageNextCheck(0)
 	{
 
 	}
@@ -43,6 +58,9 @@ public:
 		}
 	}
 
+	// Full path of the user's offline image; empty = default text frame. Takes effect
+	// on the next Generate().
+	void SetOfflineImagePath(const wchar_t* path);
 	HRESULT SetD3DManager(IUnknown* manager, UINT width, UINT height);
 	const bool HasD3DManager() const;
 	HRESULT EnsureRenderTarget(UINT width, UINT height);

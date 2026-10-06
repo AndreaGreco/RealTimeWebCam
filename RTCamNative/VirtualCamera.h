@@ -67,6 +67,10 @@ public:
 	// re-creating it with the system lifetime, then IMFVirtualCamera::Remove()).
 	static HRESULT RemovePersistent(const wchar_t* title);
 
+	// %LOCALAPPDATA%\RTVirtualCamera\offline-image.png for the calling user (empty on
+	// failure). Sent to the Frame Server as MF_VCAM_OFFLINE_IMAGE.
+	static std::wstring OfflineImagePath();
+
 	// Start the virtual camera (makes it available to apps)
 	HRESULT StartVirtualCamera();
 

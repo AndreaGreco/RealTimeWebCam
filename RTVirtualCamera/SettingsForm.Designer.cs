@@ -49,12 +49,17 @@ namespace RTVirtualCamera
             latencyCapNumeric = new System.Windows.Forms.NumericUpDown();
             vcamSectionLabel = new System.Windows.Forms.Label();
             PersistentCameraCheckBox = new System.Windows.Forms.CheckBox();
+            offlineImageLabel = new System.Windows.Forms.Label();
+            offlineImagePreview = new System.Windows.Forms.PictureBox();
+            offlineImageBrowseButton = new System.Windows.Forms.Button();
+            offlineImageRemoveButton = new System.Windows.Forms.Button();
             closeButton = new System.Windows.Forms.Button();
             ((System.ComponentModel.ISupportInitialize)socketTimeoutNumeric).BeginInit();
             ((System.ComponentModel.ISupportInitialize)reorderNumeric).BeginInit();
             ((System.ComponentModel.ISupportInitialize)bufferSizeNumeric).BeginInit();
             ((System.ComponentModel.ISupportInitialize)maxDelayNumeric).BeginInit();
             ((System.ComponentModel.ISupportInitialize)latencyCapNumeric).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)offlineImagePreview).BeginInit();
             SuspendLayout();
             //
             // languageSectionLabel
@@ -269,14 +274,54 @@ namespace RTVirtualCamera
             PersistentCameraCheckBox.UseVisualStyleBackColor = true;
             PersistentCameraCheckBox.CheckedChanged += PersistentCameraCheckBox_CheckedChanged;
             //
+            // offlineImageLabel
+            //
+            offlineImageLabel.AutoSize = true;
+            offlineImageLabel.Location = new System.Drawing.Point(20, 524);
+            offlineImageLabel.Name = "offlineImageLabel";
+            offlineImageLabel.Size = new System.Drawing.Size(120, 15);
+            offlineImageLabel.TabIndex = 21;
+            offlineImageLabel.Text = "Offline image";
+            //
+            // offlineImagePreview
+            //
+            offlineImagePreview.BackColor = System.Drawing.Color.FromArgb(20, 20, 20);
+            offlineImagePreview.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            offlineImagePreview.Location = new System.Drawing.Point(20, 544);
+            offlineImagePreview.Name = "offlineImagePreview";
+            offlineImagePreview.Size = new System.Drawing.Size(160, 90);
+            offlineImagePreview.SizeMode = System.Windows.Forms.PictureBoxSizeMode.Zoom;
+            offlineImagePreview.TabIndex = 22;
+            offlineImagePreview.TabStop = false;
+            //
+            // offlineImageBrowseButton
+            //
+            offlineImageBrowseButton.Location = new System.Drawing.Point(192, 544);
+            offlineImageBrowseButton.Name = "offlineImageBrowseButton";
+            offlineImageBrowseButton.Size = new System.Drawing.Size(128, 26);
+            offlineImageBrowseButton.TabIndex = 23;
+            offlineImageBrowseButton.Text = "Choose...";
+            offlineImageBrowseButton.UseVisualStyleBackColor = true;
+            offlineImageBrowseButton.Click += OfflineImageBrowseButton_Click;
+            //
+            // offlineImageRemoveButton
+            //
+            offlineImageRemoveButton.Location = new System.Drawing.Point(192, 576);
+            offlineImageRemoveButton.Name = "offlineImageRemoveButton";
+            offlineImageRemoveButton.Size = new System.Drawing.Size(128, 26);
+            offlineImageRemoveButton.TabIndex = 24;
+            offlineImageRemoveButton.Text = "Remove";
+            offlineImageRemoveButton.UseVisualStyleBackColor = true;
+            offlineImageRemoveButton.Click += OfflineImageRemoveButton_Click;
+            //
             // closeButton
             //
             closeButton.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
             closeButton.DialogResult = System.Windows.Forms.DialogResult.OK;
-            closeButton.Location = new System.Drawing.Point(244, 530);
+            closeButton.Location = new System.Drawing.Point(244, 636);
             closeButton.Name = "closeButton";
             closeButton.Size = new System.Drawing.Size(76, 26);
-            closeButton.TabIndex = 21;
+            closeButton.TabIndex = 26;
             closeButton.Text = "Close";
             closeButton.UseVisualStyleBackColor = true;
             //
@@ -286,8 +331,12 @@ namespace RTVirtualCamera
             AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             CancelButton = closeButton;
-            ClientSize = new System.Drawing.Size(340, 576);
+            ClientSize = new System.Drawing.Size(340, 682);
             Controls.Add(closeButton);
+            Controls.Add(offlineImageRemoveButton);
+            Controls.Add(offlineImageBrowseButton);
+            Controls.Add(offlineImagePreview);
+            Controls.Add(offlineImageLabel);
             Controls.Add(PersistentCameraCheckBox);
             Controls.Add(vcamSectionLabel);
             Controls.Add(latencyCapNumeric);
@@ -323,6 +372,7 @@ namespace RTVirtualCamera
             ((System.ComponentModel.ISupportInitialize)bufferSizeNumeric).EndInit();
             ((System.ComponentModel.ISupportInitialize)maxDelayNumeric).EndInit();
             ((System.ComponentModel.ISupportInitialize)latencyCapNumeric).EndInit();
+            ((System.ComponentModel.ISupportInitialize)offlineImagePreview).EndInit();
             ResumeLayout(false);
             PerformLayout();
         }
@@ -350,6 +400,10 @@ namespace RTVirtualCamera
         private System.Windows.Forms.NumericUpDown latencyCapNumeric;
         private System.Windows.Forms.Label vcamSectionLabel;
         private System.Windows.Forms.CheckBox PersistentCameraCheckBox;
+        private System.Windows.Forms.Label offlineImageLabel;
+        private System.Windows.Forms.PictureBox offlineImagePreview;
+        private System.Windows.Forms.Button offlineImageBrowseButton;
+        private System.Windows.Forms.Button offlineImageRemoveButton;
         private System.Windows.Forms.Button closeButton;
     }
 }

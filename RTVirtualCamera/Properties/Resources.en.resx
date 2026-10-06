@@ -551,6 +551,24 @@ Source code and license: see the project repository.</value>
   <data name="Settings_PersistentCamera" xml:space="preserve">
     <value>Keep the camera registered when the app closes. Applies at the next start.</value>
   </data>
+  <data name="Settings_OfflineImage" xml:space="preserve">
+    <value>Image when offline</value>
+  </data>
+  <data name="Settings_OfflineImage_Choose" xml:space="preserve">
+    <value>Choose...</value>
+  </data>
+  <data name="Settings_OfflineImage_Remove" xml:space="preserve">
+    <value>Remove</value>
+  </data>
+  <data name="Settings_OfflineImage_None" xml:space="preserve">
+    <value>Default image (no custom image)</value>
+  </data>
+  <data name="Settings_OfflineImage_Filter" xml:space="preserve">
+    <value>Images|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff|All files|*.*</value>
+  </data>
+  <data name="Settings_OfflineImage_Error" xml:space="preserve">
+    <value>The image could not be applied.</value>
+  </data>
   <data name="VirtualCamera_StoppedPersistent" xml:space="preserve">
     <value>Streaming stopped. The virtual camera stays registered and shows the offline image until it is started again.</value>
   </data>

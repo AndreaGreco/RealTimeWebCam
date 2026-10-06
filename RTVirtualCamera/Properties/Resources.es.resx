@@ -551,6 +551,24 @@ Código fuente y licencia: ver el repositorio del proyecto.</value>
   <data name="Settings_PersistentCamera" xml:space="preserve">
     <value>Mantener la cámara registrada al cerrar la aplicación. Se aplica en el próximo inicio.</value>
   </data>
+  <data name="Settings_OfflineImage" xml:space="preserve">
+    <value>Imagen sin conexión</value>
+  </data>
+  <data name="Settings_OfflineImage_Choose" xml:space="preserve">
+    <value>Elegir...</value>
+  </data>
+  <data name="Settings_OfflineImage_Remove" xml:space="preserve">
+    <value>Quitar</value>
+  </data>
+  <data name="Settings_OfflineImage_None" xml:space="preserve">
+    <value>Imagen predeterminada (sin imagen personalizada)</value>
+  </data>
+  <data name="Settings_OfflineImage_Filter" xml:space="preserve">
+    <value>Imágenes|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff|Todos los archivos|*.*</value>
+  </data>
+  <data name="Settings_OfflineImage_Error" xml:space="preserve">
+    <value>No se pudo aplicar la imagen.</value>
+  </data>
   <data name="VirtualCamera_StoppedPersistent" xml:space="preserve">
     <value>Transmisión detenida. La cámara virtual sigue registrada y muestra la imagen sin conexión hasta que se vuelva a iniciar.</value>
   </data>

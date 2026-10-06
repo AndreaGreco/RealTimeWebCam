@@ -494,6 +494,11 @@ HRESULT MediaStream::SetRuntimeContext(const StreamRuntimeContext& context)
 {
 	_generation = context.config.generation;
 	_overlayEnabled = context.config.overlay != 0;
+	{
+		// Under _lock: the delivery path (Generate) reads it.
+		winrt::slim_lock_guard lock(_lock);
+		_frameGenerator.SetOfflineImagePath(context.config.offlineImagePath);
+	}
 	return SetVideoConfig(
 		context.config.width,
 		context.config.height,

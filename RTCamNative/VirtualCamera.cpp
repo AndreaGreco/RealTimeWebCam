@@ -2,6 +2,10 @@
 #include "VirtualCamera.h"
 #include "Logger.h"
 #include <sstream>
+#include <shlobj.h>
+
+#pragma comment(lib, "shell32")
+#pragma comment(lib, "ole32")
 
 // ============================================================================
 // VirtualCamera Implementation
@@ -102,6 +106,11 @@ HRESULT VirtualCamera::RegisterVirtualCamera()
 	setAttr(_vcam->SetUINT32(MF_VCAM_FPS_NUM,  _config.fpsNum),  "SetUINT32(FPS_NUM)");
 	setAttr(_vcam->SetUINT32(MF_VCAM_FPS_DEN,  _config.fpsDen),  "SetUINT32(FPS_DEN)");
 	setAttr(_vcam->SetUINT32(MF_VCAM_OVERLAY,  _config.overlay), "SetUINT32(OVERLAY)");
+
+	// Per-user offline image: always sent (fixed path), the Frame Server polls the file.
+	std::wstring offlineImage = OfflineImagePath();
+	if (!offlineImage.empty())
+		setAttr(_vcam->SetString(MF_VCAM_OFFLINE_IMAGE, offlineImage.c_str()), "SetString(OFFLINE_IMAGE)");
 
 	DebugLog("VirtualCamera::RegisterVirtualCamera - config attributes stored on IMFVirtualCamera");
 
@@ -257,6 +266,18 @@ void VirtualCamera::Detach()
 	_isStarted = false;
 }
 
+std::wstring VirtualCamera::OfflineImagePath()
+{
+	PWSTR localAppData = nullptr;
+	if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_DEFAULT, nullptr, &localAppData)))
+		return std::wstring();
+
+	std::wstring path(localAppData);
+	CoTaskMemFree(localAppData);
+	path += L"\\" VCAM_OFFLINE_IMAGE_DIR L"\\" VCAM_OFFLINE_IMAGE_FILE;
+	return path;
+}
+
 HRESULT VirtualCamera::RemovePersistent(const wchar_t* title)
 {
 	IMFVirtualCamera* vcam = nullptr;
@@ -362,6 +383,21 @@ extern "C" {
 	{
 		HRESULT hr = VirtualCamera::RemovePersistent(name);
 		return SUCCEEDED(hr) ? 0 : (int)hr;
+	}
+
+	// Full path of this user's offline image (see Shared/VCamConfig.h). Returns the
+	// length written, or 0 if the buffer is too small / LocalAppData can't be resolved.
+	__declspec(dllexport) int VCam_GetOfflineImagePath(LPWSTR buffer, int cch)
+	{
+		if (!buffer || cch <= 0)
+			return 0;
+
+		std::wstring path = VirtualCamera::OfflineImagePath();
+		if (path.empty() || (int)path.size() >= cch)
+			return 0;
+
+		wcscpy_s(buffer, cch, path.c_str());
+		return (int)path.size();
 	}
 
 	__declspec(dllexport) int RegisterVCam(VirtualCamera* vcam)

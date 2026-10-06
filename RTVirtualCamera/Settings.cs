@@ -67,6 +67,11 @@ namespace RTVirtualCamera
         public bool PersistentCameraRegistered { get; set; } = false;
         public string PersistentCameraConfig { get; set; } = string.Empty;
 
+        // Image shown by the virtual camera while there is no live video (app closed,
+        // camera offline). Only the original file name is kept here for the UI; the
+        // Frame Server reads its own copy (VirtualCameraWrapper.GetOfflineImagePath).
+        public string OfflineImageName { get; set; } = string.Empty;
+
         // RTSP lower-transport preference. Auto = UDP with TCP fallback (lowest latency
         // when UDP is available). Applied to the FFmpeg engine on the next connection.
         public RtspTransportMode RtspTransport { get; set; } = RtspTransportMode.Auto;

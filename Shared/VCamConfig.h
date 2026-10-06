@@ -56,3 +56,24 @@ struct VCamConfig
 	GUID     format;       // preferred output subtype (GUID_NULL = NV12 auto)
 	UINT32   overlay;      // diagnostic frame-counter overlay: 0 = off, 1 = on
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Custom "offline" image for the synthetic frame (FrameGenerator), per Windows user.
+//
+// Each user picks their own: the app writes it (re-encoded to PNG, with an explicit
+// read ACE for LOCAL SERVICE so the Frame Server can open it inside the profile) to
+//   %LOCALAPPDATA%\RTVirtualCamera\offline-image.png
+// and passes that full path to the Frame Server as MF_VCAM_OFFLINE_IMAGE before
+// Start(). The path is fixed per user, so it is always sent (file present or not):
+// the Frame Server re-checks the file periodically, and choosing / changing /
+// removing the image shows up on a running camera without restarting it. Missing
+// file = the default dark frame with the built-in text.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// {A3C1E7B9-9F4D-4E82-B061-F5A208D36C10}  offline image full path (wstring)
+static const GUID MF_VCAM_OFFLINE_IMAGE =
+	{ 0xa3c1e7b9, 0x9f4d, 0x4e82, { 0xb0, 0x61, 0xf5, 0xa2, 0x08, 0xd3, 0x6c, 0x10 } };
+
+// Location under %LOCALAPPDATA% (resolved app-side, VCam_GetOfflineImagePath).
+#define VCAM_OFFLINE_IMAGE_DIR  L"RTVirtualCamera"
+#define VCAM_OFFLINE_IMAGE_FILE L"offline-image.png"

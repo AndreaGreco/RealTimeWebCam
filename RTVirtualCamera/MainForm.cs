@@ -822,12 +822,14 @@ namespace RTVirtualCamera
 
         // Identifies the config attributes a persistent camera was last started with
         // (Settings.PersistentCameraConfig), to tell whether a re-attach must restart it.
-        // The URL is left out: the Frame Server only uses the geometry/fps/overlay.
+        // The URL is left out: the Frame Server only uses the geometry/fps/overlay and the
+        // offline image path (fixed per user; the file itself is re-checked live).
         private static string PersistentConfigKey(VCamConfig config)
         {
             return string.Format(System.Globalization.CultureInfo.InvariantCulture,
-                "{0}x{1}@{2}/{3};overlay={4}",
-                config.Width, config.Height, config.FpsNum, config.FpsDen, config.Overlay);
+                "{0}x{1}@{2}/{3};overlay={4};image={5}",
+                config.Width, config.Height, config.FpsNum, config.FpsDen, config.Overlay,
+                OfflineImage.TargetPath);
         }
 
         private static void ClearPersistentCameraRecord()

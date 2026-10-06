@@ -20,6 +20,7 @@ struct CameraSessionConfig
 	GUID format = MFVideoFormat_NV12;
 	UINT64 generation = 0;
 	UINT32 overlay = 0; // diagnostic frame-counter overlay (0 = off, 1 = on)
+	wchar_t offlineImagePath[520] = {}; // user's offline image (MF_VCAM_OFFLINE_IMAGE); empty = default frame
 };
 
 // Passed from VCamMediaSource to each MediaStream so a stream can (re)build its
