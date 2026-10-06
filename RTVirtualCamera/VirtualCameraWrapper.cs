@@ -315,8 +315,8 @@ namespace RTVirtualCamera
         }
 
         /// <summary>
-        /// Machine-wide file the Frame Server shows instead of the default synthetic
-        /// frame (%ProgramData%\RTVirtualCamera\offline-image.png — Shared/VCamConfig.h).
+        /// Per-user file the Frame Server shows instead of the default synthetic
+        /// frame (%LOCALAPPDATA%\RTVirtualCamera\offline-image.png — Shared/VCamConfig.h).
         /// </summary>
         public static string GetOfflineImagePath()
         {

@@ -67,7 +67,7 @@ A single self-contained file — it bundles the .NET 10 runtime, so there's noth
 
 The app installs to `C:\Program Files\RTVirtualCamera`. Settings and logs go to `%LOCALAPPDATA%\RTVirtualCamera` (the install folder isn't writable by a standard user).
 
-To uninstall: Windows *Apps & features*, or run the MSI again.
+To uninstall: Windows *Apps & features*, or run the MSI again. Uninstalling also removes the virtual camera if you had it kept registered.
 
 ---
 
@@ -94,7 +94,9 @@ Open **Settings** from the app to:
 - pick the interface language (System / Italiano / English / Español / Deutsch — takes effect after restarting the app);
 - turn on **auto-start** (opens the stream automatically on launch, no click needed);
 - choose the **RTSP transport** (Auto with TCP fallback / UDP only / TCP only) and fine-tune the FFmpeg engine (hardware decode on/off, socket timeout, RTP reorder-buffer depth, latency cap);
-- toggle a diagnostic **frame-counter overlay** burned into the video (off by default).
+- toggle a diagnostic **frame-counter overlay** burned into the video (off by default);
+- **keep the camera registered when the app closes** (off by default): Zoom/Teams keep *"RTSP Virtual Camera"* in their list and show the offline image until you start it again — handy if you don't want to re-select the camera in every meeting;
+- choose an **image when offline**, shown instead of the default frame whenever there is no live video (app closed, camera unreachable); it can be changed while the camera is in use.
 
 ### The diagnostics panels (at the top)
 

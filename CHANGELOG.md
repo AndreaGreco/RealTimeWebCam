@@ -7,6 +7,19 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.4.0] - 2026-10-06
+
+The virtual camera can now stay put when the app is closed, like OBS's: Zoom/Teams keep it selected and show your own "offline" image until the stream comes back.
+
+> **Upgrade note:** both features need the new `VCamSampleSource.dll`. The MSI takes care of it (it stops the Frame Server for you); if you deploy by hand with `deploy_vcam.ps1`, update the app and the DLL together and restart the *Windows Camera Frame Server* service.
+
+### Added
+- **Keep the camera registered when the app closes** (*Settings → Virtual camera*, off by default). When on, closing the app or pressing *Stop VCam* only stops the stream: *"RTSP Virtual Camera"* stays in the device list of Zoom/Teams/etc., across app restarts and reboots, showing the offline frame until you start it again. The next start re-attaches to the same camera, so a meeting that has it selected keeps working; it is restarted (briefly interrupting whoever has it open) only when the resolution, frame rate or overlay changed. Turning the option off removes the camera as soon as it is idle. No administrator rights needed: the camera is registered for the current Windows user only.
+- **Custom offline image** (*Settings → Virtual camera → Image when offline*). Pick any PNG/JPEG/BMP/GIF/TIFF to show instead of the default *"Camera IP non connessa"* frame whenever there is no live video (app closed, camera unreachable, reconnecting). The image is scaled to fit (letterboxed) and can be changed or removed while the camera is in use — the change shows up within about 2 seconds, no restart. Each Windows user has their own image (`%LOCALAPPDATA%\RTVirtualCamera\offline-image.png`, larger than 4K is scaled down).
+
+### Changed
+- **Uninstalling removes the persistent camera** of the user running the uninstall, so no dead *"RTSP Virtual Camera"* entry is left behind. Upgrades keep it, so the camera stays selected in Zoom/Teams across updates.
+
 ## [1.3.0] - 2026-09-24
 
 Latency and robustness release for the virtual camera path, plus a smaller, better-behaved installer. Frames reach Teams/Zoom sooner and more evenly, a latency spike no longer freezes the picture, and the MSI is about 10 MB lighter.

@@ -67,7 +67,7 @@ File unico, self-contained — include il runtime .NET 10, quindi non serve inst
 
 L'app si installa in `C:\Program Files\RTVirtualCamera`. Impostazioni e log finiscono in `%LOCALAPPDATA%\RTVirtualCamera` (l'install dir non è scrivibile da utente standard).
 
-Per disinstallare: *App e funzionalità* di Windows, oppure ri-esegui l'MSI.
+Per disinstallare: *App e funzionalità* di Windows, oppure ri-esegui l'MSI. La disinstallazione rimuove anche la videocamera virtuale, se l'avevi mantenuta registrata.
 
 ---
 
@@ -94,7 +94,9 @@ Apri **Impostazioni** dall'app per:
 - scegliere la lingua dell'interfaccia (Sistema / Italiano / English / Español / Deutsch — ha effetto dopo il riavvio dell'app);
 - attivare l'**avvio automatico** (apre lo stream da solo al lancio, senza bisogno di click);
 - scegliere il **trasporto RTSP** (Auto con fallback TCP / solo UDP / solo TCP) e regolare finemente il motore FFmpeg (decodifica hardware on/off, timeout socket, profondità del buffer di riordino RTP, cap di latenza);
-- attivare un **overlay diagnostico con contatore di frame** impresso sul video (disattivo di default).
+- attivare un **overlay diagnostico con contatore di frame** impresso sul video (disattivo di default);
+- **mantenere la videocamera registrata alla chiusura dell'app** (disattivo di default): Zoom/Teams tengono *"RTSP Virtual Camera"* nell'elenco e mostrano l'immagine offline finché non la riavvii — comodo per non doverla riselezionare a ogni riunione;
+- scegliere un'**immagine quando offline**, mostrata al posto del frame predefinito quando non c'è video live (app chiusa, telecamera irraggiungibile); si può cambiare anche con la videocamera in uso.
 
 ### I pannelli di diagnostica (in alto)
 
