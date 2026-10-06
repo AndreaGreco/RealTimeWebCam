@@ -109,7 +109,21 @@ space and is an accepted trade-off.
 3. App calls `IMFVirtualCamera::Start()` — Frame Server loads the DLL, calls `Activator::ActivateObject()` → `SetupCameraSettings()` (which **creates** the frame mapping) → `Initialize()`.
 4. App calls `VCam_StartFfmpegProducer(url,w,h,…)` — the user-space `FfmpegRtspSource` opens the RTSP URL, decodes, and starts writing NV12 into the frame mapping via `FrameChannelWriter` (retrying `OpenFileMappingW` until the mapping exists).
 5. When a consumer (Zoom) opens the camera, `MediaStream::RequestSample()` is called ~30x/sec; it reads the latest frame from `FrameChannelReader` and copies it into the allocated sample (or a synthetic frame if the producer heartbeat is stale).
-6. On stop: `VCam_StopFfmpegProducer()` joins the decode thread; `VCamMediaSource::Stop()`/`Shutdown()` tear down the streams.
+6. On stop: `VCam_StopFfmpegProducer()` joins the decode thread; `VCamMediaSource::Stop()`/`Shutdown()` tear down the streams. A **persistent** camera (below) is not stopped/removed: the app only detaches from it.
+
+**Persistent camera (opt-in, like OBS).** `Settings.PersistentCamera` → `VirtualCamera::SetPersistent`
+creates the camera with `MFVirtualCameraLifetime_System` (still `MFVirtualCameraAccess_CurrentUser`,
+no elevation) instead of `_Session`. Stop / app close then only stop the producer and `Detach()`
+(release without `Stop`/`Remove`), so Zoom/Teams keep the device and get the synthetic/offline frame.
+The next start re-creates it with the same source id (= re-attach), sets the attrs and `Start()`s
+(on failure: `Stop` + `Start`); it calls `Restart()` (`Stop`+`Start`, interrupts consumers) only when
+geometry/fps/overlay differ from `Settings.PersistentCameraConfig`. `Settings.PersistentCameraRegistered`
+records that a camera may be left registered; turning the option off removes it
+(`RemovePersistentVCam`: re-create with system lifetime + `Remove()`) when idle — at startup, when the
+settings dialog closes — or on stop/close of a running persistent camera. **Uninstall** always removes it:
+the MSI runs `RTVirtualCamera.exe --remove-camera` (`Program.RemoveCamera`, no UI, 30 s cap) as a
+deferred, impersonated custom action before `StopServices`, skipped on major upgrade. Impersonated
+because the camera has CurrentUser access: only the uninstalling user's camera is removed.
 
 ---
 
@@ -148,7 +162,7 @@ space and is an accepted trade-off.
 | `VirtualCameraWrapper` | `VirtualCameraWrapper.cs` | P/Invoke façade over `RTCamNative.dll`. Declares the C# mirror of `VCamConfig` and of `VCamFrameServerStats` as `FrameServerStats`. `SetConfig → Register → Start`, then `StartFfmpegProducer`. `TryGetFrameServerRates()` polls `VCam_GetFrameServerStats`. |
 | `VideoPlayerWrapper` | `VideoPlayerWrapper.cs` | P/Invoke façade for the FFmpeg preview player. Mirrors `StreamInfo` and `PreviewStats`. |
 | `MainForm` | `MainForm.cs` | Main UI. Probes source, builds `VCamConfig`, `SetConfig → Register → Start → StartFfmpegProducer`. `StatsTimer_Tick` shows preview stats normally, or Frame-Server stats once the virtual camera is running. |
-| `Settings` | `Settings.cs` | Persists `RtspURL` and `AutoStart`. |
+| `Settings` | `Settings.cs` | Persists `RtspURL`, `AutoStart`, engine options, and `PersistentCamera` (+ bookkeeping `PersistentCameraRegistered`/`PersistentCameraConfig`). |
 
 ### `Shared/VCamConfig.h`
 

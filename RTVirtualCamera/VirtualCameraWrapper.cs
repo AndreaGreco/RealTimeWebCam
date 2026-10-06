@@ -147,6 +147,18 @@ namespace RTVirtualCamera
         private static extern int UnregisterVCam(IntPtr vcam);
 
         [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
+        private static extern void SetVCamPersistent(IntPtr vcam, int persistent);
+
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
+        private static extern int RestartVCam(IntPtr vcam);
+
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
+        private static extern void DetachVCam(IntPtr vcam);
+
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Unicode)]
+        private static extern int RemovePersistentVCam(string name);
+
+        [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
         private static extern bool IsVCamRegistered(IntPtr vcam);
 
         [DllImport("RTCamNative.dll", CallingConvention = CallingConvention.Cdecl)]
@@ -287,7 +299,20 @@ namespace RTVirtualCamera
             return s;
         }
 
+        /// <summary>Friendly name the camera is registered with (what Zoom/Teams list).</summary>
+        public const string CameraName = "RTSP Virtual Camera";
+
+        /// <summary>
+        /// Removes the persistent camera left registered by an earlier run (see
+        /// SetPersistent). Blocking (Frame Server round trip): call off the UI thread.
+        /// </summary>
+        public static bool RemovePersistentCamera()
+        {
+            return RemovePersistentVCam(CameraName) == 0;
+        }
+
         private IntPtr vcamHandle;
+        private bool persistent = false;
         private bool disposed = false;
 
         // Previous Frame-Server snapshot + timestamp, for deriving live fps from
@@ -323,6 +348,31 @@ namespace RTVirtualCamera
             if (disposed) throw new ObjectDisposedException(nameof(VirtualCameraWrapper));
             if (vcamHandle != IntPtr.Zero)
                 SetVirtualCameraConfig(vcamHandle, ref config);
+        }
+
+        /// <summary>
+        /// Persistent = the camera stays registered after the app closes, so
+        /// Zoom/Teams keep it selected and show the offline frame meanwhile. Must be
+        /// called before Register(). Dispose() then only detaches from it.
+        /// </summary>
+        public void SetPersistent(bool value)
+        {
+            if (disposed) throw new ObjectDisposedException(nameof(VirtualCameraWrapper));
+            persistent = value;
+            if (vcamHandle != IntPtr.Zero)
+                SetVCamPersistent(vcamHandle, value ? 1 : 0);
+        }
+
+        public bool IsPersistent { get { return persistent; } }
+
+        /// <summary>Stop + Start so the Frame Server re-reads the config attributes.</summary>
+        public bool Restart()
+        {
+            if (disposed) throw new ObjectDisposedException(nameof(VirtualCameraWrapper));
+            if (vcamHandle == IntPtr.Zero) return false;
+            int result = RestartVCam(vcamHandle);
+            LastWin32Error = GetLastError();
+            return result == 0;
         }
 
         public bool Register()
@@ -463,8 +513,17 @@ namespace RTVirtualCamera
 
                 if (vcamHandle != IntPtr.Zero)
                 {
-                    if (IsStarted) StopVCam(vcamHandle);
-                    if (IsRegistered) UnregisterVCam(vcamHandle);
+                    if (persistent)
+                    {
+                        // Leave the camera registered and enabled; the Frame Server shows
+                        // the offline frame until the app (re)attaches to it.
+                        DetachVCam(vcamHandle);
+                    }
+                    else
+                    {
+                        if (IsStarted) StopVCam(vcamHandle);
+                        if (IsRegistered) UnregisterVCam(vcamHandle);
+                    }
                     DestroyVirtualCamera(vcamHandle);
                     vcamHandle = IntPtr.Zero;
                 }

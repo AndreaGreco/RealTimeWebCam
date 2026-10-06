@@ -545,4 +545,13 @@ Código fuente y licencia: ver el repositorio del proyecto.</value>
   <data name="Wait_Timeout_Open_Details" xml:space="preserve">
     <value>La apertura de la vista previa no se completó (fuente RTSP bloqueada).</value>
   </data>
+  <data name="Settings_VCamSection" xml:space="preserve">
+    <value>Cámara virtual</value>
+  </data>
+  <data name="Settings_PersistentCamera" xml:space="preserve">
+    <value>Mantener la cámara registrada al cerrar la aplicación. Se aplica en el próximo inicio.</value>
+  </data>
+  <data name="VirtualCamera_StoppedPersistent" xml:space="preserve">
+    <value>Transmisión detenida. La cámara virtual sigue registrada y muestra la imagen sin conexión hasta que se vuelva a iniciar.</value>
+  </data>
 </root>

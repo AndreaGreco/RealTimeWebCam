@@ -554,4 +554,13 @@ Codice sorgente e licenza: vedi il repository del progetto.</value>
   <data name="Wait_Timeout_Open_Details" xml:space="preserve">
     <value>Apertura dell'anteprima non completata (sorgente RTSP bloccata).</value>
   </data>
+  <data name="Settings_VCamSection" xml:space="preserve">
+    <value>Videocamera virtuale</value>
+  </data>
+  <data name="Settings_PersistentCamera" xml:space="preserve">
+    <value>Mantieni la videocamera registrata alla chiusura dell'app. Vale dal prossimo avvio.</value>
+  </data>
+  <data name="VirtualCamera_StoppedPersistent" xml:space="preserve">
+    <value>Streaming interrotto. La videocamera virtuale resta registrata e mostra l'immagine offline finché non viene riavviata.</value>
+  </data>
 </root>

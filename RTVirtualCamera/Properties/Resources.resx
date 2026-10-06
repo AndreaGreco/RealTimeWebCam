@@ -554,4 +554,13 @@ Source code and license: see the project repository.</value>
   <data name="Wait_Timeout_Open_Details" xml:space="preserve">
     <value>Preview open did not complete (RTSP source hung).</value>
   </data>
+  <data name="Settings_VCamSection" xml:space="preserve">
+    <value>Virtual camera</value>
+  </data>
+  <data name="Settings_PersistentCamera" xml:space="preserve">
+    <value>Keep the camera registered when the app closes. Applies at the next start.</value>
+  </data>
+  <data name="VirtualCamera_StoppedPersistent" xml:space="preserve">
+    <value>Streaming stopped. The virtual camera stays registered and shows the offline image until it is started again.</value>
+  </data>
 </root>

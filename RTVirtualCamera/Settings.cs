@@ -54,6 +54,19 @@ namespace RTVirtualCamera
         // so the actual consumer-side frame rate is visible on the video itself.
         public bool FrameCounterOverlay { get; set; } = false;
 
+        // Keep the virtual camera registered when the app closes (MF system lifetime:
+        // Zoom/Teams keep it in their device list and show the offline frame until
+        // the app streams again. Off = session lifetime, removed when the app closes.
+        // Applied on the next virtual-camera start.
+        public bool PersistentCamera { get; set; } = false;
+
+        // Bookkeeping, not user-facing: true while a persistent camera is (believed to be)
+        // left registered, so turning the option off can remove it; and the config it was
+        // last started with, so a re-attach only restarts it (interrupting a consumer
+        // that has it open) when the geometry actually changed.
+        public bool PersistentCameraRegistered { get; set; } = false;
+        public string PersistentCameraConfig { get; set; } = string.Empty;
+
         // RTSP lower-transport preference. Auto = UDP with TCP fallback (lowest latency
         // when UDP is available). Applied to the FFmpeg engine on the next connection.
         public RtspTransportMode RtspTransport { get; set; } = RtspTransportMode.Auto;

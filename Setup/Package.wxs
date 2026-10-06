@@ -175,6 +175,28 @@
 					 Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed" />
 		</UI>
 
+		<!-- Uninstall: remove the persistent virtual camera ("keep the camera registered"
+		     option), which otherwise outlives the app and points at a deleted DLL.
+		     Done by the app itself (RTVirtualCamera.exe with the remove-camera switch,
+		     see Program.cs; IMFVirtualCamera::Remove): deferred + impersonated, because
+		     the camera is registered with
+		     CurrentUser access, i.e. per Windows user — it must run as the uninstalling
+		     user, not as LocalSystem. Before StopServices, so the Frame Server is
+		     stopped (and the DLL unlocked) after the removal, and while the exe and its
+		     DLLs are still on disk. Not on a major upgrade: the camera stays selected in
+		     Zoom/Teams across updates. Return="ignore": never block the uninstall. -->
+		<CustomAction Id="RemoveVirtualCamera"
+					  Directory="INSTALLFOLDER"
+					  ExeCommand="&quot;[INSTALLFOLDER]RTVirtualCamera.exe&quot; --remove-camera"
+					  Execute="deferred"
+					  Impersonate="yes"
+					  Return="ignore" />
+		<InstallExecuteSequence>
+			<Custom Action="RemoveVirtualCamera"
+					Before="StopServices"
+					Condition="(REMOVE~=&quot;ALL&quot;) AND (NOT UPGRADINGPRODUCTCODE)" />
+		</InstallExecuteSequence>
+
 		<!-- Main app: required. Desktop shortcut: optional, user-selectable. -->
 		<Feature Id="MainApplication"
 				 Title="RTVirtualCamera"

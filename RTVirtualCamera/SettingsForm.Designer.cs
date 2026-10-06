@@ -47,6 +47,8 @@ namespace RTVirtualCamera
             maxDelayNumeric = new System.Windows.Forms.NumericUpDown();
             latencyCapLabel = new System.Windows.Forms.Label();
             latencyCapNumeric = new System.Windows.Forms.NumericUpDown();
+            vcamSectionLabel = new System.Windows.Forms.Label();
+            PersistentCameraCheckBox = new System.Windows.Forms.CheckBox();
             closeButton = new System.Windows.Forms.Button();
             ((System.ComponentModel.ISupportInitialize)socketTimeoutNumeric).BeginInit();
             ((System.ComponentModel.ISupportInitialize)reorderNumeric).BeginInit();
@@ -245,14 +247,36 @@ namespace RTVirtualCamera
             latencyCapNumeric.Increment = new decimal(new int[] { 50, 0, 0, 0 });
             latencyCapNumeric.ValueChanged += LatencyCapNumeric_ValueChanged;
             //
+            // vcamSectionLabel
+            //
+            vcamSectionLabel.AutoSize = true;
+            vcamSectionLabel.Font = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+            vcamSectionLabel.Location = new System.Drawing.Point(20, 446);
+            vcamSectionLabel.Name = "vcamSectionLabel";
+            vcamSectionLabel.Size = new System.Drawing.Size(90, 15);
+            vcamSectionLabel.TabIndex = 19;
+            vcamSectionLabel.Text = "Virtual camera";
+            //
+            // PersistentCameraCheckBox
+            //
+            PersistentCameraCheckBox.CheckAlign = System.Drawing.ContentAlignment.TopLeft;
+            PersistentCameraCheckBox.Location = new System.Drawing.Point(20, 468);
+            PersistentCameraCheckBox.Name = "PersistentCameraCheckBox";
+            PersistentCameraCheckBox.Size = new System.Drawing.Size(300, 50);
+            PersistentCameraCheckBox.TabIndex = 20;
+            PersistentCameraCheckBox.Text = "Keep the camera registered when the app closes";
+            PersistentCameraCheckBox.TextAlign = System.Drawing.ContentAlignment.TopLeft;
+            PersistentCameraCheckBox.UseVisualStyleBackColor = true;
+            PersistentCameraCheckBox.CheckedChanged += PersistentCameraCheckBox_CheckedChanged;
+            //
             // closeButton
             //
             closeButton.Anchor = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
             closeButton.DialogResult = System.Windows.Forms.DialogResult.OK;
-            closeButton.Location = new System.Drawing.Point(244, 452);
+            closeButton.Location = new System.Drawing.Point(244, 530);
             closeButton.Name = "closeButton";
             closeButton.Size = new System.Drawing.Size(76, 26);
-            closeButton.TabIndex = 19;
+            closeButton.TabIndex = 21;
             closeButton.Text = "Close";
             closeButton.UseVisualStyleBackColor = true;
             //
@@ -262,8 +286,10 @@ namespace RTVirtualCamera
             AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
             AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             CancelButton = closeButton;
-            ClientSize = new System.Drawing.Size(340, 498);
+            ClientSize = new System.Drawing.Size(340, 576);
             Controls.Add(closeButton);
+            Controls.Add(PersistentCameraCheckBox);
+            Controls.Add(vcamSectionLabel);
             Controls.Add(latencyCapNumeric);
             Controls.Add(latencyCapLabel);
             Controls.Add(maxDelayNumeric);
@@ -322,6 +348,8 @@ namespace RTVirtualCamera
         private System.Windows.Forms.NumericUpDown maxDelayNumeric;
         private System.Windows.Forms.Label latencyCapLabel;
         private System.Windows.Forms.NumericUpDown latencyCapNumeric;
+        private System.Windows.Forms.Label vcamSectionLabel;
+        private System.Windows.Forms.CheckBox PersistentCameraCheckBox;
         private System.Windows.Forms.Button closeButton;
     }
 }

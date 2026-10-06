@@ -626,17 +626,48 @@ namespace RTVirtualCamera
             config.Format = streamInfo.subtype;
             config.Overlay = Settings.Current.FrameCounterOverlay ? 1u : 0u;
 
+            // Persistent camera (system lifetime): a later run re-attaches to the one left
+            // registered. Only restart it — which interrupts a consumer that has it open —
+            // when the config the Frame Server reads at Start() actually changed.
+            bool persistent = Settings.Current.PersistentCamera;
+            bool removeStale = !persistent && Settings.Current.PersistentCameraRegistered;
+            string configKey = PersistentConfigKey(config);
+            bool restartPersistent = persistent && Settings.Current.PersistentCameraRegistered
+                && configKey != Settings.Current.PersistentCameraConfig;
+            if (persistent && !Settings.Current.PersistentCameraRegistered)
+            {
+                // Recorded before the attempt: even a start that fails or times out may
+                // leave the camera registered, and the flag is what lets us remove it later.
+                Settings.Current.PersistentCameraRegistered = true;
+                Settings.Current.Save();
+            }
+
             Task<VCamStartResult> startTask = Task.Run(delegate ()
             {
+                if (removeStale)
+                    VirtualCameraWrapper.RemovePersistentCamera();
+
                 VirtualCameraWrapper cam = new VirtualCameraWrapper();
-                cam.SetCameraName("RTSP Virtual Camera");
+                cam.SetCameraName(VirtualCameraWrapper.CameraName);
+                cam.SetPersistent(persistent);
                 cam.SetConfig(config);
 
+                // On failure a persistent camera is removed too, rather than left registered
+                // in a broken state (Dispose would only detach from it).
                 if (!cam.Register())
+                {
+                    if (persistent) cam.Unregister();
                     return new VCamStartResult { Outcome = VCamStartOutcome.RegisterFailed, Camera = cam };
+                }
 
                 if (!cam.Start())
+                {
+                    if (persistent) cam.Unregister();
                     return new VCamStartResult { Outcome = VCamStartOutcome.StartFailed, Camera = cam };
+                }
+
+                if (restartPersistent && !cam.Restart())
+                    System.Diagnostics.Debug.WriteLine("Persistent camera restart failed");
 
                 // The Frame Server never opens the RTSP source itself — the app decodes with
                 // FFmpeg and streams frames to it. Start the user-space producer now that the
@@ -669,6 +700,13 @@ namespace RTVirtualCamera
             }
             VCamStartResult result = await startTask;
 
+            if (removeStale || (persistent && result.Outcome != VCamStartOutcome.Started))
+            {
+                Settings.Current.PersistentCameraRegistered = false;
+                Settings.Current.PersistentCameraConfig = string.Empty;
+                Settings.Current.Save();
+            }
+
             switch (result.Outcome)
             {
                 case VCamStartOutcome.RegisterFailed:
@@ -692,6 +730,13 @@ namespace RTVirtualCamera
             if (!result.ProducerStarted)
                 System.Diagnostics.Debug.WriteLine("FFmpeg producer failed to start");
 
+            if (persistent)
+            {
+                Settings.Current.PersistentCameraRegistered = true;
+                Settings.Current.PersistentCameraConfig = configKey;
+                Settings.Current.Save();
+            }
+
             virtualCamera = result.Camera;
             RememberSuccessfulUrl(config.RtspUrl);
             SetPreviewStatus(AppStrings.Get("Preview_VCamStarted"));
@@ -710,6 +755,11 @@ namespace RTVirtualCamera
             VirtualCameraWrapper cam = virtualCamera;
             virtualCamera = null;
 
+            // A persistent camera stays registered (only the stream stops; consumers see the
+            // offline frame) unless the option was turned off meanwhile — then remove it now.
+            bool keepRegistered = cam != null && cam.IsPersistent && Settings.Current.PersistentCamera;
+            bool removePersistent = cam != null && cam.IsPersistent && !keepRegistered;
+
             Task stopTask = Task.Run(delegate ()
             {
                 try { videoPlayer.Stop(); }
@@ -718,15 +768,21 @@ namespace RTVirtualCamera
                 if (cam != null)
                 {
                     cam.StopFfmpegProducer(); // no-op unless the FFmpeg engine was running
-                    cam.Stop();
-                    cam.Unregister();
-                    cam.Dispose();
+                    if (!keepRegistered)
+                    {
+                        cam.Stop();
+                        cam.Unregister();
+                    }
+                    cam.Dispose(); // persistent + kept: only detaches
                 }
             });
 
             bool stopTimedOut = RunWaitDialog(AppStrings.Get("Wait_Stopping"), StopTimeoutSec, stopTask);
             if (!stopTimedOut)
                 await stopTask;
+
+            if (removePersistent && !stopTimedOut)
+                ClearPersistentCameraRecord();
 
             isVCamRunning = false;
             startVCamButton.Text = AppStrings.Get("Button_StartVCam");
@@ -759,7 +815,55 @@ namespace RTVirtualCamera
             }
 
             System.Diagnostics.Debug.WriteLine("Virtual camera stopped");
-            MessageBox.Show(AppStrings.Get("VirtualCamera_Stopped"), AppStrings.Get("Info_Title"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(
+                AppStrings.Get(keepRegistered ? "VirtualCamera_StoppedPersistent" : "VirtualCamera_Stopped"),
+                AppStrings.Get("Info_Title"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        // Identifies the config attributes a persistent camera was last started with
+        // (Settings.PersistentCameraConfig), to tell whether a re-attach must restart it.
+        // The URL is left out: the Frame Server only uses the geometry/fps/overlay.
+        private static string PersistentConfigKey(VCamConfig config)
+        {
+            return string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                "{0}x{1}@{2}/{3};overlay={4}",
+                config.Width, config.Height, config.FpsNum, config.FpsDen, config.Overlay);
+        }
+
+        private static void ClearPersistentCameraRecord()
+        {
+            Settings.Current.PersistentCameraRegistered = false;
+            Settings.Current.PersistentCameraConfig = string.Empty;
+            Settings.Current.Save();
+        }
+
+        // Removes a camera left registered by an earlier persistent run once the option has
+        // been turned off (at startup, and when the settings dialog closes). Only while the
+        // camera is idle: a running persistent camera is removed by StopVirtualCameraAsync /
+        // OnFormClosed instead.
+        private async Task RemoveStalePersistentCameraAsync()
+        {
+            if (Settings.Current.PersistentCamera || !Settings.Current.PersistentCameraRegistered
+                || isVCamRunning || isBusy)
+                return;
+
+            BeginBusy();
+            try
+            {
+                bool removed = await Task.Run(() => VirtualCameraWrapper.RemovePersistentCamera());
+                System.Diagnostics.Debug.WriteLine("Stale persistent camera removed: " + removed);
+                // Cleared even on failure: most likely nothing was left to remove, and
+                // retrying on every launch would not help.
+                ClearPersistentCameraRecord();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("Stale persistent camera removal failed: " + ex.Message);
+            }
+            finally
+            {
+                EndBusy();
+            }
         }
 
         // Disposes a virtual-camera instance off the UI thread (Dispose joins the producer
@@ -784,8 +888,16 @@ namespace RTVirtualCamera
             {
                 try
                 {
-                    virtualCamera.Stop();
-                    virtualCamera.Unregister();
+                    // Persistent: Dispose stops the producer and only detaches, so the camera
+                    // stays in Zoom/Teams' list showing the offline frame. Otherwise (or if the
+                    // option was turned off while running) remove it as before.
+                    if (!(virtualCamera.IsPersistent && Settings.Current.PersistentCamera))
+                    {
+                        virtualCamera.Stop();
+                        virtualCamera.Unregister();
+                        if (virtualCamera.IsPersistent)
+                            ClearPersistentCameraRecord();
+                    }
                     virtualCamera.Dispose();
                 }
                 catch (Exception ex)
@@ -1155,6 +1267,8 @@ namespace RTVirtualCamera
         // UI thread, so an unreachable source never blocks the UI thread.
         private async void MainForm_Shown(object sender, EventArgs e)
         {
+            await RemoveStalePersistentCameraAsync();
+
             if (Settings.Current.RtspURL == null || !Settings.Current.AutoStart)
                 return;
 
@@ -1194,16 +1308,23 @@ namespace RTVirtualCamera
             this.Close();
         }
 
-        private void toolStripMenuItem1_Click(object sender, EventArgs e)
+        private async void toolStripMenuItem1_Click(object sender, EventArgs e)
         {
-            SettingsForm langForm = new SettingsForm();
-            langForm.ShowDialog(this);
+            using (SettingsForm langForm = new SettingsForm())
+            {
+                langForm.ShowDialog(this);
+            }
+            await RemoveStalePersistentCameraAsync();
         }
 
-        private void settingsToolStripMenuItem_Click(object sender, EventArgs e)
+        private async void settingsToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            SettingsForm settingsForm = new SettingsForm();
-            settingsForm.ShowDialog(this);
+            using (SettingsForm settingsForm = new SettingsForm())
+            {
+                settingsForm.ShowDialog(this);
+            }
+            // Turning "keep the camera registered" off takes effect right away when idle.
+            await RemoveStalePersistentCameraAsync();
         }
 
         private void guideToolStripMenuItem_Click(object sender, EventArgs e)

@@ -11,6 +11,7 @@ VirtualCamera::VirtualCamera()
 	: _vcam(nullptr)
 	, _title(L"RTSP Virtual Camera")
 	, _config{}
+	, _persistent(false)
 	, _isRegistered(false)
 	, _isStarted(false)
 {
@@ -18,7 +19,33 @@ VirtualCamera::VirtualCamera()
 
 VirtualCamera::~VirtualCamera()
 {
-	UnregisterVirtualCamera();
+	// A persistent camera must outlive this object (and the process): just let go of it.
+	if (_persistent)
+		Detach();
+	else
+		UnregisterVirtualCamera();
+}
+
+HRESULT VirtualCamera::CreateCamera(const std::wstring& title, bool persistent, IMFVirtualCamera** vcam)
+{
+	// Convert CLSID to string for sourceId
+	std::wstring clsid = GUID_ToStringW(CLSID_VCam);
+
+	// Session lifetime: removed when the app closes. System lifetime: stays registered
+	// (and, once started, enabled across app restarts and reboots) until Remove().
+	// Either way access is CurrentUser, which needs no elevation (AllUsers would).
+	// With the system lifetime, creating a camera with the same source id again opens
+	// the existing one, which is how a later run re-attaches to it.
+	return MFCreateVirtualCamera(
+		MFVirtualCameraType_SoftwareCameraSource,
+		persistent ? MFVirtualCameraLifetime_System : MFVirtualCameraLifetime_Session,
+		MFVirtualCameraAccess_CurrentUser,        // Only current user can access
+		title.c_str(),                            // Friendly name
+		clsid.c_str(),                            // Source ID (CLSID of the registered COM server)
+		nullptr,                                  // No categories
+		0,                                        // Category count
+		vcam
+	);
 }
 
 void VirtualCamera::SetCameraName(const wchar_t* name)
@@ -43,22 +70,10 @@ HRESULT VirtualCamera::RegisterVirtualCamera()
 		return S_OK;
 	}
 
-	DebugLog("RegisterVirtualCamera - start");
-
-	// Convert CLSID to string for sourceId
-	std::wstring clsid = GUID_ToStringW(CLSID_VCam);
+	DebugLog(_persistent ? "RegisterVirtualCamera - start (persistent)" : "RegisterVirtualCamera - start (session)");
 
 	// Create the virtual camera
-	HRESULT hr = MFCreateVirtualCamera(
-		MFVirtualCameraType_SoftwareCameraSource,
-		MFVirtualCameraLifetime_Session,          // Session lifetime (removed when app closes)
-		MFVirtualCameraAccess_CurrentUser,        // Only current user can access
-		_title.c_str(),                            // Friendly name
-		clsid.c_str(),                            // Source ID (CLSID of the registered COM server)
-		nullptr,                                  // No categories
-		0,                                        // Category count
-		&_vcam
-	);
+	HRESULT hr = CreateCamera(_title, _persistent, &_vcam);
 
 	if (FAILED(hr))
 	{
@@ -121,6 +136,16 @@ HRESULT VirtualCamera::StartVirtualCamera()
 	// Config attributes already set in RegisterVirtualCamera() via SetString/SetUINT32.
 	// Start with no callback: the Frame Server will forward them to MediaSource::Initialize().
 	HRESULT hr = _vcam->Start(nullptr);
+	if (FAILED(hr) && _persistent)
+	{
+		// Re-attaching to a persistent camera that is still enabled from an earlier run:
+		// stop it and start again (which also makes the Frame Server re-read the attrs).
+		std::ostringstream oss;
+		oss << "IMFVirtualCamera::Start (persistent) failed: 0x" << std::hex << hr << ", retrying after Stop";
+		DebugLog(oss.str().c_str());
+		_vcam->Stop();
+		hr = _vcam->Start(nullptr);
+	}
 	if (FAILED(hr))
 	{
 		std::ostringstream oss;
@@ -209,6 +234,45 @@ HRESULT VirtualCamera::UnregisterVirtualCamera()
 	return hr;
 }
 
+HRESULT VirtualCamera::RestartVirtualCamera()
+{
+	if (!_isRegistered || _vcam == nullptr)
+		return E_NOT_VALID_STATE;
+
+	DebugLog("RestartVirtualCamera - Stop + Start to apply new config attributes");
+	_vcam->Stop();
+	_isStarted = false;
+	return StartVirtualCamera();
+}
+
+void VirtualCamera::Detach()
+{
+	if (_vcam)
+	{
+		DebugLog("VirtualCamera::Detach - releasing the camera, left registered");
+		_vcam->Release();
+		_vcam = nullptr;
+	}
+	_isRegistered = false;
+	_isStarted = false;
+}
+
+HRESULT VirtualCamera::RemovePersistent(const wchar_t* title)
+{
+	IMFVirtualCamera* vcam = nullptr;
+	HRESULT hr = CreateCamera(title ? title : L"RTSP Virtual Camera", true, &vcam);
+	if (SUCCEEDED(hr))
+	{
+		hr = vcam->Remove();
+		vcam->Release();
+	}
+
+	std::ostringstream oss;
+	oss << "VirtualCamera::RemovePersistent: 0x" << std::hex << hr;
+	DebugLog(oss.str().c_str());
+	return hr;
+}
+
 HRESULT VirtualCamera::GetMediaSource(IMFMediaSource** ppMediaSource)
 {
 	if (!_isRegistered || _vcam == nullptr)
@@ -265,6 +329,39 @@ extern "C" {
 		{
 			vcam->SetConfig(*config);
 		}
+	}
+
+	__declspec(dllexport) void SetVCamPersistent(VirtualCamera* vcam, int persistent)
+	{
+		if (vcam)
+		{
+			vcam->SetPersistent(persistent != 0);
+		}
+	}
+
+	__declspec(dllexport) int RestartVCam(VirtualCamera* vcam)
+	{
+		if (vcam)
+		{
+			HRESULT hr = vcam->RestartVirtualCamera();
+			return SUCCEEDED(hr) ? 0 : -1;
+		}
+		return -1;
+	}
+
+	__declspec(dllexport) void DetachVCam(VirtualCamera* vcam)
+	{
+		if (vcam)
+		{
+			vcam->Detach();
+		}
+	}
+
+	// Removes the persistent camera left by an earlier run. Returns 0 on success.
+	__declspec(dllexport) int RemovePersistentVCam(LPCWSTR name)
+	{
+		HRESULT hr = VirtualCamera::RemovePersistent(name);
+		return SUCCEEDED(hr) ? 0 : (int)hr;
 	}
 
 	__declspec(dllexport) int RegisterVCam(VirtualCamera* vcam)

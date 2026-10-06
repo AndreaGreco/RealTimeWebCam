@@ -159,6 +159,8 @@ namespace RTVirtualCamera
             bufferSizeLabel.Text = AppStrings.Get("Settings_UdpBufferSize");
             maxDelayLabel.Text = AppStrings.Get("Settings_MaxDelay");
             latencyCapLabel.Text = AppStrings.Get("Settings_LatencyCap");
+            vcamSectionLabel.Text = AppStrings.Get("Settings_VCamSection");
+            PersistentCameraCheckBox.Text = AppStrings.Get("Settings_PersistentCamera");
             closeButton.Text = AppStrings.Get("Button_Close");
 
             languageComboBox.Items.Clear();
@@ -208,6 +210,7 @@ namespace RTVirtualCamera
             AutoStartCheckBox.Checked = Settings.Current.AutoStart;
             OverlayCheckBox.Checked = Settings.Current.FrameCounterOverlay;
             HardwareDecodeCheckBox.Checked = Settings.Current.HardwareDecode;
+            PersistentCameraCheckBox.Checked = Settings.Current.PersistentCamera;
 
             // Load the persisted values (clamped to each control's range). The ValueChanged
             // handlers are wired in InitializeComponent, so assigning a value that differs
@@ -276,6 +279,14 @@ namespace RTVirtualCamera
         private void OverlayCheckBox_CheckedChanged(object sender, EventArgs e)
         {
             Settings.Current.FrameCounterOverlay = OverlayCheckBox.Checked;
+            Settings.Current.Save();
+        }
+
+        private void PersistentCameraCheckBox_CheckedChanged(object sender, EventArgs e)
+        {
+            // Applied on the next virtual-camera start; turning it off also removes a
+            // camera left registered by an earlier run (MainForm, once the camera is idle).
+            Settings.Current.PersistentCamera = PersistentCameraCheckBox.Checked;
             Settings.Current.Save();
         }
     }
